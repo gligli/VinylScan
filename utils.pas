@@ -11,6 +11,18 @@ uses
   Classes, SysUtils, Types, Math;
 
 const
+  {$if 0}
+    cRedMul = 2126;
+    cGreenMul = 7152;
+    cBlueMul = 722;
+  {$else}
+    cRedMul = 299;
+    cGreenMul = 587;
+    cBlueMul = 114;
+  {$endif}
+
+  cLumaDiv = cRedMul + cGreenMul + cBlueMul;
+
   cPhi = (1 + sqrt(5)) / 2;
   cInvPhi = 1 / cPhi;
 
@@ -24,11 +36,19 @@ type
 
 procedure SpinEnter(Lock: PSpinLock); assembler;
 procedure SpinLeave(Lock: PSpinLock); assembler;
+
 procedure Exchange(var a, b: Integer);
 function iDiv0(x, y: Integer): Integer;overload;inline;
 function iDiv0(x, y: Int64): Int64;overload;inline;
 function Div0(x, y: Double): Double;inline;
 function NanDef(x, def: Double): Double; inline;
+
+function SwapRB(c: Integer): Integer; inline;
+function ToRGB(r, g, b: Byte): Integer; inline;
+procedure FromRGB(col: Integer; out r, g, b: Integer); inline; overload;
+procedure FromRGB(col: Integer; out r, g, b: Byte); inline; overload;
+function ToLuma(r, g, b: Byte): Integer; inline;
+function ToBW(col: Integer): Integer;
 
 function lerp(x, y, alpha: Double): Double; inline;
 function ilerp(x, y, alpha, maxAlpha: Integer): Integer; inline;
@@ -99,6 +119,46 @@ begin
   if IsNan(Result) then
     Result := def;
 end;
+
+function SwapRB(c: Integer): Integer; inline;
+begin
+  Result := ((c and $ff) shl 16) or ((c shr 16) and $ff) or (c and $ff00);
+end;
+
+function ToRGB(r, g, b: Byte): Integer; inline;
+begin
+  Result := (b shl 16) or (g shl 8) or r;
+end;
+
+procedure FromRGB(col: Integer; out r, g, b: Integer); inline; overload;
+begin
+  r := col and $ff;
+  g := (col shr 8) and $ff;
+  b := (col shr 16) and $ff;
+end;
+
+procedure FromRGB(col: Integer; out r, g, b: Byte); inline; overload;
+begin
+  r := col and $ff;
+  g := (col shr 8) and $ff;
+  b := (col shr 16) and $ff;
+end;
+
+function ToLuma(r, g, b: Byte): Integer; inline;
+begin
+  Result := r * cRedMul + g * cGreenMul + b * cBlueMul;
+end;
+
+function ToBW(col: Integer): Integer;
+var
+  r, g, b: Byte;
+begin
+  FromRGB(col, r, g, b);
+  Result := ToLuma(r, g, b);
+  Result := Result div cLumaDiv;
+  Result := ToRGB(Result, Result, Result);
+end;
+
 
 function lerp(x, y, alpha: Double): Double; inline;
 begin
