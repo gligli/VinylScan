@@ -34,10 +34,10 @@ implementation
 
 procedure TForm1.Button1Click(Sender: TObject);
 const
-  CReducShift = 4;
+  CReducShift = 2;
 var
   s2t: TScan2Track;
-  i, j, cx, cy, offf, offc: Integer;
+  i, j, cx, cy, sx, sy, offf, offc: Integer;
   sc: PInteger;
   b: Byte;
   C: TCanvas;
@@ -72,20 +72,24 @@ begin
 
     cx := s2t.Center.X shr CReducShift;
     cy := s2t.Center.Y shr CReducShift;
+    sx := s2t.GrooveStartPoint.X shr CReducShift;
+    sy := s2t.GrooveStartPoint.Y shr CReducShift;
     offf := Round(s2t.FirstGrooveOffset) shr CReducShift;
     offc := Round(s2t.ConcentricGrooveOffset) shr CReducShift;
 
-    C.AutoRedraw := True;
     C.Brush.Style := bsClear;
     C.Pen.Color := clRed;
     C.Pen.Color := clRed;
     C.Pen.Style := psSolid;
+
     C.Line(cx - 8, cy, cx + 9, cy);
     C.Line(cx, cy - 8, cx, cy + 9);
 
+    C.Line(sx - 8, sy, sx + 9, sy);
+    C.Line(sx, sy - 8, sx, sy + 9);
+
     C.EllipseC(cx, cy, offf, offf);
     C.EllipseC(cx, cy, offc, offc);
-
   finally
     s2t.Free;
   end;

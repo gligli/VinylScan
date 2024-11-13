@@ -30,12 +30,15 @@ type
     FCenter: TPoint;
     FConcentricGrooveOffset: Double; // offset to the center point
     FFirstGrooveOffset: Double; // offset to the center point
+    FGrooveStartRadians: Double;
+    FGrooveStartPoint: TPoint;
 
     FImage: TByteDynArray2;
     FTrack: TIntegerDynArray;
 
     procedure FindCenter;
     procedure FindConcentricGroove;
+    procedure FindGrooveStart;
 
   public
     constructor Create(ASampleRate: Integer = 48000; ABitsPerSample: Integer = 16);
@@ -54,6 +57,7 @@ type
     property Center: TPoint read FCenter;
     property ConcentricGrooveOffset: Double read FConcentricGrooveOffset;
     property FirstGrooveOffset: Double read FFirstGrooveOffset;
+    property GrooveStartPoint: TPoint read FGrooveStartPoint;
 
     property Image: TByteDynArray2 read FImage;
     property Track: TIntegerDynArray read FTrack;
@@ -116,8 +120,8 @@ begin
   begin
     SinCos(i * Self.FRadiansPerRevolutionPoint, sn, cs);
 
-    xx := Round(sn * x[0]) + Self.Center.X;
-    yy := Round(cs * x[0]) + Self.Center.Y;
+    xx := Round(cs * x[0]) + Self.Center.X;
+    yy := Round(sn * x[0]) + Self.Center.Y;
 
     if InRange(yy, 0, High(Self.FImage)) and InRange(xx, 0, High(Self.FImage[0])) then
       Result += Self.FImage[yy, xx];
@@ -140,6 +144,46 @@ begin
   PowellMinimize(@PowellEvalConcentricGroove, x, FDPI / 20.0, 0.0, 0.5, MaxInt, Self);
 
   FConcentricGrooveOffset := x[0];
+end;
+
+procedure TScan2Track.FindGrooveStart;
+var
+  i, x, y, bestx, besty: Integer;
+  v, best, sn, cs, bestr: Double;
+begin
+  best := -Infinity;
+  bestx := 0;
+  besty := 0;
+  bestr := 0;
+  v := 0;
+
+  for i := 0 to Self.FPointsPerRevolution - 1  do
+  begin
+    SinCos(i * Self.FRadiansPerRevolutionPoint, sn, cs);
+
+    x := Round(cs * FFirstGrooveOffset) + Self.Center.X;
+    y := Round(sn * FFirstGrooveOffset) + Self.Center.Y;
+
+    if InRange(y, 0, High(Self.FImage)) and InRange(x, 0, High(Self.FImage[0])) then
+    begin
+      v := v * 99 + Self.FImage[y, x];
+      v /= 100;
+
+      if v > best then
+      begin
+        best := v;
+        bestx := x;
+        besty := y;
+        bestr := i * Self.FRadiansPerRevolutionPoint;
+      end;
+    end;
+
+    writeln(i:6,x:8,y:8,v:9:3,best:9:3,bestx:8,besty:8);
+  end;
+
+  FGrooveStartRadians := bestr;
+  FGrooveStartPoint.X := bestx;
+  FGrooveStartPoint.Y := besty;
 end;
 
 constructor TScan2Track.Create(ASampleRate: Integer; ABitsPerSample: Integer);
@@ -213,6 +257,11 @@ begin
   FindConcentricGroove;
 
   WriteLn('ConcentricGrooveOffset:', FConcentricGrooveOffset:12:3);
+
+  FindGrooveStart;
+
+  WriteLn('GrooveStartRadians:', FGrooveStartRadians:12:3);
+  WriteLn('GrooveStartPoint:', FGrooveStartPoint.X:6, ',', FGrooveStartPoint.Y:6);
 end;
 
 procedure TScan2Track.ScanTrack;

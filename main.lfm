@@ -12,8 +12,14 @@ object Form1: TForm1
     Height = 1086
     Top = 0
     Width = 1568
+    HorzScrollBar.Increment = 9
     HorzScrollBar.Page = 90
+    HorzScrollBar.Smooth = True
+    HorzScrollBar.Tracking = True
+    VertScrollBar.Increment = 9
     VertScrollBar.Page = 90
+    VertScrollBar.Smooth = True
+    VertScrollBar.Tracking = True
     Align = alClient
     BorderStyle = bsNone
     ClientHeight = 1086
@@ -24,6 +30,7 @@ object Form1: TForm1
       Height = 1086
       Top = 0
       Width = 1568
+      AutoSize = True
       OnClick = Image1Click
       ParentShowHint = False
     end
