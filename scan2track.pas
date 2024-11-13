@@ -25,7 +25,7 @@ type
     FCenter: TPoint;
 
     FImage: TByteDynArray2;
-    FTrack: TIntegerArray;
+    FTrack: TIntegerDynArray;
 
     procedure FindCenter;
 
@@ -44,7 +44,8 @@ type
 
     property PNGFileName: String read FPNGFileName write FPNGFileName;
 
-    property Track: TIntegerArray read FTrack;
+    property Image: TByteDynArray2 read FImage;
+    property Track: TIntegerDynArray read FTrack;
   end;
 
 implementation
@@ -122,14 +123,20 @@ begin
     WriteLn(PNG.Width:6,'x',PNG.Height:6);
     Assert(PNG.PixelFormat=pf8bit);
 
-    for y := 0 to High(FImage) do
-    begin
-      p := PNG.ScanLine[y];
-      for x := 0 to High(FImage[0]) do
+    PNG.BeginUpdate;
+    try
+      for y := 0 to High(FImage) do
       begin
-        FImage[y, x] := p^;
-        Inc(p);
+        p := PNG.RawImage.Data;
+        inc(p, y * PNG.RawImage.Description.BytesPerLine);
+        for x := 0 to High(FImage[0]) do
+        begin
+          FImage[y, x] := p^;
+          Inc(p, PNG.RawImage.Description.BitsPerPixel shr 3);
+        end;
       end;
+    finally
+      PNG.EndUpdate;
     end;
 
     // TODO: guess DPI

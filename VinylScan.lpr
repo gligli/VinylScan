@@ -3,6 +3,7 @@ program VinylScan;
 {$mode objfpc}{$H+}
 
 uses
+  tbbmalloc,
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
