@@ -75,6 +75,8 @@ function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: D
 
 procedure SobelEdgeDetector(const image: TSingleDynArray2; var out_gx, out_gy: TSingleDynArray2);
 
+function PearsonCorrelation(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
+
 implementation
 
 procedure SpinEnter(Lock: PSpinLock); assembler;
@@ -255,6 +257,35 @@ begin
       out_gy[y, x] := gy;
       //out_image[y, x] := Sqrt(gx * gx + gy * gy);
     end;
+end;
+
+function PearsonCorrelation(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
+var
+  mx, my, num, den, denx, deny: Double;
+  i: Integer;
+begin
+  Assert(Length(x) = Length(y));
+
+  mx := mean(x);
+  my := mean(y);
+
+  num := 0.0;
+  denx := 0.0;
+  deny := 0.0;
+  for i := 0 to High(x) do
+  begin
+    num += (x[i] - mx) * (y[i] - my);
+    denx += sqr(x[i] - mx);
+    deny += sqr(y[i] - my);
+  end;
+
+  denx := sqrt(denx);
+  deny := sqrt(deny);
+  den := denx * deny;
+
+  Result := 1.0;
+  if den <> 0.0 then
+    Result := num / den;
 end;
 
 end.
