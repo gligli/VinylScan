@@ -5,8 +5,8 @@ unit scancorrelator;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, GraphType, IntfGraphics, FPCanvas, FPImage, FPWritePNG, StrUtils, ZStream,
-  utils, bufstream, fgl, powell, minasa, minlbfgs, inputscan;
+  Classes, SysUtils, Types, Math, Graphics, GraphType, IntfGraphics, FPCanvas, FPImage, FPWritePNG, ZStream,
+  utils, inputscan, powell, minasa, MTProcs;
 
 type
 
@@ -90,20 +90,179 @@ begin
 end;
 
 procedure TScanCorrelator.LoadPNGs;
-var
-  i: Integer;
+
+  procedure DoOne(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  begin
+    FInputScans[AIndex].Run;
+  end;
+
 begin
   WriteLn('LoadPNGs');
-  for i := 0 to High(FInputScans) do
-    FInputScans[i].Run;
+
+  ProcThreadPool.DoParallelLocalProc(@DoOne, 0, high(FInputScans));
+end;
+
+
+function PowellEvalCorrelation(const arg: TVector; obj: Pointer): TScalar;
+const
+  CAreaBegin = C45RpmInnerSize;
+  CAreaEnd = C45RpmOuterSize;
+  CAreaGroovesPerInch = 16;
+  CAreaWidth = (CAreaEnd - CAreaBegin) * 0.5;
+
+var
+  Self: TScanCorrelator absolute obj;
+  corrData: TDoubleDynArray2;
+  ti, ri: Double;
+
+  procedure DoOne(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  var
+    pos: Integer;
+    t, r, sn, cs, px, py, cx, cy: Double;
+  begin
+    r := CAreaBegin * 0.5 * Self.FDPI;
+
+    t := arg[AIndex];
+    cx := arg[Length(Self.FInputScans) + AIndex];
+    cy := arg[Length(Self.FInputScans) * 2 + AIndex];
+
+    pos := 0;
+    repeat
+      SinCos(t, sn, cs);
+
+      px := cs * r + cx;
+      py := sn * r + cy;
+
+      while pos >= Length(corrData[AIndex]) do
+        SetLength(corrData[AIndex], Ceil(Length(corrData[AIndex]) * 1.1));
+
+      if InRange(py, 0, Self.FInputScans[AIndex].Height - 1) and InRange(px, 0, Self.FInputScans[AIndex].Width - 1) then
+        corrData[AIndex, pos] := Self.FInputScans[AIndex].GetPointD(Self.FInputScans[AIndex].Image, py, px);
+
+      t += ti;
+      r += ri;
+      Inc(pos);
+    until r >= CAreaEnd * 0.5 * Self.FDPI;
+
+    SetLength(corrData[AIndex], pos);
+  end;
+
+var
+  i, j, cnt: Integer;
+begin
+  SetLength(corrData, Length(Self.FInputScans), Ceil(CAreaWidth * CAreaGroovesPerInch * Self.PointsPerRevolution));
+
+  ti := Self.FRadiansPerRevolutionPoint;
+  ri := CAreaWidth * Self.FDPI / (Self.PointsPerRevolution * CAreaGroovesPerInch);
+
+  ProcThreadPool.DoParallelLocalProc(@DoOne, 0, High(Self.FInputScans));
+
+  cnt := 0;
+  Result := 0;
+  for i := 0 to High(Self.FInputScans) do
+    for j := i + 1 to High(Self.FInputScans) do
+    begin
+      Result -= PearsonCorrelation(corrData[i], corrData[j]);
+      Inc(cnt);
+    end;
+  Result /= cnt;
+
+  //for i := 0 to High(arg) do
+  //  Write(arg[i]:14:6);
+  //WriteLn(-Result:14:6);
+end;
+
+
+procedure BFGSEvalCorrelation_(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+const
+  CH = 1e-8;
+  CFCoeff: array[0 .. 7] of Double = (-1/280, 4/105, -1/5, 4/5, -4/5, 1/5, -4/105, 1/280);
+  CXCoeff: array[0 .. 7] of Double = (4, 3, 2, 1, -1, -2, -3, -4);
+var
+  MTGrads: TDoubleDynArray2;
+
+  procedure DoOne(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  var
+    x: TVector;
+    ig, ic: Integer;
+  begin
+    if AIndex = 0 then
+      func := PowellEvalCorrelation(arg, obj)
+    else
+    begin
+      DivMod(AIndex - 1, Length(CFCoeff), ig, ic);
+
+      x := Copy(arg);
+      x[ig] += CXCoeff[ic] * CH;
+      MTGrads[ig, ic] := CFCoeff[ic] * PowellEvalCorrelation(x, obj);
+    end;
+  end;
+
+var
+  ig, ic: Integer;
+begin
+  SetLength(MTGrads, Length(arg), Length(CFCoeff));
+
+  ProcThreadPool.DoParallelLocalProc(@DoOne, 0, Length(CFCoeff) * Length(arg) + 1 - 1);
+
+  for ig := 0 to High(MTGrads) do
+  begin
+    grad[ig] := 0;
+    for ic := 0 to High(MTGrads[0]) do
+      grad[ig] += MTGrads[ig, ic];
+    grad[ig] /= CH;
+  end;
+
+  for ig := 0 to High(arg) do
+    Write(arg[ig]:14:6);
+  WriteLn(func:14:6);
 end;
 
 procedure TScanCorrelator.Correlate;
 var
   ox, oy, i: Integer;
-  t, r, sn, cs, x, y, center, acc: Double;
+  t, r, sn, cs, px, py, center, acc, it, radiusOuter: Double;
+  x, bl, bu: TVector;
+  state: MinASAState;
+  rep: MinASAReport;
 begin
   WriteLn('Correlate');
+
+  SetLength(x, Length(Self.FInputScans) * 3);
+  SetLength(bl, length(x));
+  SetLength(bu, length(x));
+
+  radiusOuter := Round(C45RpmOuterSize * Self.FDPI * 0.5);
+
+  for i := 0 to High(FInputScans) do
+  begin
+    x[i] := Self.FInputScans[i].GrooveStartAngle;
+    x[Length(FInputScans) + i] := FInputScans[i].Center.X;
+    x[Length(FInputScans) * 2 + i] := FInputScans[i].Center.Y;
+
+    bl[i] := 0;
+    bl[Length(FInputScans) + i] := radiusOuter;
+    bl[Length(FInputScans) * 2 + i] := radiusOuter;
+
+    bu[i] := 2 * Pi;
+    bu[Length(FInputScans) + i] := FInputScans[i].Width - radiusOuter;
+    bu[Length(FInputScans) * 2 + i] := FInputScans[i].Height - radiusOuter;
+  end;
+
+{$if 1}
+  PowellMinimize(@PowellEvalCorrelation, x, 1e-6, 1e-6, 1e-6, MaxInt, Self);
+{$else}
+  MinASACreate(Length(x), x, bl, bu, state);
+  MinASASetCond(state, 0, 0, 0, 0);
+
+  while MinASAIteration(state) do
+    if State.NeedFG then
+    begin
+      BFGSEvalCorrelation_(State.X, state.F, state.G, Self);
+    end;
+
+  MinASAResults(state, x, rep);
+{$ifend}
 
   center := Length(FOutputImage) / 2.0;
   FMaxOutputImageValue := 0;
@@ -119,13 +278,15 @@ begin
         acc := 0;
         for i := 0 to High(FInputScans) do
         begin
-          SinCos(FInputScans[i].GrooveStartAngle - t, sn, cs);
+          it := x[i];
 
-          x := cs * r + FInputScans[i].Center.X;
-          y := sn * r + FInputScans[i].Center.Y;
+          SinCos(it - t, sn, cs);
 
-          if InRange(y, 0, FInputScans[i].Height - 1) and InRange(x, 0, FInputScans[i].Width - 1) then
-            acc += FInputScans[i].GetPointD(FInputScans[i].Image, y, x);
+          px := cs * r + x[Length(Self.FInputScans) + i];
+          py := sn * r + x[Length(Self.FInputScans) * 2 + i];
+
+          if InRange(py, 0, FInputScans[i].Height - 1) and InRange(px, 0, FInputScans[i].Width - 1) then
+            acc += FInputScans[i].GetPointD(FInputScans[i].Image, py, px);
         end;
         if Length(FInputScans) > 0 then
           acc /= Length(FInputScans);
@@ -142,7 +303,7 @@ end;
 
 procedure TScanCorrelator.Save;
 var
-  i, ox, oy: Integer;
+  i: Integer;
   png: TFPWriterPNG;
   factor: Single;
   fs: TFileStream;

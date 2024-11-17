@@ -63,7 +63,7 @@ begin
 end;
 
 const
-  CPredictionPointCount = 3600;
+  CPredictionPointCount = 360;
 var
   pradius, dumx, dumy: Double;
   SinCosLut: array[0 .. CPredictionPointCount - 1] of TPointD;

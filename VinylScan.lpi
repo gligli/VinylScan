@@ -61,6 +61,9 @@
     </RunParams>
     <RequiredPackages>
       <Item>
+        <PackageName Value="MultiThreadProcsLaz"/>
+      </Item>
+      <Item>
         <PackageName Value="LCL"/>
       </Item>
     </RequiredPackages>
