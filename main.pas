@@ -5,7 +5,11 @@ unit main;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, scan2track, utils;
+  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, scan2track, utils, math;
+
+const
+  CReducShift = 2;
+  CReducFactor = 1.0 / (1 shl CReducShift);
 
 type
 
@@ -13,10 +17,9 @@ type
 
   TForm1 = class(TForm)
     Button1: TButton;
+    Edit1: TEdit;
     Image1: TImage;
-    ScrollBox1: TScrollBox;
     procedure Button1Click(Sender: TObject);
-    procedure Image1Click(Sender: TObject);
   private
 
   public
@@ -33,32 +36,45 @@ implementation
 { TForm1 }
 
 procedure TForm1.Button1Click(Sender: TObject);
-const
-  CReducShift = 2;
 var
   s2t: TScan2Track;
-  i, j, cx, cy, sx, sy, offf, offc: Integer;
+  x, y, ix, iy, cx, cy, sx, sy, offf, offc: Integer;
   sc: PInteger;
   b: Byte;
+  acc: Double;
   C: TCanvas;
 begin
-  s2t := TScan2Track.Create;
+  C := Image1.Picture.Bitmap.Canvas;
+
+  C.Brush.Style := bsClear;
+  C.Pen.Color := clRed;
+  C.Pen.Color := clRed;
+  C.Pen.Style := psSolid;
+
+  s2t := TScan2Track.Create;//(8000);
   try
-    s2t.PNGFileName := 'data\think0.png';
-    s2t.Run;
+    s2t.Scan.PNGFileName := Edit1.Text;
+
+    s2t.Scan.LoadPNG;
 
     Image1.Picture.Bitmap.PixelFormat := pf32bit;
-    Image1.Picture.Bitmap.Width := Length(s2t.Image[0]) shr CReducShift;
-    Image1.Picture.Bitmap.Height := Length(s2t.Image) shr CReducShift;
+    Image1.Picture.Bitmap.Width := s2t.Scan.Width shr CReducShift;
+    Image1.Picture.Bitmap.Height := s2t.Scan.Height shr CReducShift;
 
     Image1.Picture.Bitmap.BeginUpdate;
     try
-      for j := 0 to Length(s2t.Image) shr CReducShift - 1 do
+      for y := 0 to s2t.Scan.Height shr CReducShift - 1 do
       begin
-        sc := Image1.Picture.Bitmap.ScanLine[j];
-        for i := 0 to Length(s2t.Image[0]) shr CReducShift - 1 do
+        sc := Image1.Picture.Bitmap.ScanLine[y];
+        for x := 0 to s2t.Scan.Width shr CReducShift - 1 do
         begin
-          b := s2t.Image[j shl CReducShift, i shl CReducShift];
+          acc  := 0;
+          for iy := 0 to (1 shl CReducShift) - 1 do
+            for ix := 0 to (1 shl CReducShift) - 1 do
+              acc += s2t.Scan.Image[(y shl CReducShift) + iy, (x shl CReducShift) + ix];
+          acc /=  1 shl (CReducShift * 2);
+
+          b := EnsureRange(round(acc * 255.0), 0, 255);
           sc^ := ToRGB(b, b, b);
 
           Inc(sc);
@@ -68,19 +84,15 @@ begin
       Image1.Picture.Bitmap.EndUpdate;
     end;
 
-    C := Image1.Picture.Bitmap.Canvas;
+    Application.ProcessMessages;
+    s2t.Scan.FindTrack;
 
-    cx := s2t.Center.X shr CReducShift;
-    cy := s2t.Center.Y shr CReducShift;
-    sx := s2t.GrooveStartPoint.X shr CReducShift;
-    sy := s2t.GrooveStartPoint.Y shr CReducShift;
-    offf := Round(s2t.FirstGrooveOffset) shr CReducShift;
-    offc := Round(s2t.ConcentricGrooveOffset) shr CReducShift;
-
-    C.Brush.Style := bsClear;
-    C.Pen.Color := clRed;
-    C.Pen.Color := clRed;
-    C.Pen.Style := psSolid;
+    cx := Round(s2t.Scan.Center.X * CReducFactor);
+    cy := Round(s2t.Scan.Center.Y * CReducFactor);
+    sx := Round(s2t.Scan.GrooveStartPoint.X * CReducFactor);
+    sy := Round(s2t.Scan.GrooveStartPoint.Y * CReducFactor);
+    offf := Round(s2t.Scan.FirstGrooveRadius) shr CReducShift;
+    offc := Round(s2t.Scan.ConcentricGrooveRadius) shr CReducShift;
 
     C.Line(cx - 8, cy, cx + 9, cy);
     C.Line(cx, cy - 8, cx, cy + 9);
@@ -90,14 +102,15 @@ begin
 
     C.EllipseC(cx, cy, offf, offf);
     C.EllipseC(cx, cy, offc, offc);
+
+    HorzScrollBar.Position := sx - Width div 2;
+    VertScrollBar.Position := sy - Height div 2;
+    Application.ProcessMessages;
+    s2t.EvalTrack;
+
   finally
     s2t.Free;
   end;
-end;
-
-procedure TForm1.Image1Click(Sender: TObject);
-begin
-
 end;
 
 end.

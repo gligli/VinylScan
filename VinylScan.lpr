@@ -11,7 +11,7 @@ uses
   athreads,
   {$ENDIF}
   Interfaces, // this includes the LCL widgetset
-  Forms, main, scan2track, utils, powell
+  Forms, main, scan2track, utils, powell, inputscan
   { you can add units after this };
 
 {$R *.res}

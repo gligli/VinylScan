@@ -15,7 +15,7 @@ unit powell;
 interface
 
 uses
-  Classes, SysUtils, Math, Types;
+  Classes, SysUtils, Math;
 
 
 type

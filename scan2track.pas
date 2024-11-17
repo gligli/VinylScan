@@ -5,14 +5,7 @@ unit scan2track;
 interface
 
 uses
-  Classes, SysUtils, Types, StrUtils, Math, Graphics, GraphType, FPCanvas, FPImage, FPWritePNG, utils, powell;
-
-const
-  C45RpmRevolutionsPerSecond = 45.0 / 60.0;
-  C45RpmOuterSize = 6.0 + 7.0 / 8.0;
-  C45RpmInnerSize = 1.504;
-  C45RpmConcentricGroove = 3.0 + 7.0 / 8.0;
-  C45RpmFirstGroove = 6.0 + 6.0 / 8.0;
+  Classes, SysUtils, Types, Math, Graphics, GraphType, FPCanvas, FPImage, FPWritePNG, utils, bufstream, fgl, powell, minasa, minlbfgs, inputscan;
 
 type
 
@@ -20,262 +13,297 @@ type
 
   TScan2Track = class
   private
-    FPNGFileName: String;
-    FDPI: Integer;
+    FScan: TInputScan;
     FBitsPerSample: Integer;
     FSampleRate: Integer;
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
 
-    FCenter: TPoint;
-    FConcentricGrooveOffset: Double; // offset to the center point
-    FFirstGrooveOffset: Double; // offset to the center point
-    FGrooveStartRadians: Double;
-    FGrooveStartPoint: TPoint;
-
-    FImage: TByteDynArray2;
     FTrack: TIntegerDynArray;
-
-    procedure FindCenter;
-    procedure FindConcentricGroove;
-    procedure FindGrooveStart;
-
   public
-    constructor Create(ASampleRate: Integer = 48000; ABitsPerSample: Integer = 16);
+    constructor Create(ASampleRate: Integer = 48000; ABitsPerSample: Integer = 16; ADPI: Integer = 2400);
     destructor Destroy; override;
 
-    procedure LoadPNG;
-    procedure FindTrack;
-    procedure ScanTrack;
+    procedure EvalTrack;
 
     procedure Run;
 
-    property PNGFileName: String read FPNGFileName write FPNGFileName;
+    property Scan: TInputScan read FScan;
     property SampleRate: Integer read FSampleRate;
     property BitsPerSample: Integer read FBitsPerSample;
+    property PointsPerRevolution: Integer read FPointsPerRevolution;
+    property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
 
-    property Center: TPoint read FCenter;
-    property ConcentricGrooveOffset: Double read FConcentricGrooveOffset;
-    property FirstGrooveOffset: Double read FFirstGrooveOffset;
-    property GrooveStartPoint: TPoint read FGrooveStartPoint;
-
-    property Image: TByteDynArray2 read FImage;
     property Track: TIntegerDynArray read FTrack;
   end;
 
 implementation
 
+uses main, forms;
+
 { TScan2Track }
 
-function PowellEvalCenter(const x: TVector; Data: Pointer): Double;
-var
-  Self: TScan2Track absolute Data;
-  Rect: TRect;
-  sz, xx, yy: Integer;
-begin
-  sz := Round(C45RpmInnerSize * Self.FDPI / sqrt(2));
-  Rect.Left := Round(x[0]) - sz div 2;
-  Rect.Top := Round(x[1]) - sz div 2;
-  Rect.Right := Rect.Left + sz;
-  Rect.Bottom := Rect.Top + sz;
-
-  Result := 0;
-  for yy := Rect.Top to Rect.Bottom do
-    if InRange(yy, 0, High(Self.FImage)) then
-      for xx := Rect.Left to Rect.Right do
-        if InRange(xx, 0, High(Self.FImage[0])) then
-          Result += Self.FImage[yy, xx];
-
-  //WriteLn(x[0]:8:0,x[1]:8:0,Result:20:0);
-
-  Result := -Result;
-end;
-
-procedure TScan2Track.FindCenter;
-var
-  x: TVector;
-begin
-  FCenter.X := Length(FImage[0]) div 2;
-  FCenter.Y := Length(FImage) div 2;
-
-  SetLength(x, 2);
-  x[0] := FCenter.X;
-  x[1] := FCenter.Y;
-
-  PowellMinimize(@PowellEvalCenter, x, FDPI / 10.0, 0.5, 0.5, MaxInt, Self);
-
-  FCenter.X := round(x[0]);
-  FCenter.Y := round(x[1]);
-end;
-
-function PowellEvalConcentricGroove(const x: TVector; Data: Pointer): Double;
-var
-  Self: TScan2Track absolute Data;
-  i, xx, yy: Integer;
-  sn, cs: Double;
-begin
-
-  Result := 0;
-  for i := 0 to Self.FPointsPerRevolution - 1  do
-  begin
-    SinCos(i * Self.FRadiansPerRevolutionPoint, sn, cs);
-
-    xx := Round(cs * x[0]) + Self.Center.X;
-    yy := Round(sn * x[0]) + Self.Center.Y;
-
-    if InRange(yy, 0, High(Self.FImage)) and InRange(xx, 0, High(Self.FImage[0])) then
-      Result += Self.FImage[yy, xx];
-  end;
-
-  //WriteLn(x[0]:12:3,Result:20:0);
-
-  Result := -Result;
-end;
-
-procedure TScan2Track.FindConcentricGroove;
-var
-  x: TVector;
-begin
-  FConcentricGrooveOffset := C45RpmConcentricGroove * Self.FDPI * 0.5;
-
-  SetLength(x, 1);
-  x[0] := FConcentricGrooveOffset;
-
-  PowellMinimize(@PowellEvalConcentricGroove, x, FDPI / 20.0, 0.0, 0.5, MaxInt, Self);
-
-  FConcentricGrooveOffset := x[0];
-end;
-
-procedure TScan2Track.FindGrooveStart;
-var
-  i, x, y, bestx, besty: Integer;
-  v, best, sn, cs, bestr: Double;
-begin
-  best := -Infinity;
-  bestx := 0;
-  besty := 0;
-  bestr := 0;
-  v := 0;
-
-  for i := 0 to Self.FPointsPerRevolution - 1  do
-  begin
-    SinCos(i * Self.FRadiansPerRevolutionPoint, sn, cs);
-
-    x := Round(cs * FFirstGrooveOffset) + Self.Center.X;
-    y := Round(sn * FFirstGrooveOffset) + Self.Center.Y;
-
-    if InRange(y, 0, High(Self.FImage)) and InRange(x, 0, High(Self.FImage[0])) then
-    begin
-      v := v * 99 + Self.FImage[y, x];
-      v /= 100;
-
-      if v > best then
-      begin
-        best := v;
-        bestx := x;
-        besty := y;
-        bestr := i * Self.FRadiansPerRevolutionPoint;
-      end;
-    end;
-
-    writeln(i:6,x:8,y:8,v:9:3,best:9:3,bestx:8,besty:8);
-  end;
-
-  FGrooveStartRadians := bestr;
-  FGrooveStartPoint.X := bestx;
-  FGrooveStartPoint.Y := besty;
-end;
-
-constructor TScan2Track.Create(ASampleRate: Integer; ABitsPerSample: Integer);
+constructor TScan2Track.Create(ASampleRate: Integer; ABitsPerSample: Integer; ADPI: Integer);
 begin
   FSampleRate := ASampleRate;
   FBitsPerSample := ABitsPerSample;
 
-  FPointsPerRevolution := Round(FSampleRate * C45RpmRevolutionsPerSecond);
+  FPointsPerRevolution := Round(FSampleRate / C45RpmRevolutionsPerSecond);
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
 
-  FDPI := 2400;
+  FScan := TInputScan.Create(FPointsPerRevolution, ADPI);
 end;
 
 destructor TScan2Track.Destroy;
 begin
+  FScan.Free;
+
   inherited Destroy;
 end;
 
-procedure TScan2Track.LoadPNG;
+const
+  CPredictionPointCount = 3600;
 var
-  PNG: TPortableNetworkGraphic;
-  x, y: Integer;
-  p: PByte;
+  pradius, dumx, dumy: Double;
+  SinCosLut: array[0 .. CPredictionPointCount - 1] of TPointD;
+
+function PowellEvalTracking(const x: TVector; Data: Pointer): TScalar;
+var
+  Self: TScan2Track absolute Data;
+  i: Integer;
+  r, ri, predy, predx: Double;
 begin
-  WriteLn('LoadPNG');
+  r := pradius;
+  ri := x[0] * Self.PointsPerRevolution / CPredictionPointCount;
 
-  PNG := TPortableNetworkGraphic.Create;
-  try
-    PNG.LoadFromFile(FPNGFileName);
+  Result := 0;
+  if InRange(r, Self.Scan.ConcentricGrooveRadius, Self.Scan.FirstGrooveRadius) and
+      InRange(r - ri * CPredictionPointCount, Self.Scan.ConcentricGrooveRadius, Self.Scan.FirstGrooveRadius) then
+    for i := 0 to CPredictionPointCount - 1 do
+    begin
+      predx := SinCosLut[i].X * r + Self.Scan.Center.X;
+      predy := SinCosLut[i].Y * r + Self.Scan.Center.Y;
 
-    SetLength(FImage, PNG.Height, PNG.Width);
+      Result -= Self.Scan.GetPointD(Self.Scan.Image, predy, predx);
 
-    WriteLn(PNG.Width:6, 'x', PNG.Height:6);
-    Assert(PNG.PixelFormat=pf8bit);
-
-    PNG.BeginUpdate;
-    try
-      for y := 0 to High(FImage) do
-      begin
-        p := PNG.RawImage.Data;
-        inc(p, y * PNG.RawImage.Description.BytesPerLine);
-        for x := 0 to High(FImage[0]) do
-        begin
-          FImage[y, x] := p^;
-          Inc(p, PNG.RawImage.Description.BitsPerPixel shr 3);
-        end;
-      end;
-    finally
-      PNG.EndUpdate;
+      r -= ri;
     end;
 
-    // TODO: guess DPI
+  dumx := predx;
+  dumy := predy;
 
-  finally
-    PNG.Free;
+  //WriteLn(x[0]:12:6,x[1]:12:6,Result:20:3);
+end;
+
+procedure BFGSEvalTracking(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+var
+  Self: TScan2Track absolute obj;
+  i: Integer;
+  sn, cs, r, ri, predy, predx, id: Double;
+begin
+  ri := arg[0];
+
+  func := 0;
+  grad[0] := 0;
+  for i := 0 to CPredictionPointCount - 1 do
+  begin
+    id := i * Self.PointsPerRevolution / CPredictionPointCount;
+
+    r := pradius - id * ri;
+
+    if InRange(r, Self.Scan.ConcentricGrooveRadius, Self.Scan.FirstGrooveRadius) then
+    begin
+      predx := SinCosLut[i].X * r + Self.Scan.Center.X;
+      predy := SinCosLut[i].Y * r + Self.Scan.Center.Y;
+
+      func -= Self.Scan.GetPointD(Self.Scan.Image, predy, predx);
+      grad[0] -= Self.Scan.GetPointD(Self.Scan.XGradient, predy, predx) * cs * -id + Self.Scan.GetPointD(Self.Scan.YGradient, predy, predx) * sn * -id;
+    end;
   end;
+
+  dumx := predx;
+  dumy := predy;
+
+  //WriteLn(arg[0]:12:3,func:20:3,grad[0]:12:3);
 end;
 
-procedure TScan2Track.FindTrack;
+procedure BFGSEvalTracking_(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+var
+  x: TVector;
+  h: Double;
 begin
-  WriteLn('FindTrack');
+  h := 1e-8;
 
-  FindCenter;
+  // 1/280 	−4/105 	1/5 	−4/5 	0 	4/5 	−1/5 	4/105 	−1/280
 
-  WriteLn('Center:', FCenter.X:6, ',', FCenter.Y:6);
+  grad[0] := 0;
+  x := Copy(arg); x[0] += 4.0 * h; grad[0] += -1.0 / 280.0 * PowellEvalTracking(x, obj);
+  x := Copy(arg); x[0] += 3.0 * h; grad[0] += 4.0 / 105.0 * PowellEvalTracking(x, obj);
+  x := Copy(arg); x[0] += 2.0 * h; grad[0] += -1.0 / 5.0 * PowellEvalTracking(x, obj);
+  x := Copy(arg); x[0] += 1.0 * h; grad[0] += 4.0 / 5.0 * PowellEvalTracking(x, obj);
+  x := Copy(arg); x[0] -= 1.0 * h; grad[0] += -4.0 / 5.0 * PowellEvalTracking(x, obj);
+  x := Copy(arg); x[0] -= 2.0 * h; grad[0] += 1.0 / 5.0 * PowellEvalTracking(x, obj);
+  x := Copy(arg); x[0] -= 3.0 * h; grad[0] += -4.0 / 105.0 * PowellEvalTracking(x, obj);
+  x := Copy(arg); x[0] -= 4.0 * h; grad[0] += 1.0 / 280.0 * PowellEvalTracking(x, obj);
+  grad[0] /= h;
 
-  FFirstGrooveOffset := C45RpmFirstGroove * Self.FDPI * 0.5;
+  func := PowellEvalTracking(arg, obj);
 
-  WriteLn('FirstGrooveOffset:', FFirstGrooveOffset:12:3);
-
-  FindConcentricGroove;
-
-  WriteLn('ConcentricGrooveOffset:', FConcentricGrooveOffset:12:3);
-
-  FindGrooveStart;
-
-  WriteLn('GrooveStartRadians:', FGrooveStartRadians:12:3);
-  WriteLn('GrooveStartPoint:', FGrooveStartPoint.X:6, ',', FGrooveStartPoint.Y:6);
+  //WriteLn(arg[0]:12:3,func:20:3,grad[0]:12:3,' estimated');
 end;
 
-procedure TScan2Track.ScanTrack;
+procedure TScan2Track.EvalTrack;
+const
+  CBFPrecMul = 4;
+var
+  angle, radius, sn, cs, corr, px, py, p, bestf, f, bestr, a, ai: Double;
+  i, pos: Integer;
+  x, bl, bu: TVector;
+  fs: TBufferedFileStream;
+  pbuf: specialize TFPGList<TPoint>;
+  t, pt: QWord;
+  prevPoints: array[0 .. 255] of Double;
+
+
+  procedure Correct;
+  var
+    i, k: Integer;
+    state: MinASAState;
+    rep: MinASAReport;
+  begin
+    x[0] := corr;
+    pradius := radius;
+
+    ai := Pi * 2.0 / CPredictionPointCount;
+    a := angle;
+    for i := 0 to CPredictionPointCount - 1 do
+    begin
+      SinCos(a, SinCosLut[i].Y, SinCosLut[i].X);
+      a -= ai;
+    end;
+
+  {$if 1}
+    //PowellMinimize(@PowellEvalTracking, x, 1.0, 0, 0, MaxInt, Self);
+
+    bestf := Infinity;
+    bestr := 0;
+    for k := -Round(C45RpmMaxGrooveWidth * Scan.DPI * CBFPrecMul) to Round(2.0 * Scan.DPI / C45RpmLeadInGroovesPerInch * CBFPrecMul) do
+    begin
+      x[0] := k / (FPointsPerRevolution * CBFPrecMul);
+      f := PowellEvalTracking(x, Self);
+
+      if f < bestf then
+      begin
+        bestf := f;
+        bestr := x[0];
+      end;
+    end;
+
+    x[0] := bestr;
+    PowellEvalTracking(x, Self);
+
+  {$else}
+    MinASACreate(1, x, bl, bu, state);
+    MinASASetCond(state, 0, 0, 0, 0);
+
+    while MinASAIteration(state) do
+      if State.NeedFG then
+      begin
+        //BFGSEvalTracking(State.X, state.F, state.G, Self);
+        BFGSEvalTracking_(State.X, state.F, state.G, Self);
+      end;
+
+    MinASAResults(state, x, rep);
+  {$ifend}
+
+    main.Form1.Image1.Picture.Bitmap.Canvas.Pixels[round(dumx * CReducFactor), round(dumy * CReducFactor)] := clBlue;
+
+    corr := x[0];
+  end;
+
 begin
-  WriteLn('ScanTrack');
+  WriteLn('EvalTrack');
 
+  FillQWord(prevPoints, Length(prevPoints), 0);
+  SetLength(x, 1);
+  SetLength(bl, 1);
+  SetLength(bu, 1);
+  fs := TBufferedFileStream.Create('debug.raw', fmCreate or fmShareDenyNone);
+  pbuf := specialize TFPGList<TPoint>.Create;
+  try
+    pos := 0;
+    pt := GetTickCount64;
 
+    angle := Scan.GrooveStartAngle;
+    radius := Scan.FirstGrooveRadius;
+    corr := (Scan.DPI / C45RpmLeadInGroovesPerInch) / FPointsPerRevolution *0 + 223 / FPointsPerRevolution;
+    bl[0] := -0.1 * corr;
+    bu[0] := 2.0 * corr;
+
+    repeat
+      Correct;
+
+      angle := Scan.GrooveStartAngle - FRadiansPerRevolutionPoint * pos;
+      radius -= corr;
+
+      SinCos(angle, sn, cs);
+      px := cs * radius + Self.Scan.Center.X;
+      py := sn * radius + Self.Scan.Center.Y;
+
+      Write(pos:8, corr:20:6, #13);
+
+      if InRange(px, 0, High(Scan.Image[0]) - 1) and InRange(py, 0, High(Scan.Image) - 1) then
+      begin
+        t := GetTickCount64;
+
+        pbuf.Add(Point(round(px * CReducFactor), round(py * CReducFactor)));
+
+        if t - pt >= 1000 then
+        begin
+
+          for i := 0 to pbuf.Count - 1 do
+            main.Form1.Image1.Picture.Bitmap.Canvas.Pixels[pbuf[i].X, pbuf[i].Y] := clLime;
+
+          main.Form1.HorzScrollBar.Position := pbuf.Last.X - main.Form1.Width div 2;
+          main.Form1.VertScrollBar.Position := pbuf.Last.Y - main.Form1.Height div 2;
+
+          pbuf.Clear;
+
+          Application.ProcessMessages;
+          pt := GetTickCount64;
+        end;
+
+        p := Scan.GetPointD(Scan.Image, py, px);
+
+        //if p < Mean(prevPoints) * 0.5 then
+        //begin
+        //  Correct;
+        //
+        //  FillQWord(prevPoints, Length(prevPoints), 0);
+        //  pos := Max(0, pos - Length(prevPoints) div 2);
+        //  fs.Seek(pos * sizeof(p), soBeginning);
+        //
+        //  Continue;
+        //end;
+
+        prevPoints[pos and High(prevPoints)] := p;
+
+        fs.Write(p, sizeof(p));
+      end;
+
+      Inc(pos);
+
+    until radius <= Scan.ConcentricGrooveRadius;
+  finally
+    fs.Free;
+    pbuf.Free;
+  end;
 end;
 
 procedure TScan2Track.Run;
 begin
-  LoadPNG;
-  FindTrack;
-  ScanTrack;
+  Scan.Run;
+  EvalTrack;
 end;
 
 end.
