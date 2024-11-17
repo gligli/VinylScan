@@ -126,8 +126,8 @@ begin
   x[1] := FCenter.Y;
   bl[0] := radiusOuter;
   bl[1] := radiusOuter;
-  bu[0] := High(FImage[0]) - 1 - radiusOuter;
-  bu[1] := High(FImage) - 1 - radiusOuter;
+  bu[0] := Length(FImage[0]) - radiusOuter;
+  bu[1] := Length(FImage) - radiusOuter;
 
   MinASACreate(2, x, bl, bu, state);
   MinASASetCond(state, 0, 0, 0, 0);
@@ -322,8 +322,19 @@ begin
             inc(p, y * PNG.RawImage.Description.BytesPerLine);
             for x := 0 to High(FImage[0]) do
             begin
-              FImage[y, x] := p^ * (1 / 255.0);
+              FImage[y, x] := p^ * (1 / High(Byte));
               Inc(p);
+            end;
+          end;
+        16:
+          for y := 0 to High(FImage) do
+          begin
+            p := PNG.RawImage.Data;
+            inc(p, y * PNG.RawImage.Description.BytesPerLine);
+            for x := 0 to High(FImage[0]) do
+            begin
+              FImage[y, x] := PWord(p)^ * (1 / High(Word));
+              Inc(p, 2);
             end;
           end;
         24:
@@ -333,8 +344,8 @@ begin
             inc(p, y * PNG.RawImage.Description.BytesPerLine);
             for x := 0 to High(FImage[0]) do
             begin
-              FImage[y, x] := ToLuma(p[0], p[1], p[2]) * (1 / (cLumaDiv * 255.0));
-              Inc(p,3);
+              FImage[y, x] := ToLuma(p[0], p[1], p[2]) * (1 / (cLumaDiv * High(Byte)));
+              Inc(p, 3);
             end;
           end;
         32:
@@ -344,8 +355,8 @@ begin
             inc(p, y * PNG.RawImage.Description.BytesPerLine);
             for x := 0 to High(FImage[0]) do
             begin
-              FImage[y, x] := ToLuma(p[0], p[1], p[2]) * (1 / (cLumaDiv * 255.0));
-              Inc(p,4);
+              FImage[y, x] := ToLuma(p[0], p[1], p[2]) * (1 / (cLumaDiv * High(Byte)));
+              Inc(p, 4);
             end;
           end;
         else
