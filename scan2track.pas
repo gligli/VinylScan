@@ -5,7 +5,8 @@ unit scan2track;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, GraphType, FPCanvas, FPImage, FPWritePNG, utils, bufstream, fgl, powell, minasa, minlbfgs, inputscan;
+  Classes, SysUtils, Types, Math, Graphics, GraphType, FPCanvas, FPImage, FPWritePNG,
+  utils, bufstream, fgl, powell, minasa, minlbfgs, inputscan;
 
 type
 
@@ -162,8 +163,6 @@ var
   fs: TBufferedFileStream;
   pbuf: specialize TFPGList<TPoint>;
   t, pt: QWord;
-  prevPoints: array[0 .. 255] of Double;
-
 
   procedure Correct;
   var
@@ -216,7 +215,7 @@ var
     MinASAResults(state, x, rep);
   {$ifend}
 
-    main.Form1.Image1.Picture.Bitmap.Canvas.Pixels[round(dumx * CReducFactor), round(dumy * CReducFactor)] := clBlue;
+    main.Form1.Image.Picture.Bitmap.Canvas.Pixels[round(dumx * CReducFactor), round(dumy * CReducFactor)] := clBlue;
 
     corr := x[0];
   end;
@@ -224,7 +223,6 @@ var
 begin
   WriteLn('EvalTrack');
 
-  FillQWord(prevPoints, Length(prevPoints), 0);
   SetLength(x, 1);
   SetLength(bl, 1);
   SetLength(bu, 1);
@@ -262,7 +260,7 @@ begin
         begin
 
           for i := 0 to pbuf.Count - 1 do
-            main.Form1.Image1.Picture.Bitmap.Canvas.Pixels[pbuf[i].X, pbuf[i].Y] := clLime;
+            main.Form1.Image.Picture.Bitmap.Canvas.Pixels[pbuf[i].X, pbuf[i].Y] := clLime;
 
           main.Form1.HorzScrollBar.Position := pbuf.Last.X - main.Form1.Width div 2;
           main.Form1.VertScrollBar.Position := pbuf.Last.Y - main.Form1.Height div 2;
@@ -274,19 +272,6 @@ begin
         end;
 
         p := Scan.GetPointD(Scan.Image, py, px);
-
-        //if p < Mean(prevPoints) * 0.5 then
-        //begin
-        //  Correct;
-        //
-        //  FillQWord(prevPoints, Length(prevPoints), 0);
-        //  pos := Max(0, pos - Length(prevPoints) div 2);
-        //  fs.Seek(pos * sizeof(p), soBeginning);
-        //
-        //  Continue;
-        //end;
-
-        prevPoints[pos and High(prevPoints)] := p;
 
         fs.Write(p, sizeof(p));
       end;

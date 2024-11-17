@@ -5,7 +5,7 @@ unit main;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, scan2track, utils, math;
+  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, scan2track, scancorrelator, utils, math;
 
 const
   CReducShift = 2;
@@ -16,12 +16,17 @@ type
   { TForm1 }
 
   TForm1 = class(TForm)
-    Button1: TButton;
-    Edit1: TEdit;
-    Image1: TImage;
-    procedure Button1Click(Sender: TObject);
+    btScan2Track: TButton;
+    btScansCorrelator: TButton;
+    edInputPNG: TEdit;
+    edOutputPNG: TEdit;
+    Image: TImage;
+    mmInputPNGs: TMemo;
+    procedure btScan2TrackClick(Sender: TObject);
+    procedure btScansCorrelatorClick(Sender: TObject);
   private
 
+    procedure DrawImage(const Img: TSingleDynArray2);
   public
 
   end;
@@ -35,16 +40,13 @@ implementation
 
 { TForm1 }
 
-procedure TForm1.Button1Click(Sender: TObject);
+procedure TForm1.btScan2TrackClick(Sender: TObject);
 var
   s2t: TScan2Track;
-  x, y, ix, iy, cx, cy, sx, sy, offf, offc: Integer;
-  sc: PInteger;
-  b: Byte;
-  acc: Double;
   C: TCanvas;
+  cx, cy, sx, sy, offf, offc: Integer;
 begin
-  C := Image1.Picture.Bitmap.Canvas;
+  C := Image.Picture.Bitmap.Canvas;
 
   C.Brush.Style := bsClear;
   C.Pen.Color := clRed;
@@ -53,38 +55,12 @@ begin
 
   s2t := TScan2Track.Create;//(8000);
   try
-    s2t.Scan.PNGFileName := Edit1.Text;
+    s2t.Scan.PNGFileName := edInputPNG.Text;
 
     s2t.Scan.LoadPNG;
 
-    Image1.Picture.Bitmap.PixelFormat := pf32bit;
-    Image1.Picture.Bitmap.Width := s2t.Scan.Width shr CReducShift;
-    Image1.Picture.Bitmap.Height := s2t.Scan.Height shr CReducShift;
+    DrawImage(s2t.Scan.Image);
 
-    Image1.Picture.Bitmap.BeginUpdate;
-    try
-      for y := 0 to s2t.Scan.Height shr CReducShift - 1 do
-      begin
-        sc := Image1.Picture.Bitmap.ScanLine[y];
-        for x := 0 to s2t.Scan.Width shr CReducShift - 1 do
-        begin
-          acc  := 0;
-          for iy := 0 to (1 shl CReducShift) - 1 do
-            for ix := 0 to (1 shl CReducShift) - 1 do
-              acc += s2t.Scan.Image[(y shl CReducShift) + iy, (x shl CReducShift) + ix];
-          acc /=  1 shl (CReducShift * 2);
-
-          b := EnsureRange(round(acc * 255.0), 0, 255);
-          sc^ := ToRGB(b, b, b);
-
-          Inc(sc);
-        end;
-      end;
-    finally
-      Image1.Picture.Bitmap.EndUpdate;
-    end;
-
-    Application.ProcessMessages;
     s2t.Scan.FindTrack;
 
     cx := Round(s2t.Scan.Center.X * CReducFactor);
@@ -106,11 +82,72 @@ begin
     HorzScrollBar.Position := sx - Width div 2;
     VertScrollBar.Position := sy - Height div 2;
     Application.ProcessMessages;
+
     s2t.EvalTrack;
 
   finally
     s2t.Free;
   end;
+end;
+
+procedure TForm1.btScansCorrelatorClick(Sender: TObject);
+var
+  sc: TScanCorrelator;
+begin
+  sc := TScanCorrelator.Create(mmInputPNGs.Lines);
+  try
+    sc.OutputPNGFileName := edOutputPNG.Text;
+
+    sc.LoadPNGs;
+
+    sc.Correlate;
+
+    DrawImage(sc.OutputImage);
+
+    sc.Save;
+  finally
+    sc.Free;
+  end;
+end;
+
+procedure TForm1.DrawImage(const Img: TSingleDynArray2);
+var
+  x, y, ix, iy: Integer;
+  sc: PInteger;
+  b: Byte;
+  acc: Double;
+  C: TCanvas;
+begin
+  C := Image.Picture.Bitmap.Canvas;
+
+  Image.Picture.Bitmap.PixelFormat := pf32bit;
+  Image.Picture.Bitmap.Width := Length(Img[0]) shr CReducShift;
+  Image.Picture.Bitmap.Height := Length(Img) shr CReducShift;
+
+  Image.Picture.Bitmap.BeginUpdate;
+  try
+    for y := 0 to Image.Picture.Bitmap.Height - 1 do
+    begin
+      sc := Image.Picture.Bitmap.ScanLine[y];
+      for x := 0 to Image.Picture.Bitmap.Width - 1 do
+      begin
+        acc  := 0;
+        for iy := 0 to (1 shl CReducShift) - 1 do
+          for ix := 0 to (1 shl CReducShift) - 1 do
+            acc += Img[(y shl CReducShift) + iy, (x shl CReducShift) + ix];
+        acc /=  1 shl (CReducShift * 2);
+
+        b := EnsureRange(round(acc * 255.0), 0, 255);
+        sc^ := ToRGB(b, b, b);
+
+        Inc(sc);
+      end;
+    end;
+  finally
+    Image.Picture.Bitmap.EndUpdate;
+  end;
+
+  Application.ProcessMessages;
 end;
 
 end.

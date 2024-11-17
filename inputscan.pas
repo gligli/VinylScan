@@ -5,7 +5,8 @@ unit inputscan;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, utils, minasa, powell;
+  Classes, SysUtils, Types, Math, Graphics,
+  utils, minasa, powell;
 
 type
 
