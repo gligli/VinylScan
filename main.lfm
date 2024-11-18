@@ -32,7 +32,7 @@ object Form1: TForm1
     Top = 128
     Width = 168
     TabOrder = 1
-    Text = 'data\think_correlated.png'
+    Text = 'data\think1.png'
   end
   object btScan2Track: TButton
     Left = 176
