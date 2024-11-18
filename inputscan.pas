@@ -44,8 +44,8 @@ type
 
     procedure Run;
 
+    function InRangePointD(Y, X: Double): Boolean;
     function GetPointD(const Img: TSingleDynArray2; Y, X: Double): Double;
-    function GetSobelPointD(Y, X: Double): Double;
 
     property PNGFileName: String read FPNGFileName write FPNGFileName;
     property DPI: Integer read FDPI;
@@ -87,8 +87,7 @@ begin
   radiusOuter := Round(C45RpmOuterSize * Self.FDPI * 0.5);
   r := radiusInner;
   repeat
-    if InRange(arg[1] + r, 0, High(Self.FImage)) and InRange(arg[0] + r, 0, High(Self.FImage[0])) and
-        InRange(arg[1] - r, 0, High(Self.FImage)) and InRange(arg[0] - r, 0, High(Self.FImage[0])) then
+    if Self.InRangePointD(arg[1], arg[0]) and Self.InRangePointD(arg[1] - r, arg[0] - r) then
       for t := 0 to CRevolutionPointCount - 1  do
       begin
         SinCos(t * CRadiansPerPoint, sn, cs);
@@ -150,8 +149,7 @@ var
   sn, cs, xx, yy: Double;
 begin
   Result := 0;
-  if InRange(Self.Center.Y + x[0], 0, High(Self.FImage)) and InRange(Self.Center.X + x[0], 0, High(Self.FImage[0])) and
-      InRange(Self.Center.Y - x[0], 0, High(Self.FImage)) and InRange(Self.Center.X - x[0], 0, High(Self.FImage[0])) then
+  if Self.InRangePointD(Self.Center.Y + x[0], Self.Center.X + x[0]) and Self.InRangePointD(Self.Center.Y - x[0], Self.Center.X - x[0]) then
     for i := 0 to CRevolutionPointCount - 1  do
     begin
       SinCos(i * CRadiansPerPoint, sn, cs);
@@ -225,7 +223,7 @@ begin
     x := cs * FFirstGrooveRadius + Center.X;
     y := sn * FFirstGrooveRadius + Center.Y;
 
-    if InRange(y, 0, High(FImage)) and InRange(x, 0, High(FImage[0])) then
+    if InRangePointD(y, x) then
     begin
       v := v * 0.99 + Self.GetPointD(FImage, y, x) * 0.01;
 
@@ -254,29 +252,17 @@ end;
 function TInputScan.GetPointD(const Img: TSingleDynArray2; Y, X: Double): Double;
 var
   ix, iy: Integer;
-  x1, x2: Double;
+  x0, x1, x2, x3: Double;
 begin
   ix := trunc(X);
   iy := trunc(Y);
 
-  x1 := lerp(Img[iy, ix], Img[iy, ix + 1], X - ix);
-  x2 := lerp(Img[iy + 1, ix], Img[iy + 1, ix + 1], X - ix);
+  x0 := herp(Img[iy - 1, ix - 1], Img[iy - 1, ix], Img[iy - 1, ix + 1], Img[iy - 1, ix + 2], X - ix);
+  x1 := herp(Img[iy, ix - 1], Img[iy, ix], Img[iy, ix + 1], Img[iy, ix + 2], X - ix);
+  x2 := herp(Img[iy + 1, ix - 1], Img[iy + 1, ix], Img[iy + 1, ix + 1], Img[iy + 1, ix + 2], X - ix);
+  x3 := herp(Img[iy + 2, ix - 1], Img[iy + 2, ix], Img[iy + 2, ix + 1], Img[iy + 2, ix + 2], X - ix);
 
-  Result := lerp(x1, x2, Y - iy);
-end;
-
-function TInputScan.GetSobelPointD(Y, X: Double): Double;
-var
-  ix, iy: Integer;
-  x1, x2: Double;
-begin
-  ix := trunc(X);
-  iy := trunc(Y);
-
-  x1 := lerp(Sqrt(sqr(FXGradient[iy, ix]) + sqr(FYGradient[iy, ix])), Sqrt(sqr(FXGradient[iy, ix + 1]) + sqr(FYGradient[iy, ix + 1])), X - ix);
-  x2 := lerp(Sqrt(sqr(FXGradient[iy + 1, ix]) + sqr(FYGradient[iy + 1, ix])), Sqrt(sqr(FXGradient[iy + 1, ix + 1]) + sqr(FYGradient[iy + 1, ix + 1])), X - ix);
-
-  Result := lerp(x1, x2, Y - iy);
+  Result := herp(x0, x1, x2, x3, Y - iy);
 end;
 
 function TInputScan.GetWidth: Integer;
@@ -402,6 +388,11 @@ procedure TInputScan.Run;
 begin
   LoadPNG;
   FindTrack;
+end;
+
+function TInputScan.InRangePointD(Y, X: Double): Boolean;
+begin
+  Result := InRange(Y, 1, Height - 2) and InRange(X, 1, Width - 2);
 end;
 
 end.
