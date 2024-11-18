@@ -69,6 +69,7 @@ function ToBW(col: Integer): Integer;
 function lerp(x, y, alpha: Double): Double; inline;
 function ilerp(x, y, alpha, maxAlpha: Integer): Integer; inline;
 function revlerp(x, r, alpha: Double): Double; inline;
+function herp(y0, y1, y2, y3, alpha: Double): Double;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double;
   EpsilonX, EpsilonY: Double; Data: Pointer): Double;
@@ -193,6 +194,25 @@ end;
 function revlerp(x, r, alpha: Double): Double; inline;
 begin
   Result := x + (r - x) / alpha;
+end;
+
+function herp(y0, y1, y2, y3, alpha: Double): Double;
+var
+  m0, m1, alpha2, aplha3: Double;
+  a0, a1, a2, a3: Double;
+begin
+    alpha2 := alpha * alpha;
+    aplha3 := alpha2 * alpha;
+    m0 := (y1 - y0) * 0.5;
+    m0 += (y2 - y1) * 0.5;
+    m1 := (y2 - y1) * 0.5;
+    m1 += (y3 - y2) * 0.5;
+    a0 := 2 * aplha3 - 3 * alpha2 + 1;
+    a1 := aplha3 - 2 * alpha2 + alpha;
+    a2 := aplha3 - alpha2;
+    a3 := -2 * aplha3 + 3 * alpha2;
+
+    Result := (a0 * y1 + a1 * m0 + a2 * m1 + a3 * y2);
 end;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double;
