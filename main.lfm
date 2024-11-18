@@ -1,7 +1,7 @@
 object Form1: TForm1
   Left = 387
   Height = 600
-  Top = 92
+  Top = 87
   Width = 800
   HorzScrollBar.Increment = 240
   HorzScrollBar.Page = 640
@@ -72,5 +72,14 @@ object Form1: TForm1
     Caption = 'btScansCorrelator'
     TabOrder = 4
     OnClick = btScansCorrelatorClick
+  end
+  object btTest: TButton
+    Left = 224
+    Height = 25
+    Top = 8
+    Width = 75
+    Caption = 'btTest'
+    TabOrder = 5
+    OnClick = btTestClick
   end
 end

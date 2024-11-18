@@ -198,21 +198,18 @@ end;
 
 function herp(y0, y1, y2, y3, alpha: Double): Double;
 var
-  m0, m1, alpha2, aplha3: Double;
+  alpha2, alpha3: Double;
   a0, a1, a2, a3: Double;
 begin
     alpha2 := alpha * alpha;
-    aplha3 := alpha2 * alpha;
-    m0 := (y1 - y0) * 0.5;
-    m0 += (y2 - y1) * 0.5;
-    m1 := (y2 - y1) * 0.5;
-    m1 += (y3 - y2) * 0.5;
-    a0 := 2 * aplha3 - 3 * alpha2 + 1;
-    a1 := aplha3 - 2 * alpha2 + alpha;
-    a2 := aplha3 - alpha2;
-    a3 := -2 * aplha3 + 3 * alpha2;
+    alpha3 := alpha2 * alpha;
 
-    Result := (a0 * y1 + a1 * m0 + a2 * m1 + a3 * y2);
+    a3 := 0.5 * (-1 * y0 + +3 * y1 + -3 * y2 + +1 * y3);
+    a2 := 0.5 * (+2 * y0 + -5 * y1 + +4 * y2 + -1 * y3);
+    a1 := 0.5 * (-1 * y0 + +0 * y1 + +1 * y2 + +0 * y3);
+    a0 := y1;
+
+    Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
 end;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double;

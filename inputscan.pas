@@ -252,17 +252,17 @@ end;
 function TInputScan.GetPointD(const Img: TSingleDynArray2; Y, X: Double): Double;
 var
   ix, iy: Integer;
-  x0, x1, x2, x3: Double;
+  y0, y1, y2, y3: Double;
 begin
   ix := trunc(X);
   iy := trunc(Y);
 
-  x0 := herp(Img[iy - 1, ix - 1], Img[iy - 1, ix], Img[iy - 1, ix + 1], Img[iy - 1, ix + 2], X - ix);
-  x1 := herp(Img[iy, ix - 1], Img[iy, ix], Img[iy, ix + 1], Img[iy, ix + 2], X - ix);
-  x2 := herp(Img[iy + 1, ix - 1], Img[iy + 1, ix], Img[iy + 1, ix + 1], Img[iy + 1, ix + 2], X - ix);
-  x3 := herp(Img[iy + 2, ix - 1], Img[iy + 2, ix], Img[iy + 2, ix + 1], Img[iy + 2, ix + 2], X - ix);
+  y0 := herp(Img[iy - 1, ix - 1], Img[iy - 1, ix + 0], Img[iy - 1, ix + 1], Img[iy - 1, ix + 2], X - ix);
+  y1 := herp(Img[iy + 0, ix - 1], Img[iy + 0, ix + 0], Img[iy + 0, ix + 1], Img[iy + 0, ix + 2], X - ix);
+  y2 := herp(Img[iy + 1, ix - 1], Img[iy + 1, ix + 0], Img[iy + 1, ix + 1], Img[iy + 1, ix + 2], X - ix);
+  y3 := herp(Img[iy + 2, ix - 1], Img[iy + 2, ix + 0], Img[iy + 2, ix + 1], Img[iy + 2, ix + 2], X - ix);
 
-  Result := herp(x0, x1, x2, x3, Y - iy);
+  Result := herp(y0, y1, y2, y3, Y - iy);
 end;
 
 function TInputScan.GetWidth: Integer;

@@ -16,6 +16,7 @@ type
   { TForm1 }
 
   TForm1 = class(TForm)
+    btTest: TButton;
     btScan2Track: TButton;
     btScansCorrelator: TButton;
     edInputPNG: TEdit;
@@ -24,6 +25,7 @@ type
     mmInputPNGs: TMemo;
     procedure btScan2TrackClick(Sender: TObject);
     procedure btScansCorrelatorClick(Sender: TObject);
+    procedure btTestClick(Sender: TObject);
   private
 
     procedure DrawImage(const Img: TSingleDynArray2);
@@ -108,6 +110,28 @@ begin
   finally
     sc.Free;
   end;
+end;
+
+procedure TForm1.btTestClick(Sender: TObject);
+var
+  img: TSingleDynArray2;
+  i: Integer;
+begin
+  SetLength(img, 2048, 2048);
+
+  img[512, 16 * 2 + 1024] := 1.0;
+  img[1024, 128 * 2 + 1024] := 1.0;
+  img[1536, 64 * 2 + 1024] := 1.0;
+  img[2047, 256 * 2 + 1024] := 1.0;
+
+  for i := 0 to 511 do
+  begin
+    img[i + 512, round(herp(0, 16, 128, 64, i / 512) * 2 + 1024)] := 1.0;
+    img[i + 1024, round(herp(16, 128, 64, 256, i / 512) * 2 + 1024)] := 1.0;
+    img[i + 1536, round(herp(128, 64, 256, 512, i / 512) * 2 + 1024)] := 1.0;
+  end;
+
+  DrawImage(img);
 end;
 
 procedure TForm1.DrawImage(const Img: TSingleDynArray2);
