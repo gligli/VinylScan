@@ -18,6 +18,7 @@ type
     FDPI: Integer;
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
+    FSilent: Boolean;
 
     FCenter: TPointD;
     FConcentricGrooveRadius: Double;
@@ -36,7 +37,7 @@ type
     procedure FindConcentricGroove;
     procedure FindGrooveStart;
   public
-    constructor Create(APointsPerRevolution: Integer = 36000; ADPI: Integer = 2400);
+    constructor Create(APointsPerRevolution: Integer = 36000; ADPI: Integer = 2400; ASilent: Boolean = False);
     destructor Destroy; override;
 
     procedure LoadPNG;
@@ -270,11 +271,12 @@ begin
   Result := Length(FImage[0]);
 end;
 
-constructor TInputScan.Create(APointsPerRevolution: Integer; ADPI: Integer);
+constructor TInputScan.Create(APointsPerRevolution: Integer; ADPI: Integer; ASilent: Boolean);
 begin
   FDPI := ADPI;
   FPointsPerRevolution := APointsPerRevolution;
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
+  FSilent := ASilent;
 end;
 
 destructor TInputScan.Destroy;
@@ -288,7 +290,7 @@ var
   x, y: Integer;
   p: PByte;
 begin
-  WriteLn('LoadPNG ', FPNGFileName);
+  if not FSilent then WriteLn('LoadPNG ', FPNGFileName);
 
   PNG := TPortableNetworkGraphic.Create;
   try
@@ -296,7 +298,7 @@ begin
 
     SetLength(FImage, PNG.Height, PNG.Width);
 
-    WriteLn(PNG.Width:6, 'x', PNG.Height:6);
+    if not FSilent then WriteLn(PNG.Width:6, 'x', PNG.Height:6);
 
     PNG.BeginUpdate;
     try
@@ -365,23 +367,23 @@ end;
 
 procedure TInputScan.FindTrack;
 begin
-  WriteLn('FindTrack');
+  if not FSilent then WriteLn('FindTrack');
 
   FindCenter;
 
-  WriteLn('Center:', FCenter.X:12:3, ',', FCenter.Y:12:3);
+  if not FSilent then WriteLn('Center:', FCenter.X:12:3, ',', FCenter.Y:12:3);
 
   FFirstGrooveRadius := (C45RpmOuterSize + C45RpmFirstMusicGroove) * 0.5 * Self.FDPI * 0.5;
 
-  WriteLn('FirstGrooveOffset:', FFirstGrooveRadius:12:3);
+  if not FSilent then WriteLn('FirstGrooveOffset:', FFirstGrooveRadius:12:3);
 
   FindConcentricGroove;
 
-  WriteLn('ConcentricGrooveOffset:', FConcentricGrooveRadius:12:3);
+  if not FSilent then WriteLn('ConcentricGrooveOffset:', FConcentricGrooveRadius:12:3);
 
   FindGrooveStart;
 
-  WriteLn('GrooveStartPoint:', FGrooveStartPoint.X:12:3, ',', FGrooveStartPoint.Y:12:3);
+  if not FSilent then WriteLn('GrooveStartPoint:', FGrooveStartPoint.X:12:3, ',', FGrooveStartPoint.Y:12:3);
 end;
 
 procedure TInputScan.Run;
