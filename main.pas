@@ -8,7 +8,7 @@ uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, scan2track, scancorrelator, utils, math;
 
 const
-  CReducShift = 2;
+  CReducShift = 1;
   CReducFactor = 1.0 / (1 shl CReducShift);
 
 type
@@ -55,7 +55,7 @@ begin
   C.Pen.Color := clRed;
   C.Pen.Style := psSolid;
 
-  s2t := TScan2Track.Create;//(8000);
+  s2t := TScan2Track.Create(8000);
   try
     s2t.Scan.PNGFileName := edInputPNG.Text;
 
