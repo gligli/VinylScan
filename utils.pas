@@ -8,7 +8,7 @@ unit utils;
 interface
 
 uses
-  Classes, SysUtils, Types, Math;
+  Classes, SysUtils, Types, Math, Windows, MTProcs;
 
 const
   C45RpmRevolutionsPerSecond = 45.0 / 60.0;
@@ -20,6 +20,8 @@ const
   C45RpmLastMusicGroove = 4.25;
   C45RpmLeadInGroovesPerInch = 16.0;
   C45RpmMaxGrooveWidth = 0.003;
+
+  CLowCutoffFreq = 40.0;
 
 {$if 0}
   cRedMul = 2126;
@@ -52,11 +54,12 @@ type
 
 procedure SpinEnter(Lock: PSpinLock); assembler;
 procedure SpinLeave(Lock: PSpinLock); assembler;
+function NumberOfProcessors: Integer;
 
 procedure Exchange(var a, b: Integer);
 function iDiv0(x, y: Integer): Integer;overload;inline;
 function iDiv0(x, y: Int64): Int64;overload;inline;
-function Div0(x, y: Double): Double;inline;
+function DivDef(x, y, def: Double): Double;inline;
 function NanDef(x, def: Double): Double; inline;
 
 function SwapRB(c: Integer): Integer; inline;
@@ -77,6 +80,9 @@ function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: D
 procedure SobelEdgeDetector(const image: TSingleDynArray2; var out_gx, out_gy: TSingleDynArray2);
 
 function PearsonCorrelation(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
+
+function Make16BitSample(smp: Double): SmallInt;
+
 
 implementation
 
@@ -104,6 +110,14 @@ asm
     xchg    eax, [Lock]     // Atomically swap the EAX register with the lock variable.
 end;
 
+function NumberOfProcessors: Integer;
+var
+  SystemInfo: SYSTEM_INFO;
+begin
+  GetSystemInfo(SystemInfo);
+  Result := SystemInfo.dwNumberOfProcessors;
+end;
+
 procedure Exchange(var a, b: Integer);
 var
   tmp: Integer;
@@ -127,9 +141,9 @@ begin
     Result := x div y;
 end;
 
-function Div0(x, y: Double): Double;inline;
+function DivDef(x, y, def: Double): Double;
 begin
-  Result := 0;
+  Result := def;
   if y <> 0 then
     Result := x / y;
 end;
@@ -305,5 +319,13 @@ begin
     Result := num / den;
 end;
 
+function Make16BitSample(smp: Double): SmallInt;
+begin
+  Result := EnsureRange(round(smp * High(SmallInt)), Low(SmallInt), High(SmallInt));
+end;
+
+initialization
+  SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
+  ProcThreadPool.MaxThreadCount := NumberOfProcessors;
 end.
 
