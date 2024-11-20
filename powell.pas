@@ -21,8 +21,8 @@ uses
 type
   TScalar = Double;
   TVector = array of TScalar;
-  TFunction = function(x: TScalar): TScalar;
-  TFunctionN = function(const x: TVector; data: Pointer): TScalar;
+  TFunctionN = function(const x: TVector; data: Pointer): TScalar of object;
+  TFunction = function(x: TScalar; const p, xi :TVector; f: TFunctionN; data: Pointer): TScalar;
 
 function PowellMinimize(f: TFunctionN; var x: TVector; scale, xtol, ftol: TScalar; maxiter: Integer; data: Pointer = nil): TVector;
 
@@ -53,7 +53,7 @@ begin
   b := temp;
 end;
 
-function Bracket(f: TFunction; xa, xb: TScalar): TVector;
+function Bracket(f1: TFunction; xa, xb: TScalar; const p, xi :TVector; f: TFunctionN; data: Pointer): TVector;
 const
   MaxIter = 1000;
   GrowLimit = 110;
@@ -63,15 +63,15 @@ var
   fa, fb, fc, xc, w, fw, tmp1, tmp2, val, denom, wlim: TScalar;
   iter: Integer;
 begin
-  fa := f(xa);
-  fb := f(xb);
+  fa := f1(xa, p, xi, f, data);
+  fb := f1(xb, p, xi, f, data);
   if fa < fb then
   begin
     Swap(xa, xb);
     Swap(fa, fb);
   end;
   xc := xb + Gold * (xb - xa);
-  fc := f(xc);
+  fc := f1(xc, p, xi, f, data);
   iter := 0;
   while fc < fb do
   begin
@@ -90,7 +90,7 @@ begin
     fw := 0;
     if (w - xc) * (xb - w) > 0 then
     begin
-      fw := f(w);
+      fw := f1(w, p, xi, f, data);
       if fw < fc then
       begin
         xa := xb;
@@ -106,16 +106,16 @@ begin
         Break;
       end;
       w := xc + Gold * (xc - xb);
-      fw := f(w);
+      fw := f1(w, p, xi, f, data);
     end
     else if (w - wlim) * (wlim - xc) >= 0 then
     begin
       w := wlim;
-      fw := f(w);
+      fw := f1(w, p, xi, f, data);
     end
     else if (w - wlim) * (xc - w) > 0 then
     begin
-      fw := f(w);
+      fw := f1(w, p, xi, f, data);
       if fw < fc then
       begin
         xb := xc;
@@ -123,13 +123,13 @@ begin
         w := xc + Gold * (xc - xb);
         fb := fc;
         fc := fw;
-        fw := f(w);
+        fw := f1(w, p, xi, f, data);
       end;
     end
     else
     begin
       w := xc + Gold * (xc - xb);
-      fw := f(w);
+      fw := f1(w, p, xi, f, data);
     end;
     xa := xb;
     xb := xc;
@@ -146,11 +146,11 @@ begin
   Result := Vec(xa, xb, xc);
 end;
 
-function BrentHelper(f: TFunction; a, x, b, fx, xtol: TScalar; maxiter: Integer): TVector;
+function BrentHelper(f1: TFunction; a, x, b, fx, xtol: TScalar; maxiter: Integer; const p, xi :TVector; f: TFunctionN; data: Pointer): TVector;
 const
   CG = (3 - Sqrt(5)) / 2;
 var
-  w, v, fw, fv, deltax, xmid, rat, tmp1, tmp2, p, dx_temp, u, fu: TScalar;
+  w, v, fw, fv, deltax, xmid, rat, tmp1, tmp2, pp, dx_temp, u, fu: TScalar;
   iter: Integer;
 begin
   if a > b then
@@ -183,17 +183,17 @@ begin
     begin
       tmp1 := (x - w) * (fx - fv);
       tmp2 := (x - v) * (fx - fw);
-      p := (x - v) * tmp2 - (x - w) * tmp1;
+      pp := (x - v) * tmp2 - (x - w) * tmp1;
       tmp2 := 2 * (tmp2 - tmp1);
       if tmp2 > 0 then
-        p := -p;
+        pp := -pp;
       tmp2 := Abs(tmp2);
       dx_temp := deltax;
       deltax := rat;
 
-      if (p > tmp2 * (a - x)) and (p < tmp2 * (b - x)) and (Abs(p) < Abs(0.5 * tmp2 * dx_temp)) then
+      if (pp > tmp2 * (a - x)) and (pp < tmp2 * (b - x)) and (Abs(pp) < Abs(0.5 * tmp2 * dx_temp)) then
       begin
-        rat := p / tmp2;
+        rat := pp / tmp2;
         u := x + rat;
         if (u - a < xtol) or (b - u < xtol) then
           rat := Sign(xmid - x) * xtol;
@@ -213,7 +213,7 @@ begin
     else
       u := x + Sign(rat) * xtol;
 
-    fu := f(u);
+    fu := f1(u, p, xi, f, data);
 
     if fu > fx then
     begin
@@ -254,47 +254,37 @@ begin
   Result := Vec(x, fx, iter);
 end;
 
-function Brent(f: TFunction; brack: TVector; xtol: TScalar; maxiter: Integer): TVector;
+function Brent(f1: TFunction; const brack: TVector; xtol: TScalar; maxiter: Integer; const p, xi :TVector; f: TFunctionN; data: Pointer): TVector;
 var
   a, b, c, fb: TScalar;
   br: TVector;
 begin
-  br := Bracket(f, brack[0], brack[1]);
+  br := Bracket(f1, brack[0], brack[1], p, xi, f, data);
   a := br[0];
   b := br[1];
   c := br[2];
-  fb := f(b);
-  Result := BrentHelper(f, a, b, c, fb, xtol, maxiter);
+  fb := f1(b, p, xi, f, data);
+  Result := BrentHelper(f1, a, b, c, fb, xtol, maxiter, p, xi, f, data);
 end;
 
-threadvar
-  ar_data: Pointer;
-  ar_f: TFunctionN;
-  ar_p, ar_xi: TVector;
-
-function AlongRay1(t: TScalar): TScalar;
+function AlongRay1(t: TScalar; const p, xi :TVector; f: TFunctionN; data: Pointer): TScalar;
 var
   i: Integer;
   tmp: TVector;
 begin
-  SetLength(tmp, Length(ar_p));
+  SetLength(tmp, Length(p));
   for i := 0 to High(tmp) do
-    tmp[i] := ar_p[i] + t * ar_xi[i];
-  Result := ar_f(tmp, ar_data);
+    tmp[i] := p[i] + t * xi[i];
+  Result := f(tmp, data);
 end;
 
 
-function LinesearchPowell(f: TFunctionN; var p, xi: TVector; xtol: TScalar; tmp: TVector; data: Pointer): TScalar;
+function LinesearchPowell(f: TFunctionN; var p, xi: TVector; xtol: TScalar; data: Pointer): TScalar;
 var
   n, i: Integer;
   atol, alpha, fret, sqsos: TScalar;
   alpha_fret_iter: TVector;
 begin
-  ar_data := data;
-  ar_p := p;
-  ar_xi := xi;
-  ar_f := f;
-
   n := Length(p);
 
   sqsos := Sqrt(SumOfSquares(xi));
@@ -303,7 +293,7 @@ begin
     atol := 5 * xtol / sqsos;
   atol := Min(0.1, atol);
 
-  alpha_fret_iter := Brent(@AlongRay1, Vec(0, 1), atol, 100);
+  alpha_fret_iter := Brent(@AlongRay1, Vec(0, 1), atol, 100, p, xi, f, data);
   alpha := alpha_fret_iter[0];
   fret := alpha_fret_iter[1];
   for i := 0 to n - 1 do
@@ -345,7 +335,7 @@ begin
     for i := 0 to n - 1 do
     begin
       fx2 := fval;
-      fval := LinesearchPowell(f, x, direc[i], xtol, tmp, data);
+      fval := LinesearchPowell(f, x, direc[i], xtol, data);
       if fx2 - fval > delta then
       begin
         delta := fx2 - fval;
@@ -373,7 +363,7 @@ begin
       t := t - delta * temp * temp;
       if t < 0 then
       begin
-        fval := LinesearchPowell(f, x, direc1, xtol, tmp, data);
+        fval := LinesearchPowell(f, x, direc1, xtol, data);
         direc[bigind] := direc[n - 1];
         direc[n - 1] := direc1;
       end;
