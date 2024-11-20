@@ -5,8 +5,8 @@ unit scan2track;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, GraphType, FPCanvas, FPImage, FPWritePNG,
-  utils, bufstream, fgl, powell, inputscan;
+  Classes, SysUtils, Types, Math, Graphics, GraphType, FPCanvas, FPImage, FPWritePNG, minlbfgs, MTProcs,
+  utils, fgl, powell, inputscan;
 
 type
 
@@ -63,189 +63,245 @@ begin
 end;
 
 const
-  CPredictionPointCount = 3600;
+  CPredictionPointCount = 360;
+  CPredictionRevolutionDiv = 18;
 var
   pradius, dumx, dumy: Double;
-  SinCosLut: array[0 .. CPredictionPointCount - 1] of TPointD;
+  SinCosLut: array[0 .. CPredictionPointCount - 1] of record
+    Sin, Cos: Double;
+  end;
 
-function PowellEvalTracking(const x: TVector; Data: Pointer): TScalar;
+function PowellEvalTracking(const arg: TVector; obj: Pointer): TScalar;
 var
-  Self: TScan2Track absolute Data;
+  Self: TScan2Track absolute obj;
   i: Integer;
-  r, ri, predy, predx: Double;
+  r, x, predy, predx, fx: Double;
 begin
   r := pradius;
-  ri := x[0] * Self.PointsPerRevolution / CPredictionPointCount;
+  x := arg[0] * Self.PointsPerRevolution / (CPredictionPointCount * CPredictionRevolutionDiv);
 
   Result := 0;
-  if InRange(r, Self.Scan.ConcentricGrooveRadius, Self.Scan.FirstGrooveRadius) and
-      InRange(r - ri * CPredictionPointCount, Self.Scan.ConcentricGrooveRadius, Self.Scan.FirstGrooveRadius) then
-    for i := 0 to CPredictionPointCount - 1 do
+  for i := 0 to CPredictionPointCount - 1 do
+  begin
+    if InRange(r, Self.Scan.ConcentricGrooveRadius, Self.Scan.FirstGrooveRadius) and
+       InRange(r, Self.Scan.ConcentricGrooveRadius, Self.Scan.FirstGrooveRadius) then
     begin
-      predx := SinCosLut[i].X * r + Self.Scan.Center.X;
-      predy := SinCosLut[i].Y * r + Self.Scan.Center.Y;
+      predx := SinCosLut[i].Cos * r + Self.Scan.Center.X;
+      predy := SinCosLut[i].Sin * r + Self.Scan.Center.Y;
 
-      Result -= Self.Scan.GetPointD(Self.Scan.Image, predy, predx);
+      fx := Self.Scan.GetPointD(Self.Scan.Image, predy, predx);
+      Result -= fx;
 
-      r -= ri;
+      //main.Form1.Image.Picture.Bitmap.Canvas.Pixels[round(predx * CReducFactor), round(predy * CReducFactor)] := clBlue;
     end;
+
+    r += x;
+  end;
 
   dumx := predx;
   dumy := predy;
 
-  //WriteLn(x[0]:12:6,x[1]:12:6,Result:20:3);
+  //for i := 0 to High(arg) do
+  //  Write(arg[i]:12:6);
+  //WriteLn(-Result:12:6);
+end;
+
+procedure BFGSEvalTracking(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+var
+  Self: TScan2Track absolute obj;
+  i: Integer;
+  r, x, predy, predx, id, fx: Double;
+begin
+  x := arg[0];
+
+  func := 0;
+  grad[0] := 0;
+  for i := 0 to CPredictionPointCount - 1 do
+  begin
+    id := i * Self.PointsPerRevolution / (CPredictionPointCount * CPredictionRevolutionDiv);
+
+    r := pradius + id * x;
+
+    if InRange(r, Self.Scan.ConcentricGrooveRadius, Self.Scan.FirstGrooveRadius) then
+    begin
+      predx := SinCosLut[i].Cos * r + Self.Scan.Center.X;
+      predy := SinCosLut[i].Sin * r + Self.Scan.Center.Y;
+
+      fx := Self.Scan.GetPointD(Self.Scan.Image, predy, predx);
+      func -= fx;
+      grad[0] -= Self.Scan.GetPointD(Self.Scan.XGradient, predy, predx) * (SinCosLut[i].Cos * id) +
+                 Self.Scan.GetPointD(Self.Scan.YGradient, predy, predx) * (SinCosLut[i].Sin * id);
+
+      //main.Form1.Image.Picture.Bitmap.Canvas.Pixels[round(predx * CReducFactor), round(predy * CReducFactor)] := clBlue;
+    end;
+  end;
+
+  dumx := predx;
+  dumy := predy;
+
+  //for i := 0 to High(arg) do
+  //  Write(arg[i]:12:6);
+  //WriteLn(-func:12:6);
+end;
+
+procedure BFGSEvalTracking_(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+const
+  CH = 1e-8;
+  CFCoeff: array[0 .. 7] of Double = (-1/280, 4/105, -1/5, 4/5, -4/5, 1/5, -4/105, 1/280);
+  CXCoeff: array[0 .. 7] of Double = (4, 3, 2, 1, -1, -2, -3, -4);
+var
+  ig, ic: Integer;
+  x: TVector;
+begin
+  ig := 0;
+  grad[ig] := 0;
+  for ic := 0 to High(CFCoeff) do
+  begin
+    x := Copy(arg);
+    x[ig] += CXCoeff[ic] * CH;
+    grad[ig] += CFCoeff[ic] * PowellEvalTracking(x, obj);
+  end;
+  grad[ig] /= CH;
+
+  func := PowellEvalTracking(arg, obj);
+
+  //for ig := 0 to High(arg) do
+  //  Write(arg[ig]:14:6);
+  //WriteLn(func:14:6);
 end;
 
 procedure TScan2Track.EvalTrack;
 const
-  CTrackingPrecMul = 10;
+  CDecodePrecMul = 1000;
 
-  function Correct(angle, radius: Double): Double;
-  const
-    CBFPrecMul = 1;
+  procedure Correct(angle, radius: Double; var radiusInc: Double);
   var
-    bestf, ai, a, f: Double;
-    i, k: Integer;
-    x: TVector;
+    ai, a, f: Double;
+    i: Integer;
+    x, g: TVector;
+    state: MinLBFGSState;
+    rep: MinLBFGSReport;
   begin
     SetLength(x, 1);
+    SetLength(g, 1);
+
+    x[0] := radiusInc;
 
     pradius := radius;
 
-    ai := Pi * 2.0 / CPredictionPointCount;
+    ai := Pi * 2.0 / (CPredictionPointCount * CPredictionRevolutionDiv);
     a := angle;
     for i := 0 to CPredictionPointCount - 1 do
     begin
-      SinCos(a, SinCosLut[i].Y, SinCosLut[i].X);
+      SinCos(a, SinCosLut[i].Sin, SinCosLut[i].Cos);
       a -= ai;
     end;
 
-    //PowellMinimize(@PowellEvalTracking, x, 1.0, 0, 0, MaxInt, Self);
+{$if 0}
+    PowellMinimize(@PowellEvalTracking, x, 1e-6, 1e-6, 1e-6, MaxInt, Self);
 
-    bestf := Infinity;
-    Result := 0;
-    for k := -Round(C45RpmMaxGrooveWidth * Scan.DPI * CBFPrecMul) to Round(2.0 * Scan.DPI / C45RpmLeadInGroovesPerInch * CBFPrecMul) do
-    begin
-      x[0] := k / (FPointsPerRevolution * CBFPrecMul);
-      f := PowellEvalTracking(x, Self);
+    radiusInc := x[0];
 
-      if f < bestf then
+    PowellEvalTracking(x, self);
+{$else}
+    MinLBFGSCreate(1, 1, x, state);
+    MinLBFGSSetCond(state, 0, 0, 0, 0);
+
+    while MinLBFGSIteration(state) do
+      if State.NeedFG then
       begin
-        bestf := f;
-        Result := x[0];
+        //BFGSEvalTracking(State.X, state.F, state.G, Self);
+        BFGSEvalTracking_(State.X, state.F, state.G, Self);
       end;
-    end;
 
-    x[0] := Result;
-    PowellEvalTracking(x, Self);
+    MinLBFGSResults(state, x, rep);
 
-    main.Form1.Image.Picture.Bitmap.Canvas.Pixels[round(dumx * CReducFactor), round(dumy * CReducFactor)] := clBlue;
+    radiusInc := x[0];
+    //BFGSEvalTracking(x, f, g, self);
+    BFGSEvalTracking_(x, f, g, self);
+{$ifend}
+
+    main.Form1.Image.Picture.Bitmap.Canvas.Pixels[round(dumx * CReducFactor), round(dumy * CReducFactor)] := clTeal;
   end;
 
 
 var
-  angle, radius, sn, cs, px, py, p, bestSkew, bestr, accInner, accOuter, accSkew, r: Double;
-  i, j, pos: Integer;
-  fs: TBufferedFileStream;
+  angle, radius, sn, cs, px, py, p, r, bestp, radiusInc, radiusIncSmoo, c16a: Double;
+  i, pos: Integer;
+  fs: TFileStream;
   pbuf: specialize TFPGList<TPoint>;
   t, pt: QWord;
-
+  ismp, smp:SmallInt;
 begin
   WriteLn('EvalTrack');
 
-  fs := TBufferedFileStream.Create('debug.raw', fmCreate or fmShareDenyNone);
+  fs := TFileStream.Create('debug.raw', fmCreate or fmShareDenyNone);
   pbuf := specialize TFPGList<TPoint>.Create;
   try
     pos := 0;
     pt := GetTickCount64;
 
+    c16a := C45RpmMaxGrooveWidth * Scan.DPI / High(SmallInt);
     angle := Scan.GrooveStartAngle;
     radius := Scan.FirstGrooveRadius;
+    radiusInc := -(Scan.DPI / C45RpmLeadInGroovesPerInch) / FPointsPerRevolution;
+    radiusIncSmoo := radiusInc;
 
     repeat
       angle := Scan.GrooveStartAngle - FRadiansPerRevolutionPoint * pos;
 
       SinCos(angle, sn, cs);
 
-      bestSkew := Infinity;
-      bestr := radius;
-      for i := -Round(C45RpmMaxGrooveWidth * Scan.DPI * CTrackingPrecMul) to Round(C45RpmMaxGrooveWidth * Scan.DPI * CTrackingPrecMul) do
+      bestp := -Infinity;
+      smp := 0;
+      for ismp := Low(SmallInt) to high(SmallInt) do
       begin
-        accOuter := 0;
-        accInner := 0;
+        r := radius + ismp * c16a;
 
-        for j := 1 to Round(C45RpmMaxGrooveWidth * Scan.DPI * CTrackingPrecMul) do
+        px := cs * r + Self.Scan.Center.X;
+        py := sn * r + Self.Scan.Center.Y;
+
+        if Scan.InRangePointD(py, px) then
         begin
-          r := radius + (i + j) / CTrackingPrecMul;
-
-          px := cs * r + Self.Scan.Center.X;
-          py := sn * r + Self.Scan.Center.Y;
-
-          if Scan.InRangePointD(py, px) then
-            accOuter += Scan.GetPointD(Scan.Image, py, px);
-        end;
-
-        for j := -1 downto -Round(C45RpmMaxGrooveWidth * Scan.DPI * CTrackingPrecMul) do
-        begin
-          r := radius + (i + j) / CTrackingPrecMul;
-
-          px := cs * r + Self.Scan.Center.X;
-          py := sn * r + Self.Scan.Center.Y;
-
-          if Scan.InRangePointD(py, px) then
-            accInner += Scan.GetPointD(Scan.Image, py, px);
-        end;
-
-        accSkew := Abs(accInner - accOuter);
-
-        if (accSkew < bestSkew) and (accInner + accOuter > 0.1) then
-        begin
-          bestSkew := accSkew;
-          bestr := radius + i / CTrackingPrecMul;
+          p := Scan.GetPointD(Scan.Image, py, px);
+          if p > bestp then
+          begin
+            bestp := p;
+            smp := ismp;
+          end;
         end;
       end;
-
-      if IsInfinite(bestSkew) then
-      begin
-        radius -= Correct(angle, radius);
-      end
-      else
-      begin
-        radius := radius * 0.99 + bestr * 0.01;
-      end;
-
+      fs.WriteWord(Word(smp));
 
       px := cs * radius + Self.Scan.Center.X;
       py := sn * radius + Self.Scan.Center.Y;
 
-      Write(pos:8, bestr:20:6, bestSkew:20:6, #13);
-
-      if Scan.InRangePointD(py, px) then
+////////////////////////
+      t := GetTickCount64;
+      pbuf.Add(Point(round(px * CReducFactor), round(py * CReducFactor)));
+      if t - pt >= 1000 then
       begin
-        t := GetTickCount64;
 
-        pbuf.Add(Point(round(px * CReducFactor), round(py * CReducFactor)));
+        for i := 0 to pbuf.Count - 1 do
+          main.Form1.Image.Picture.Bitmap.Canvas.Pixels[pbuf[i].X, pbuf[i].Y] := clLime;
 
-        if t - pt >= 1000 then
-        begin
+        main.Form1.HorzScrollBar.Position := pbuf.Last.X - main.Form1.Width div 2;
+        main.Form1.VertScrollBar.Position := pbuf.Last.Y - main.Form1.Height div 2;
 
-          for i := 0 to pbuf.Count - 1 do
-            main.Form1.Image.Picture.Bitmap.Canvas.Pixels[pbuf[i].X, pbuf[i].Y] := clLime;
+        pbuf.Clear;
 
-          main.Form1.HorzScrollBar.Position := pbuf.Last.X - main.Form1.Width div 2;
-          main.Form1.VertScrollBar.Position := pbuf.Last.Y - main.Form1.Height div 2;
-
-          pbuf.Clear;
-
-          Application.ProcessMessages;
-          pt := GetTickCount64;
-        end;
-
-        p := Scan.GetPointD(Scan.Image, py, px);
-
-        fs.Write(p, sizeof(p));
+        Application.ProcessMessages;
+        pt := GetTickCount64;
       end;
+////////////////////////
 
+      Correct(angle, radius, radiusInc);
+      radiusIncSmoo := lerp(radiusIncSmoo, radiusInc, CLowCutoffFreq * 2.0 / FSampleRate);
+
+      Write(pos:8, radiusInc:20:6, radiusIncSmoo:20:6, #13);
+
+      radiusInc := radiusIncSmoo;
+      radius += radiusInc;
       Inc(pos);
 
     until radius <= Scan.ConcentricGrooveRadius;
