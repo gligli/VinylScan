@@ -89,7 +89,7 @@ begin
       predx := SinCosLut[i].Cos * r + Self.Scan.Center.X;
       predy := SinCosLut[i].Sin * r + Self.Scan.Center.Y;
 
-      fx := Self.Scan.GetPointD(Self.Scan.Image, predy, predx);
+      fx := Self.Scan.GetPointD(Self.Scan.Image, predy, predx, imLinear);
       Result -= fx;
 
       //main.Form1.Image.Picture.Bitmap.Canvas.Pixels[round(predx * CReducFactor), round(predy * CReducFactor)] := clBlue;
@@ -127,10 +127,10 @@ begin
       predx := SinCosLut[i].Cos * r + Self.Scan.Center.X;
       predy := SinCosLut[i].Sin * r + Self.Scan.Center.Y;
 
-      fx := Self.Scan.GetPointD(Self.Scan.Image, predy, predx);
+      fx := Self.Scan.GetPointD(Self.Scan.Image, predy, predx, imLinear);
       func -= fx;
-      grad[0] -= Self.Scan.GetPointD(Self.Scan.XGradient, predy, predx) * (SinCosLut[i].Cos * id) +
-                 Self.Scan.GetPointD(Self.Scan.YGradient, predy, predx) * (SinCosLut[i].Sin * id);
+      grad[0] -= Self.Scan.GetPointD(Self.Scan.XGradient, predy, predx, imLinear) * (SinCosLut[i].Cos * id) +
+                 Self.Scan.GetPointD(Self.Scan.YGradient, predy, predx, imLinear) * (SinCosLut[i].Sin * id);
 
       //main.Form1.Image.Picture.Bitmap.Canvas.Pixels[round(predx * CReducFactor), round(predy * CReducFactor)] := clBlue;
     end;
@@ -221,7 +221,7 @@ const
     BFGSEvalTracking_(x, f, g, self);
 {$ifend}
 
-    main.Form1.Image.Picture.Bitmap.Canvas.Pixels[round(dumx * CReducFactor), round(dumy * CReducFactor)] := clTeal;
+    main.MainForm.Image.Picture.Bitmap.Canvas.Pixels[round(dumx * CReducFactor), round(dumy * CReducFactor)] := clTeal;
   end;
 
 
@@ -263,7 +263,7 @@ begin
 
         if Scan.InRangePointD(py, px) then
         begin
-          p := Scan.GetPointD(Scan.Image, py, px);
+          p := Scan.GetPointD(Scan.Image, py, px, imHermite);
           if p > bestp then
           begin
             bestp := p;
@@ -283,10 +283,10 @@ begin
       begin
 
         for i := 0 to pbuf.Count - 1 do
-          main.Form1.Image.Picture.Bitmap.Canvas.Pixels[pbuf[i].X, pbuf[i].Y] := clLime;
+          main.MainForm.Image.Picture.Bitmap.Canvas.Pixels[pbuf[i].X, pbuf[i].Y] := clLime;
 
-        main.Form1.HorzScrollBar.Position := pbuf.Last.X - main.Form1.Width div 2;
-        main.Form1.VertScrollBar.Position := pbuf.Last.Y - main.Form1.Height div 2;
+        main.MainForm.HorzScrollBar.Position := pbuf.Last.X - main.MainForm.Width div 2;
+        main.MainForm.VertScrollBar.Position := pbuf.Last.Y - main.MainForm.Height div 2;
 
         pbuf.Clear;
 

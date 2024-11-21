@@ -1,4 +1,4 @@
-object Form1: TForm1
+object MainForm: TMainForm
   Left = 387
   Height = 600
   Top = 87
@@ -10,7 +10,7 @@ object Form1: TForm1
   VertScrollBar.Page = 480
   VertScrollBar.Tracking = True
   AutoScroll = True
-  Caption = 'Form1'
+  Caption = 'VinylScan'
   ClientHeight = 600
   ClientWidth = 800
   DoubleBuffered = True
@@ -32,7 +32,7 @@ object Form1: TForm1
     Top = 128
     Width = 168
     TabOrder = 1
-    Text = 'data\think2.png'
+    Text = 'data\think_correlated.png'
   end
   object btScan2Track: TButton
     Left = 176

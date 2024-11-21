@@ -5,10 +5,11 @@ unit inputscan;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics,
+  Classes, SysUtils, Types, Math, Graphics, FPReadPNG, FPImage, PNGComn, bufstream,
   utils, minasa, powell;
 
 type
+  TInterpMode = (imNone, imLinear, imHermite);
 
   { TInputScan }
 
@@ -46,17 +47,17 @@ type
     procedure Run;
 
     function InRangePointD(Y, X: Double): Boolean;
-    function GetPointD(const Img: TSingleDynArray2; Y, X: Double): Double;
+    function GetPointD(const Img: TSingleDynArray2; Y, X: Double; Mode: TInterpMode): Double; inline;
 
     property PNGFileName: String read FPNGFileName write FPNGFileName;
     property DPI: Integer read FDPI;
     property Width: Integer read GetWidth;
     property Height: Integer read GetHeight;
 
-    property Center: TPointD read FCenter;
+    property Center: TPointD read FCenter write FCenter;
     property ConcentricGrooveRadius: Double read FConcentricGrooveRadius;
     property FirstGrooveRadius: Double read FFirstGrooveRadius;
-    property GrooveStartAngle: Double read FGrooveStartAngle;
+    property GrooveStartAngle: Double read FGrooveStartAngle write FGrooveStartAngle;
     property GrooveStartPoint: TPointD read FGrooveStartPoint;
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
@@ -66,6 +67,32 @@ type
     property YGradient: TSingleDynArray2 read FYGradient;
   end;
 
+  { TDPIAwareReaderPNG }
+
+  TDPIAwareReaderPNG = class(TFPReaderPNG)
+  private
+    FDPI: TPoint;
+  protected
+    procedure HandleChunk; override;
+  public
+    constructor create; override;
+
+    property DPI: TPoint read FDPI;
+  end;
+
+
+  { TDPIAawarePortableNetworkGraphic }
+
+  TDPIAawarePortableNetworkGraphic = class(TPortableNetworkGraphic)
+  private
+    FDPI: TPoint;
+  protected
+    class function GetReaderClass: TFPCustomImageReaderClass; override;
+    procedure FinalizeReader(AReader: TFPCustomImageReader); override;
+  public
+    property DPI: TPoint read FDPI;
+  end;
+
 
 implementation
 
@@ -73,21 +100,29 @@ implementation
 
 procedure BFGSEvalCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 const
+  CAreaBegin = C45RpmLabelOuterSize;
+  CAreaEnd = C45RpmOuterSize;
+  CAreaWidth = (CAreaEnd - CAreaBegin) * 0.5;
+  CAreaGroovesPerInch = 100;
+
   CRevolutionPointCount = 360;
   CRadiansPerPoint = Pi * 2.0 / CRevolutionPointCount;
 var
   Self: TInputScan absolute obj;
-  t, r, radiusInner, radiusOuter: Integer;
-  sn, cs, xx, yy: Double;
+  t, pos: Integer;
+  r, sn, cs, xx, yy, ri, radiusInner, radiusOuter: Double;
 begin
   func := 0;
   grad[0] := 0;
   grad[1] := 0;
 
-  radiusInner := Round(C45RpmLabelOuterSize * Self.FDPI * 0.5);
-  radiusOuter := Round(C45RpmOuterSize * Self.FDPI * 0.5);
-  r := radiusInner;
+  radiusInner := CAreaBegin * Self.FDPI * 0.5;
+  radiusOuter := CAreaEnd * Self.FDPI * 0.5;
+  ri := Self.FDPI / CAreaGroovesPerInch;
+  pos := 0;
   repeat
+    r := radiusInner + ri * pos;
+
     if Self.InRangePointD(arg[1], arg[0]) and Self.InRangePointD(arg[1] - r, arg[0] - r) then
       for t := 0 to CRevolutionPointCount - 1  do
       begin
@@ -96,12 +131,12 @@ begin
         xx := cs * r + arg[0];
         yy := sn * r + arg[1];
 
-        func += Self.GetPointD(Self.FImage, yy, xx);
-        grad[0] += Self.GetPointD(Self.FXGradient, yy, xx);
-        grad[1] += Self.GetPointD(Self.FYGradient, yy, xx);
+        func += Self.GetPointD(Self.FImage, yy, xx, imLinear);
+        grad[0] += Self.GetPointD(Self.FXGradient, yy, xx, imLinear);
+        grad[1] += Self.GetPointD(Self.FYGradient, yy, xx, imLinear);
       end;
 
-    r += round(self.FDPI * 0.01);
+    Inc(pos);
   until r >= radiusOuter;
 
   //WriteLn(arg[0]:12:3,arg[1]:12:3,func:20:3,grad[0]:20:3,grad[1]:20:3);
@@ -158,7 +193,7 @@ begin
       xx := cs * x[0] + Self.Center.X;
       yy := sn * x[0] + Self.Center.Y;
 
-      Result -= Self.GetPointD(Self.FImage, yy, xx);
+      Result -= Self.GetPointD(Self.FImage, yy, xx, imLinear);
     end;
 
   //WriteLn(x[0]:12:3,Result:20:3);
@@ -226,7 +261,7 @@ begin
 
     if InRangePointD(y, x) then
     begin
-      v := v * 0.99 + Self.GetPointD(FImage, y, x) * 0.01;
+      v := v * 0.99 + Self.GetPointD(FImage, y, x, imHermite) * 0.01;
 
       if v > best then
       begin
@@ -250,7 +285,7 @@ begin
   Result := Length(FImage);
 end;
 
-function TInputScan.GetPointD(const Img: TSingleDynArray2; Y, X: Double): Double;
+function TInputScan.GetPointD(const Img: TSingleDynArray2; Y, X: Double; Mode: TInterpMode): Double;
 var
   ix, iy: Integer;
   y0, y1, y2, y3: Double;
@@ -258,12 +293,28 @@ begin
   ix := trunc(X);
   iy := trunc(Y);
 
-  y0 := herp(Img[iy - 1, ix - 1], Img[iy - 1, ix + 0], Img[iy - 1, ix + 1], Img[iy - 1, ix + 2], X - ix);
-  y1 := herp(Img[iy + 0, ix - 1], Img[iy + 0, ix + 0], Img[iy + 0, ix + 1], Img[iy + 0, ix + 2], X - ix);
-  y2 := herp(Img[iy + 1, ix - 1], Img[iy + 1, ix + 0], Img[iy + 1, ix + 1], Img[iy + 1, ix + 2], X - ix);
-  y3 := herp(Img[iy + 2, ix - 1], Img[iy + 2, ix + 0], Img[iy + 2, ix + 1], Img[iy + 2, ix + 2], X - ix);
+  case mode of
+    imNone:
+    begin
+      Result := Img[iy, ix];
+    end;
+    imLinear:
+    begin
+      y1 := lerp(Img[iy + 0, ix + 0], Img[iy + 0, ix + 1], X - ix);
+      y2 := lerp(Img[iy + 1, ix + 0], Img[iy + 1, ix + 1], X - ix);
 
-  Result := herp(y0, y1, y2, y3, Y - iy);
+      Result := lerp(y1, y2, Y - iy);
+    end;
+    imHermite:
+    begin
+      y0 := herp(Img[iy - 1, ix - 1], Img[iy - 1, ix + 0], Img[iy - 1, ix + 1], Img[iy - 1, ix + 2], X - ix);
+      y1 := herp(Img[iy + 0, ix - 1], Img[iy + 0, ix + 0], Img[iy + 0, ix + 1], Img[iy + 0, ix + 2], X - ix);
+      y2 := herp(Img[iy + 1, ix - 1], Img[iy + 1, ix + 0], Img[iy + 1, ix + 1], Img[iy + 1, ix + 2], X - ix);
+      y3 := herp(Img[iy + 2, ix - 1], Img[iy + 2, ix + 0], Img[iy + 2, ix + 1], Img[iy + 2, ix + 2], X - ix);
+
+      Result := herp(y0, y1, y2, y3, Y - iy);
+    end;
+  end;
 end;
 
 function TInputScan.GetWidth: Integer;
@@ -286,28 +337,30 @@ end;
 
 procedure TInputScan.LoadPNG;
 var
-  PNG: TPortableNetworkGraphic;
+  fs: TBufferedFileStream;
+  png: TDPIAawarePortableNetworkGraphic;
   x, y: Integer;
   p: PByte;
 begin
   if not FSilent then WriteLn('LoadPNG ', FPNGFileName);
 
-  PNG := TPortableNetworkGraphic.Create;
+  fs := TBufferedFileStream.Create(FPNGFileName, fmOpenRead or fmShareDenyNone);
+  png := TDPIAawarePortableNetworkGraphic.Create;
   try
-    PNG.LoadFromFile(FPNGFileName);
+    png.LoadFromStream(fs);
 
-    SetLength(FImage, PNG.Height, PNG.Width);
+    SetLength(FImage, png.Height, png.Width);
 
-    if not FSilent then WriteLn(PNG.Width:6, 'x', PNG.Height:6);
+    if not FSilent then WriteLn(png.Width:6, 'x', png.Height:6);
 
-    PNG.BeginUpdate;
+    png.BeginUpdate;
     try
-      case PNG.RawImage.Description.BitsPerPixel of
+      case png.RawImage.Description.BitsPerPixel of
         8:
           for y := 0 to High(FImage) do
           begin
-            p := PNG.RawImage.Data;
-            inc(p, y * PNG.RawImage.Description.BytesPerLine);
+            p := png.RawImage.Data;
+            inc(p, y * png.RawImage.Description.BytesPerLine);
             for x := 0 to High(FImage[0]) do
             begin
               FImage[y, x] := p^ * (1 / High(Byte));
@@ -317,8 +370,8 @@ begin
         16:
           for y := 0 to High(FImage) do
           begin
-            p := PNG.RawImage.Data;
-            inc(p, y * PNG.RawImage.Description.BytesPerLine);
+            p := png.RawImage.Data;
+            inc(p, y * png.RawImage.Description.BytesPerLine);
             for x := 0 to High(FImage[0]) do
             begin
               FImage[y, x] := PWord(p)^ * (1 / High(Word));
@@ -328,8 +381,8 @@ begin
         24:
           for y := 0 to High(FImage) do
           begin
-            p := PNG.RawImage.Data;
-            inc(p, y * PNG.RawImage.Description.BytesPerLine);
+            p := png.RawImage.Data;
+            inc(p, y * png.RawImage.Description.BytesPerLine);
             for x := 0 to High(FImage[0]) do
             begin
               FImage[y, x] := ToLuma(p[0], p[1], p[2]) * (1 / (cLumaDiv * High(Byte)));
@@ -339,8 +392,8 @@ begin
         32:
           for y := 0 to High(FImage) do
           begin
-            p := PNG.RawImage.Data;
-            inc(p, y * PNG.RawImage.Description.BytesPerLine);
+            p := png.RawImage.Data;
+            inc(p, y * png.RawImage.Description.BytesPerLine);
             for x := 0 to High(FImage[0]) do
             begin
               FImage[y, x] := ToLuma(p[0], p[1], p[2]) * (1 / (cLumaDiv * High(Byte)));
@@ -351,13 +404,17 @@ begin
           Assert(False);
       end;
     finally
-      PNG.EndUpdate;
+      png.EndUpdate;
     end;
 
-    // TODO: guess DPI
-
+    if (png.DPI.X > 0) and (png.DPI.X = png.DPI.Y) then
+    begin
+      FDPI := png.DPI.X;
+      if not FSilent then WriteLn(FDPI:6, 'DPI');
+    end;
   finally
-    PNG.Free;
+    png.Free;
+    fs.Free;
   end;
 
   SetLength(FXGradient, Length(FImage), Length(FImage[0]));
@@ -395,6 +452,39 @@ end;
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
 begin
   Result := InRange(Y, 1, Height - 2) and InRange(X, 1, Width - 2);
+end;
+
+{ TDPIAwareReaderPNG }
+
+procedure TDPIAwareReaderPNG.HandleChunk;
+begin
+  inherited HandleChunk;
+
+  if (Chunk.aType = ctpHYs) and (Chunk.data^[8] = $01) then
+  begin
+    FDPI.X := Round(BEtoN(PCardinal(@Chunk.data^[0])^) * 0.0254);
+    FDPI.Y := Round(BEtoN(PCardinal(@Chunk.data^[4])^) * 0.0254);
+  end;
+end;
+
+constructor TDPIAwareReaderPNG.create;
+begin
+  inherited create;
+
+  FDPI := Point(-1, -1);
+end;
+
+{ TDPIAawarePortableNetworkGraphic }
+
+class function TDPIAawarePortableNetworkGraphic.GetReaderClass: TFPCustomImageReaderClass;
+begin
+  Result := TDPIAwareReaderPNG;
+end;
+
+procedure TDPIAawarePortableNetworkGraphic.FinalizeReader(AReader: TFPCustomImageReader);
+begin
+  FDPI := TDPIAwareReaderPNG(AReader).DPI;
+  inherited FinalizeReader(AReader);
 end;
 
 end.

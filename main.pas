@@ -13,9 +13,9 @@ const
 
 type
 
-  { TForm1 }
+  { TMainForm }
 
-  TForm1 = class(TForm)
+  TMainForm = class(TForm)
     btTest: TButton;
     btScan2Track: TButton;
     btScansCorrelator: TButton;
@@ -34,15 +34,15 @@ type
   end;
 
 var
-  Form1: TForm1;
+  MainForm: TMainForm;
 
 implementation
 
 {$R *.lfm}
 
-{ TForm1 }
+{ TMainForm }
 
-procedure TForm1.btScan2TrackClick(Sender: TObject);
+procedure TMainForm.btScan2TrackClick(Sender: TObject);
 var
   s2t: TScan2Track;
   C: TCanvas;
@@ -92,7 +92,7 @@ begin
   end;
 end;
 
-procedure TForm1.btScansCorrelatorClick(Sender: TObject);
+procedure TMainForm.btScansCorrelatorClick(Sender: TObject);
 var
   sc: TScanCorrelator;
 begin
@@ -112,10 +112,13 @@ begin
   end;
 end;
 
-procedure TForm1.btTestClick(Sender: TObject);
+procedure TMainForm.btTestClick(Sender: TObject);
 var
   img: TSingleDynArray2;
   i: Integer;
+  fn: String;
+  sc1, sc100: TScanCorrelator;
+  sl: TStringList;
 begin
   SetLength(img, 2048, 2048);
 
@@ -132,9 +135,25 @@ begin
   end;
 
   DrawImage(img);
+
+  fn := GetTempFileName;
+  sl := TStringList.Create;
+  sc1 := TScanCorrelator.Create(sl, 1);
+  sc100 := TScanCorrelator.Create(sl, 100);
+  try
+    sc1.OutputPNGFileName := fn;
+    sc1.Run;
+    sc100.OutputPNGFileName := fn;
+    sc100.Run;
+  finally
+    sc100.Free;
+    sc1.Free;
+    sl.Free;
+    DeleteFile(fn);
+  end;
 end;
 
-procedure TForm1.DrawImage(const Img: TSingleDynArray2);
+procedure TMainForm.DrawImage(const Img: TSingleDynArray2);
 var
   x, y, ix, iy: Integer;
   sc: PInteger;
