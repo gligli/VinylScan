@@ -64,7 +64,7 @@ end;
 
 const
   CPredictionPointCount = 360;
-  CPredictionRevolutionDiv = 18;
+  CPredictionRevolutionDiv = 100;
 var
   pradius, dumx, dumy: Double;
   SinCosLut: array[0 .. CPredictionPointCount - 1] of record

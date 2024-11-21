@@ -55,7 +55,7 @@ begin
   C.Pen.Color := clRed;
   C.Pen.Style := psSolid;
 
-  s2t := TScan2Track.Create(8000);
+  s2t := TScan2Track.Create;//(8000);
   try
     s2t.Scan.PNGFileName := edInputPNG.Text;
 
@@ -102,7 +102,9 @@ begin
 
     sc.LoadPNGs;
 
-    sc.Correlate;
+    sc.Analyze;
+    sc.Correct;
+    sc.Rebuild;
 
     DrawImage(sc.OutputImage);
 
