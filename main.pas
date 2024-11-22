@@ -55,7 +55,7 @@ begin
   C.Pen.Color := clRed;
   C.Pen.Style := psSolid;
 
-  s2t := TScan2Track.Create;//(8000);
+  s2t := TScan2Track.Create(25000);
   try
     s2t.Scan.PNGFileName := edInputPNG.Text;
 

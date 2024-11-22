@@ -279,7 +279,7 @@ begin
 ////////////////////////
       t := GetTickCount64;
       pbuf.Add(Point(round(px * CReducFactor), round(py * CReducFactor)));
-      if t - pt >= 1000 then
+      if t - pt >= 5000 then
       begin
 
         for i := 0 to pbuf.Count - 1 do

@@ -80,6 +80,7 @@ function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: D
 procedure SobelEdgeDetector(const image: TSingleDynArray2; var out_gx, out_gy: TSingleDynArray2);
 
 function PearsonCorrelation(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
+function RMSE(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
 
 function Make16BitSample(smp: Double): SmallInt;
 
@@ -317,6 +318,22 @@ begin
   Result := 1.0;
   if den <> 0.0 then
     Result := num / den;
+end;
+
+function RMSE(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
+var
+  i: Integer;
+begin
+  Assert(Length(x) = Length(y));
+
+  Result := 0;
+  for i := 0 to High(x) do
+    Result += Sqr(x[i] - y[i]);
+
+  if Length(x) > 1 then
+    Result /= Length(x);
+
+  Result := Sqrt(Result);
 end;
 
 function Make16BitSample(smp: Double): SmallInt;
