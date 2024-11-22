@@ -63,8 +63,8 @@ begin
 end;
 
 const
-  CPredictionPointCount = 360;
-  CPredictionRevolutionDiv = 100;
+  CPredictionPointCount = 200;
+  CPredictionRevolutionDiv = 720;
 var
   pradius, dumx, dumy: Double;
   SinCosLut: array[0 .. CPredictionPointCount - 1] of record
@@ -171,8 +171,6 @@ begin
 end;
 
 procedure TScan2Track.EvalTrack;
-const
-  CDecodePrecMul = 1000;
 
   procedure Correct(angle, radius: Double; var radiusInc: Double);
   var
@@ -226,26 +224,28 @@ const
 
 
 var
-  angle, radius, sn, cs, px, py, p, r, bestp, radiusInc, radiusIncSmoo, c16a: Double;
-  i, pos: Integer;
+  angle, radius, sn, cs, px, py, p, r, bestp, radiusInc, radiusIncSmoo, c8a, middleSmp: Double;
+  i, pos, aboveCnt, aboveAcc: Integer;
   fs: TFileStream;
   pbuf: specialize TFPGList<TPoint>;
   t, pt: QWord;
   ismp, smp:SmallInt;
+  sf: TSimpleFilter;
+  smpBuf: array[Low(ShortInt) .. High(ShortInt)] of Double;
 begin
   WriteLn('EvalTrack');
 
+  sf := TSimpleFilter.Create(CLowCutoffFreq * 2.0 / FSampleRate, 4, False);
   fs := TFileStream.Create('debug.raw', fmCreate or fmShareDenyNone);
   pbuf := specialize TFPGList<TPoint>.Create;
   try
     pos := 0;
     pt := GetTickCount64;
 
-    c16a := C45RpmMaxGrooveWidth * Scan.DPI / High(SmallInt);
+    c8a := C45RpmMaxGrooveWidth * Scan.DPI / High(ShortInt);
     angle := Scan.GrooveStartAngle;
     radius := Scan.FirstGrooveRadius;
     radiusInc := -(Scan.DPI / C45RpmLeadInGroovesPerInch) / FPointsPerRevolution;
-    radiusIncSmoo := radiusInc;
 
     repeat
       angle := Scan.GrooveStartAngle - FRadiansPerRevolutionPoint * pos;
@@ -254,23 +254,29 @@ begin
 
       bestp := -Infinity;
       smp := 0;
-      for ismp := Low(SmallInt) to high(SmallInt) do
+      for ismp := Low(ShortInt) to high(ShortInt) do
       begin
-        r := radius + ismp * c16a;
+        r := radius + ismp * c8a;
 
         px := cs * r + Self.Scan.Center.X;
         py := sn * r + Self.Scan.Center.Y;
 
         if Scan.InRangePointD(py, px) then
-        begin
-          p := Scan.GetPointD(Scan.Image, py, px, imHermite);
-          if p > bestp then
-          begin
-            bestp := p;
-            smp := ismp;
-          end;
-        end;
+          smpBuf[ismp] := Scan.GetPointD(Scan.Image, py, px, imHermite);
       end;
+
+      middleSmp := (MinValue(smpBuf) + MaxValue(smpBuf)) * 0.5;
+
+      aboveAcc := 0;
+      aboveCnt := 0;
+      for ismp := Low(ShortInt) to high(ShortInt) do
+        if smpBuf[ismp] >= middleSmp then
+        begin
+          aboveAcc += ismp;
+          Inc(aboveCnt);
+        end;
+      smp := Round(aboveAcc / (High(ShortInt) * aboveCnt) * High(SmallInt));
+
       fs.WriteWord(Word(smp));
 
       px := cs * radius + Self.Scan.Center.X;
@@ -279,7 +285,7 @@ begin
 ////////////////////////
       t := GetTickCount64;
       pbuf.Add(Point(round(px * CReducFactor), round(py * CReducFactor)));
-      if t - pt >= 5000 then
+      if t - pt >= 1000 then
       begin
 
         for i := 0 to pbuf.Count - 1 do
@@ -296,18 +302,19 @@ begin
 ////////////////////////
 
       Correct(angle, radius, radiusInc);
-      radiusIncSmoo := lerp(radiusIncSmoo, radiusInc, CLowCutoffFreq * 2.0 / FSampleRate);
 
-      Write(pos:8, radiusInc:20:6, radiusIncSmoo:20:6, #13);
+      radiusIncSmoo := sf.ProcessSample(radiusInc);
 
-      radiusInc := radiusIncSmoo;
-      radius += radiusInc;
+      Write(pos:8, aboveCnt:4, #13);
+
+      radius += radiusIncSmoo;
       Inc(pos);
 
     until radius <= Scan.ConcentricGrooveRadius;
   finally
-    fs.Free;
     pbuf.Free;
+    fs.Free;
+    sf.Free;
   end;
 end;
 
