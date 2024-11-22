@@ -66,7 +66,7 @@ function SwapRB(c: Integer): Integer; inline;
 function ToRGB(r, g, b: Byte): Integer; inline;
 procedure FromRGB(col: Integer; out r, g, b: Integer); inline; overload;
 procedure FromRGB(col: Integer; out r, g, b: Byte); inline; overload;
-function ToLuma(r, g, b: Byte): Integer; inline;
+function ToLuma(r, g, b: Integer): Integer; inline;
 function ToBW(col: Integer): Integer;
 
 function lerp(x, y, alpha: Double): Double; inline;
@@ -180,7 +180,7 @@ begin
   b := (col shr 16) and $ff;
 end;
 
-function ToLuma(r, g, b: Byte): Integer; inline;
+function ToLuma(r, g, b: Integer): Integer; inline;
 begin
   Result := r * cRedMul + g * cGreenMul + b * cBlueMul;
 end;

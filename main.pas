@@ -55,7 +55,7 @@ begin
   C.Pen.Color := clRed;
   C.Pen.Style := psSolid;
 
-  s2t := TScan2Track.Create(25000);
+  s2t := TScan2Track.Create(16000);
   try
     s2t.Scan.PNGFileName := edInputPNG.Text;
 
@@ -108,7 +108,8 @@ begin
 
     DrawImage(sc.OutputImage);
 
-    sc.Save;
+    if Trim(sc.OutputPNGFileName) <> '' then
+      sc.Save;
   finally
     sc.Free;
   end;
