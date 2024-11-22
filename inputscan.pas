@@ -290,6 +290,7 @@ var
   ix, iy: Integer;
   y0, y1, y2, y3: Double;
 begin
+  Result := 0;
   ix := trunc(X);
   iy := trunc(Y);
 
@@ -364,7 +365,7 @@ begin
             for x := 0 to High(FImage[0]) do
             begin
               FImage[y, x] := p^ * (1 / High(Byte));
-              Inc(p);
+              Inc(p, 1);
             end;
           end;
         16:
@@ -400,6 +401,17 @@ begin
               Inc(p, 4);
             end;
           end;
+        48:
+          for y := 0 to High(FImage) do
+          begin
+            p := png.RawImage.Data;
+            inc(p, y * png.RawImage.Description.BytesPerLine);
+            for x := 0 to High(FImage[0]) do
+            begin
+              FImage[y, x] := ToLuma(PWord(p)[0], PWord(p)[1], PWord(p)[2]) * (1 / (cLumaDiv * High(Word)));
+              Inc(p, 6);
+            end;
+          end;
         else
           Assert(False);
       end;
@@ -410,7 +422,7 @@ begin
     if (png.DPI.X > 0) and (png.DPI.X = png.DPI.Y) then
     begin
       FDPI := png.DPI.X;
-      if not FSilent then WriteLn(FDPI:6, 'DPI');
+      if not FSilent then   WriteLn('DPI:', FDPI:6);
     end;
   finally
     png.Free;
