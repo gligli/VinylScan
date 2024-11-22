@@ -52,6 +52,21 @@ type
 
   TGRSEvalFunc = function(x: Double; Data: Pointer): Double of object;
 
+  { TSimpleFilter }
+
+  TSimpleFilter = class
+  private
+    prevSmp: TDoubleDynArray;
+  public
+    Count: Integer;
+    Stages: Integer;
+    HighPass: Boolean;
+
+    constructor Create(AFc: Double; AStages: Integer; AHighPass: Boolean; AInitValue: Double = 0.0);
+
+    function ProcessSample(Smp: Double): Double;
+  end;
+
 procedure SpinEnter(Lock: PSpinLock); assembler;
 procedure SpinLeave(Lock: PSpinLock); assembler;
 function NumberOfProcessors: Integer;
@@ -83,7 +98,6 @@ function PearsonCorrelation(const x: TDoubleDynArray; const y: TDoubleDynArray):
 function RMSE(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
 
 function Make16BitSample(smp: Double): SmallInt;
-
 
 implementation
 
@@ -257,7 +271,6 @@ begin
   end;
 end;
 
-
 type
   TKernel = array[-1..1, -1..1] of integer;
 
@@ -339,6 +352,35 @@ end;
 function Make16BitSample(smp: Double): SmallInt;
 begin
   Result := EnsureRange(round(smp * High(SmallInt)), Low(SmallInt), High(SmallInt));
+end;
+
+constructor TSimpleFilter.Create(AFc: Double; AStages: Integer; AHighPass: Boolean; AInitValue: Double);
+var
+  i: Integer;
+begin
+  Stages := AStages;
+  HighPass := AHighPass;
+  Count := trunc(sqrt(0.196202 + sqr(AFc)) / AFc);
+  SetLength(prevSmp, Stages);
+  for i := 0 to Stages - 1 do
+    prevSmp[i] := AInitValue;
+end;
+
+function TSimpleFilter.ProcessSample(Smp: Double): Double;
+var
+  i: Integer;
+  v: Double;
+begin
+  Result := Smp;
+  for i := 0 to Stages - 1 do
+  begin
+    v := prevSmp[i];
+    prevSmp[i] := Result;
+    Result := (Count * v + Result) / (Count + 1);
+  end;
+
+  if HighPass then
+    Result := Smp - Result;
 end;
 
 initialization
