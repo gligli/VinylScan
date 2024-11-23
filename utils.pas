@@ -98,7 +98,8 @@ function PearsonCorrelation(const x: TDoubleDynArray; const y: TDoubleDynArray):
 function RMSE(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
 
 function Make16BitSample(smp: Double): SmallInt;
-
+function AngleToArctanExtents(x: Double): Double;
+function InArctanExtentsAngle(x, xmin, xmax: Double): Boolean;
 implementation
 
 procedure SpinEnter(Lock: PSpinLock); assembler;
@@ -352,6 +353,23 @@ end;
 function Make16BitSample(smp: Double): SmallInt;
 begin
   Result := EnsureRange(round(smp * High(SmallInt)), Low(SmallInt), High(SmallInt));
+end;
+
+function AngleToArctanExtents(x: Double): Double;
+begin
+  if x < -Pi then
+    x += 2.0 * Pi
+  else if x > Pi then
+    x -= 2.0 * Pi;
+  Result := x;
+end;
+
+function InArctanExtentsAngle(x, xmin, xmax: Double): Boolean;
+begin
+  if xmax >= xmin then
+    Result := InRange(x, xmin, xmax)
+  else
+    Result := not InRange(x, AngleToArctanExtents(xmax), AngleToArctanExtents(xmin + 2.0 * Pi))
 end;
 
 constructor TSimpleFilter.Create(AFc: Double; AStages: Integer; AHighPass: Boolean; AInitValue: Double);
