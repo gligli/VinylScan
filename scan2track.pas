@@ -230,9 +230,8 @@ procedure TScan2Track.EvalTrack;
 
 
 var
-  angle, radius, sn, cs, px, py, p, r, bestp, radiusInc, radiusIncSmoo, c8a, middleSmp: Double;
+  angle, radius, sn, cs, px, py, r, radiusInc, radiusIncSmoo, c8a, middleSmp: Double;
   i, pos, aboveCnt, aboveAcc: Integer;
-  fs: TFileStream;
   pbuf: specialize TFPGList<TPoint>;
   t, pt: QWord;
   ismp, smp:SmallInt;
@@ -244,7 +243,6 @@ begin
 
   SetLength(samples, FSampleRate);
   sf := TSimpleFilter.Create(CLowCutoffFreq * 2.0 / FSampleRate, 4, False);
-  fs := TFileStream.Create('debug.raw', fmCreate or fmShareDenyNone);
   pbuf := specialize TFPGList<TPoint>.Create;
   try
     pos := 0;
@@ -260,7 +258,6 @@ begin
 
       SinCos(angle, sn, cs);
 
-      bestp := -Infinity;
       smp := 0;
       for ismp := Low(ShortInt) to high(ShortInt) do
       begin
@@ -285,8 +282,6 @@ begin
         end;
       smp := Round(aboveAcc / (High(ShortInt) * aboveCnt) * High(SmallInt));
 
-      fs.WriteWord(Word(smp));
-
       while pos >= Length(samples) do
         SetLength(samples, Ceil(Length(samples) * cPhi));
       samples[pos] := smp;
@@ -294,10 +289,19 @@ begin
       px := cs * radius + Self.Scan.Center.X;
       py := sn * radius + Self.Scan.Center.Y;
 
+      Correct(angle, radius, radiusInc);
+
+      radiusIncSmoo := sf.ProcessSample(radiusInc);
+
+      Write(pos:8, aboveCnt:4, #13);
+
+      radius += radiusIncSmoo;
+      Inc(pos);
+
 ////////////////////////
       t := GetTickCount64;
       pbuf.Add(Point(round(px * CReducFactor), round(py * CReducFactor)));
-      if t - pt >= 1000 then
+      if t - pt >= 4000 then
       begin
 
         for i := 0 to pbuf.Count - 1 do
@@ -309,27 +313,20 @@ begin
         pbuf.Clear;
 
         Application.ProcessMessages;
+
+        SetLength(samples, pos);
+        CreateWAV(1, FBitsPerSample, FSampleRate, FOutputWAVFileName, samples);
+
         pt := GetTickCount64;
       end;
 ////////////////////////
 
-      Correct(angle, radius, radiusInc);
-
-      radiusIncSmoo := sf.ProcessSample(radiusInc);
-
-      Write(pos:8, aboveCnt:4, #13);
-
-      radius += radiusIncSmoo;
-      Inc(pos);
-
     until not InRange(radius, Scan.ConcentricGrooveRadius, C45RpmOuterSize * 0.5 * Scan.DPI);
 
     SetLength(samples, pos);
-
     CreateWAV(1, FBitsPerSample, FSampleRate, FOutputWAVFileName, samples);
   finally
     pbuf.Free;
-    fs.Free;
     sf.Free;
   end;
 end;

@@ -21,7 +21,7 @@ const
   C45RpmLeadInGroovesPerInch = 16.0;
   C45RpmMaxGrooveWidth = 0.003;
 
-  CLowCutoffFreq = 40.0;
+  CLowCutoffFreq = 20.0;
 
 {$if 0}
   cRedMul = 2126;
