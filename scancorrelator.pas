@@ -212,7 +212,7 @@ begin
     x[Length(FInputScans) * 2 + i] := FInputScans[i].Center.Y;
   end;
 
-  FInitF := PowellMinimize(@PowellAnalyze, x, 1e-9, 1e-6, 0.0, MaxInt, nil)[0];
+  FInitF := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-6, 0.0, MaxInt, nil)[0];
 
   for i := 0 to High(FInputScans) do
   begin
@@ -419,7 +419,7 @@ var
     angleIdx := Round(AIndex * FPointsPerRevolution / CCorrectAngleCount);
 
     lx := Copy(x);
-    f := PowellMinimize(@PowellCorrect, lx, 1e-9, 1e-6, 0.0, MaxInt, Pointer(angleIdx))[0];
+    f := PowellMinimize(@PowellCorrect, lx, 1e-8, 1e-6, 0.0, MaxInt, Pointer(angleIdx))[0];
 
     FPerAngleX[AIndex] := lx;
 

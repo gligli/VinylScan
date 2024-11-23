@@ -202,7 +202,7 @@ procedure TScan2Track.EvalTrack;
     end;
 
 {$if 1}
-    PowellMinimize(@PowellEvalTracking, x, 1e-6, 1e-6, 1e-6, MaxInt, Self);
+    PowellMinimize(@PowellEvalTracking, x, 1e-8, 1e-6, 0, MaxInt, Self);
 
     radiusInc := x[0];
 
