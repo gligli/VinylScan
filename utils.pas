@@ -361,15 +361,20 @@ begin
     x += 2.0 * Pi
   else if x > Pi then
     x -= 2.0 * Pi;
+
+  Assert(InRange(x, -Pi, Pi));
+
   Result := x;
 end;
 
 function InArctanExtentsAngle(x, xmin, xmax: Double): Boolean;
 begin
+  Assert(InRange(xmin, -Pi, Pi));
+  Assert(InRange(xmax, -Pi, Pi));
   if xmax >= xmin then
     Result := InRange(x, xmin, xmax)
   else
-    Result := not InRange(x, AngleToArctanExtents(xmax), AngleToArctanExtents(xmin + 2.0 * Pi))
+    Result := InRange(x, -Pi, xmax) or InRange(x, xmin, Pi);
 end;
 
 constructor TSimpleFilter.Create(AFc: Double; AStages: Integer; AHighPass: Boolean; AInitValue: Double);
@@ -402,7 +407,11 @@ begin
 end;
 
 initialization
+{$ifdef DEBUG}
+  ProcThreadPool.MaxThreadCount := 1;
+{$else}
   SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
   ProcThreadPool.MaxThreadCount := NumberOfProcessors;
+{$endif}
 end.
 

@@ -254,7 +254,7 @@ var
         Inc(pxCnt);
         if not InArctanExtentsAngle(bt, a0a, a0b) and not InArctanExtentsAngle(bt, a1a, a1b) then
         begin
-          stdDevArr[stdDevPos] := FInputScans[inputIdx].GetPointD(FInputScans[inputIdx].Image, AIndex, ox, imNone);
+          stdDevArr[stdDevPos] := FInputScans[inputIdx].GetPointD(FInputScans[inputIdx].Image, AIndex, ox, imLinear);
           Inc(stdDevPos);
         end;
       end;
@@ -262,7 +262,7 @@ var
 
     if stdDevPos > 0 then
     begin
-      accs[AIndex] := StdDev(PDouble(@stdDevArr[0]), stdDevPos) - 0.01 * stdDevPos / pxCnt;
+      accs[AIndex] := StdDev(PDouble(@stdDevArr[0]), stdDevPos) - 0.001 * stdDevPos / pxCnt;
       accCnts[AIndex] := 1;
     end;
   end;
@@ -274,8 +274,8 @@ begin
   begin
     a0a := AngleToArctanExtents(x[0]);
     a0b := AngleToArctanExtents(x[0] + x[1]);
-    a1a := AngleToArctanExtents(a0a + Pi);
-    a1b := AngleToArctanExtents(a0b + Pi);
+    a1a := AngleToArctanExtents(x[0] + Pi);
+    a1b := AngleToArctanExtents(x[0] + x[1] + Pi);
 
     rBeg := C45RpmLastMusicGroove * 0.5 * FOutputDPI;
     rEnd := C45RpmFirstMusicGroove * 0.5 * FOutputDPI;
@@ -312,8 +312,8 @@ begin
 
     FPerSnanCrops[i, 0] := AngleToArctanExtents(x[0]);
     FPerSnanCrops[i, 1] := AngleToArctanExtents(x[0] + x[1]);
-    FPerSnanCrops[i, 2] := AngleToArctanExtents(FPerSnanCrops[i, 0] + Pi);
-    FPerSnanCrops[i, 3] := AngleToArctanExtents(FPerSnanCrops[i, 1] + Pi);
+    FPerSnanCrops[i, 2] := AngleToArctanExtents(x[0] + Pi);
+    FPerSnanCrops[i, 3] := AngleToArctanExtents(x[0] + x[1] + Pi);
 
     WriteLn;
   end;
@@ -483,7 +483,7 @@ var
   var
     x: TVector;
     i, ox, cnt: Integer;
-    r, sn, cs, px, py, t, cx, cy, acc, bt, skm, maxOutVal: Double;
+    r, sn, cs, px, py, t, cx, cy, acc, bt, skm, maxOutVal, ct: Double;
   begin
     if High(FInputScans) > 0 then
       SetLength(x, High(FInputScans));
@@ -502,7 +502,7 @@ var
         acc := 0;
         for i := 0 to High(FInputScans) do
         begin
-          t  := bt + FInputScans[i].GrooveStartAngle;
+          t  := FInputScans[i].GrooveStartAngle;
           cx := FInputScans[i].Center.X;
           cy := FInputScans[i].Center.Y;
           if i > 0 then
@@ -515,12 +515,15 @@ var
             skm := 1.0;
           end;
 
-          SinCos(t, sn, cs);
+          SinCos(t + bt, sn, cs);
           px := cs * r * skm + cx;
           py := sn * r * skm + cy;
+
+          ct := AngleToArctanExtents(bt + t);
+
           if FInputScans[i].InRangePointD(py, px) and
-              (not InArctanExtentsAngle(t, FPerSnanCrops[i, 0], FPerSnanCrops[i, 1]) and
-               not InArctanExtentsAngle(t, FPerSnanCrops[i, 2], FPerSnanCrops[i, 3]) or
+              (not InArctanExtentsAngle(ct, FPerSnanCrops[i, 0], FPerSnanCrops[i, 1]) and
+               not InArctanExtentsAngle(ct, FPerSnanCrops[i, 2], FPerSnanCrops[i, 3]) or
                (r < rLbl)) then
           begin
             acc += FInputScans[i].GetPointD(FInputScans[i].Image, py, px, imHermite);
