@@ -67,6 +67,33 @@ type
     function ProcessSample(Smp: Double): Double;
   end;
 
+  { format of WAV file header }
+  TWavHeader = record         { parameter description }
+    rId             : longint; { 'RIFF'  4 characters }
+    rLen            : longint; { length of DATA + FORMAT chunk }
+    { FORMAT CHUNK }
+    wId             : longint; { 'WAVE' }
+    fId             : longint; { 'fmt ' }
+    fLen            : longint; { length of FORMAT DATA = 16 }
+    { format data }
+    wFormatTag      : word;    { $01 = PCM }
+    nChannels       : word;    { 1 = mono, 2 = stereo }
+    nSamplesPerSec  : longint; { Sample frequency ie 11025}
+    nAvgBytesPerSec : longint; { = nChannels * nSamplesPerSec *
+                                 (nBitsPerSample/8) }
+    nBlockAlign     : word;    { = nChannels * (nBitsPerSAmple / 8 }
+    wBitsPerSample  : word;    { 8 or 16 }
+    { DATA CHUNK }
+    dId             : longint; { 'data' }
+    wSampleLength   : longint; { length of SAMPLE DATA }
+      { sample data : offset 44 }
+      { for 8 bit mono = s[0],s[1]... :byte}
+      { for 8 bit stereo = sleft[0],sright[0],sleft[1],sright[1]... :byte}
+      { for 16 bit mono = s[0],s[1]... :word}
+      { for 16 bit stereo = sleft[0],sright[0],sleft[1],sright[1]... :word}
+  end;
+
+
 procedure SpinEnter(Lock: PSpinLock); assembler;
 procedure SpinLeave(Lock: PSpinLock); assembler;
 function NumberOfProcessors: Integer;
@@ -100,6 +127,9 @@ function RMSE(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
 function Make16BitSample(smp: Double): SmallInt;
 function AngleToArctanExtents(x: Double): Double;
 function InArctanExtentsAngle(x, xmin, xmax: Double): Boolean;
+
+procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray);
+
 implementation
 
 procedure SpinEnter(Lock: PSpinLock); assembler;
@@ -405,6 +435,35 @@ begin
   if HighPass then
     Result := Smp - Result;
 end;
+
+procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray);
+var
+  wf : TFileStream;
+  wh : TWavHeader;
+begin
+  wh.rId             := $46464952; { 'RIFF' }
+  wh.rLen            := 36 + Length(data) * SizeOf(data[0]); { length of sample + format }
+  wh.wId             := $45564157; { 'WAVE' }
+  wh.fId             := $20746d66; { 'fmt ' }
+  wh.fLen            := 16; { length of format chunk }
+  wh.wFormatTag      := 1; { PCM data }
+  wh.nChannels       := channels; { mono/stereo }
+  wh.nSamplesPerSec  := rate; { sample rate }
+  wh.nAvgBytesPerSec := channels*rate*(resolution div 8);
+  wh.nBlockAlign     := channels*(resolution div 8);
+  wh.wBitsPerSample  := resolution;{ resolution 8/16 }
+  wh.dId             := $61746164; { 'data' }
+  wh.wSampleLength   := Length(data) * SizeOf(data[0]); { sample size }
+
+  wf := TFileStream.Create(fn, fmCreate or fmShareDenyNone);
+  try
+    wf.WriteBuffer(wh, SizeOf(wh));
+    wf.WriteBuffer(data[0], Length(data) * SizeOf(data[0]));
+  finally
+    wf.Free;
+  end;
+end;
+
 
 initialization
 {$ifdef DEBUG}
