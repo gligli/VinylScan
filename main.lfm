@@ -37,7 +37,7 @@ object MainForm: TMainForm
   object btScan2Track: TButton
     Left = 176
     Height = 25
-    Top = 144
+    Top = 143
     Width = 128
     Caption = 'btScan2Track'
     TabOrder = 6
@@ -50,13 +50,9 @@ object MainForm: TMainForm
     Width = 168
     Lines.Strings = (
       'data\think0.png'
-      'data\think1.png'
       'data\think2.png'
-      'data\think3.png'
       'data\think4.png'
       'data\think5.png'
-      'data\think6.png'
-      'data\think7.png'
     )
     ScrollBars = ssAutoBoth
     TabOrder = 0
@@ -64,7 +60,7 @@ object MainForm: TMainForm
   object edOutputPNG: TEdit
     Left = 8
     Height = 23
-    Top = 88
+    Top = 89
     Width = 168
     TabOrder = 2
     Text = 'data\think_correlated.png'
@@ -81,7 +77,7 @@ object MainForm: TMainForm
   object btTest: TButton
     Left = 224
     Height = 25
-    Top = 8
+    Top = 9
     Width = 75
     Caption = 'btTest'
     TabOrder = 1

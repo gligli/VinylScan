@@ -74,7 +74,7 @@ implementation
 { TScanCorrelator }
 
 const
-  CCorrectAngleCount = 32;
+  CCorrectAngleCount = 16;
   CPrecMul = 10;
   CInitAreaBegin = C45RpmInnerSize;
   CInitAreaEnd = C45RpmLabelOuterSize;
@@ -212,7 +212,7 @@ begin
     x[Length(FInputScans) * 2 + i] := FInputScans[i].Center.Y;
   end;
 
-  FInitF := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-6, 0.0, MaxInt, nil)[0];
+  FInitF := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-6, 1e-9, MaxInt, nil)[0];
 
   for i := 0 to High(FInputScans) do
   begin
@@ -234,11 +234,10 @@ var
 
   procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
-    ox, pxCnt, stdDevPos: Integer;
+    ox, stdDevPos: Integer;
     r, bt: Double;
     stdDevArr: TDoubleDynArray;
   begin
-    pxCnt := 0;
     stdDevPos := 0;
     SetLength(stdDevArr, Length(FOutputImage[0]));
 
@@ -247,22 +246,17 @@ var
       r := Sqrt(Sqr(center - AIndex) + Sqr(center - ox));
       bt := ArcTan2(center - AIndex, center - ox);
 
-      bt := AngleToArctanExtents(bt);
-
-      if FInputScans[inputIdx].InRangePointD(AIndex, ox) and InRange(r, rBeg, rEnd) then
+      if FInputScans[inputIdx].InRangePointD(AIndex, ox) and InRange(r, rBeg, rEnd) and
+          not InArctanExtentsAngle(bt, a0a, a0b) and not InArctanExtentsAngle(bt, a1a, a1b) then
       begin
-        Inc(pxCnt);
-        if not InArctanExtentsAngle(bt, a0a, a0b) and not InArctanExtentsAngle(bt, a1a, a1b) then
-        begin
-          stdDevArr[stdDevPos] := FInputScans[inputIdx].GetPointD(FInputScans[inputIdx].Image, AIndex, ox, imLinear);
-          Inc(stdDevPos);
-        end;
+        stdDevArr[stdDevPos] := FInputScans[inputIdx].GetPointD(FInputScans[inputIdx].Image, AIndex, ox, imLinear);
+        Inc(stdDevPos);
       end;
     end;
 
     if stdDevPos > 0 then
     begin
-      accs[AIndex] := StdDev(PDouble(@stdDevArr[0]), stdDevPos) - 0.001 * stdDevPos / pxCnt;
+      accs[AIndex] := -StdDev(PDouble(@stdDevArr[0]), stdDevPos);
       accCnts[AIndex] := 1;
     end;
   end;
@@ -270,27 +264,27 @@ var
 begin
   Result := 1000.0;
 
-  if InRange(x[1], DegToRad(0.0), DegToRad(120.0)) then
-  begin
-    a0a := AngleToArctanExtents(x[0]);
-    a0b := AngleToArctanExtents(x[0] + x[1]);
-    a1a := AngleToArctanExtents(x[0] + Pi);
-    a1b := AngleToArctanExtents(x[0] + x[1] + Pi);
+  if (x[1] - x[0]) >= DegToRad(120.0) then
+    Exit;
 
-    rBeg := C45RpmLastMusicGroove * 0.5 * FOutputDPI;
-    rEnd := C45RpmFirstMusicGroove * 0.5 * FOutputDPI;
+  a0a := AngleToArctanExtents(x[0]);
+  a0b := AngleToArctanExtents(x[1]);
+  a1a := AngleToArctanExtents(x[0] + Pi);
+  a1b := AngleToArctanExtents(x[1] + Pi);
 
-    center := Length(FOutputImage) / 2.0;
+  rBeg := C45RpmLastMusicGroove * 0.5 * FOutputDPI;
+  rEnd := C45RpmFirstMusicGroove * 0.5 * FOutputDPI;
 
-    SetLength(accs, Length(FOutputImage));
-    SetLength(accCnts, Length(FOutputImage));
+  center := Length(FOutputImage) / 2.0;
 
-    ProcThreadPool.DoParallelLocalProc(@DoY, 0, High(FOutputImage));
+  SetLength(accs, Length(FOutputImage));
+  SetLength(accCnts, Length(FOutputImage));
 
-    Result := DivDef(Sum(accs), SumInt(accCnts), Result);
+  ProcThreadPool.DoParallelLocalProc(@DoY, 0, High(FOutputImage));
 
-    Write(inputIdx + 1:4, ' / ', Length(FInputScans):4, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', Result:9:6, #13);
-  end;
+  Result := DivDef(Sum(accs), SumInt(accCnts), Result);
+
+  Write(inputIdx + 1:4, ' / ', Length(FInputScans):4, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', -Result:9:6, #13);
 end;
 
 procedure TScanCorrelator.Crop;
@@ -305,15 +299,15 @@ begin
 
   for i := 0 to High(FInputScans) do
   begin
-    x[0] := DegToRad(-45.0);
-    x[1] := DegToRad(90.0);
+    x[0] := DegToRad(-30.0);
+    x[1] := DegToRad(30.0);
 
-    PowellMinimize(@PowellCrop, x, 1.0 / 360.0, 1e-6, 0.0, MaxInt, Pointer(i));
+    PowellMinimize(@PowellCrop, x, 1.0 / 360.0, 1e-6, 1e-9, MaxInt, Pointer(i));
 
     FPerSnanCrops[i, 0] := AngleToArctanExtents(x[0]);
-    FPerSnanCrops[i, 1] := AngleToArctanExtents(x[0] + x[1]);
+    FPerSnanCrops[i, 1] := AngleToArctanExtents(x[1]);
     FPerSnanCrops[i, 2] := AngleToArctanExtents(x[0] + Pi);
-    FPerSnanCrops[i, 3] := AngleToArctanExtents(x[0] + x[1] + Pi);
+    FPerSnanCrops[i, 3] := AngleToArctanExtents(x[1] + Pi);
 
     WriteLn;
   end;
@@ -419,7 +413,7 @@ var
     angleIdx := Round(AIndex * FPointsPerRevolution / CCorrectAngleCount);
 
     lx := Copy(x);
-    f := PowellMinimize(@PowellCorrect, lx, 1e-8, 1e-6, 0.0, MaxInt, Pointer(angleIdx))[0];
+    f := PowellMinimize(@PowellCorrect, lx, 1e-8, 1e-6, 1e-9, MaxInt, Pointer(angleIdx))[0];
 
     FPerAngleX[AIndex] := lx;
 
