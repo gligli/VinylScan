@@ -103,6 +103,7 @@ begin
     sc.LoadPNGs;
 
     sc.Analyze;
+    sc.Crop;
     sc.Correct;
     sc.Rebuild;
 
@@ -120,7 +121,7 @@ var
   img: TSingleDynArray2;
   i: Integer;
   fn: String;
-  sc1, sc100: TScanCorrelator;
+  sc1, sc100, scm: TScanCorrelator;
   sl: TStringList;
 begin
   SetLength(img, 2048, 2048);
@@ -143,14 +144,21 @@ begin
   sl := TStringList.Create;
   sc1 := TScanCorrelator.Create(sl, 1);
   sc100 := TScanCorrelator.Create(sl, 100);
+  sl.Text := 'data\think_mock.png';
+  scm := TScanCorrelator.Create(sl);
   try
+    scm.OutputPNGFileName := fn;
+    scm.Run;
     sc1.OutputPNGFileName := fn;
     sc1.Run;
     sc100.OutputPNGFileName := fn;
     sc100.Run;
+
+    DrawImage(scm.OutputImage);
   finally
     sc100.Free;
     sc1.Free;
+    scm.Free;
     sl.Free;
     DeleteFile(fn);
   end;

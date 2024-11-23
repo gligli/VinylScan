@@ -49,8 +49,11 @@ object MainForm: TMainForm
     Top = 8
     Width = 168
     Lines.Strings = (
-      'data\think5.png'
-      'data\think6.png'
+      'data\think0.png'
+      'data\think1.png'
+      'data\think2.png'
+      'data\think3.png'
+      'data\think4.png'
     )
     ScrollBars = ssAutoBoth
     TabOrder = 2
@@ -61,6 +64,7 @@ object MainForm: TMainForm
     Top = 96
     Width = 168
     TabOrder = 3
+    Text = 'data\think_correlated.png'
   end
   object btScansCorrelator: TButton
     Left = 176
