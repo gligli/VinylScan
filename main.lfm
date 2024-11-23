@@ -29,18 +29,18 @@ object MainForm: TMainForm
   object edInputPNG: TEdit
     Left = 8
     Height = 23
-    Top = 128
+    Top = 120
     Width = 168
-    TabOrder = 1
+    TabOrder = 4
     Text = 'data\think_correlated.png'
   end
   object btScan2Track: TButton
     Left = 176
     Height = 25
-    Top = 128
+    Top = 144
     Width = 128
     Caption = 'btScan2Track'
-    TabOrder = 0
+    TabOrder = 6
     OnClick = btScan2TrackClick
   end
   object mmInputPNGs: TMemo
@@ -54,25 +54,28 @@ object MainForm: TMainForm
       'data\think2.png'
       'data\think3.png'
       'data\think4.png'
+      'data\think5.png'
+      'data\think6.png'
+      'data\think7.png'
     )
     ScrollBars = ssAutoBoth
-    TabOrder = 2
+    TabOrder = 0
   end
   object edOutputPNG: TEdit
     Left = 8
     Height = 23
-    Top = 96
+    Top = 88
     Width = 168
-    TabOrder = 3
+    TabOrder = 2
     Text = 'data\think_correlated.png'
   end
   object btScansCorrelator: TButton
     Left = 176
     Height = 25
-    Top = 96
+    Top = 88
     Width = 128
     Caption = 'btScansCorrelator'
-    TabOrder = 4
+    TabOrder = 3
     OnClick = btScansCorrelatorClick
   end
   object btTest: TButton
@@ -81,7 +84,15 @@ object MainForm: TMainForm
     Top = 8
     Width = 75
     Caption = 'btTest'
-    TabOrder = 5
+    TabOrder = 1
     OnClick = btTestClick
+  end
+  object edOutputWAV: TEdit
+    Left = 8
+    Height = 23
+    Top = 144
+    Width = 168
+    TabOrder = 5
+    Text = 'data\think.wav'
   end
 end

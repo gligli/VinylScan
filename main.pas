@@ -20,6 +20,7 @@ type
     btScan2Track: TButton;
     btScansCorrelator: TButton;
     edInputPNG: TEdit;
+    edOutputWAV: TEdit;
     edOutputPNG: TEdit;
     Image: TImage;
     mmInputPNGs: TMemo;
@@ -55,8 +56,9 @@ begin
   C.Pen.Color := clRed;
   C.Pen.Style := psSolid;
 
-  s2t := TScan2Track.Create;//(16000);
+  s2t := TScan2Track.Create;
   try
+    s2t.OutputWAVFileName := edOutputWAV.Text;
     s2t.Scan.PNGFileName := edInputPNG.Text;
 
     s2t.Scan.LoadPNG;

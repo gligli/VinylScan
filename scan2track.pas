@@ -14,6 +14,8 @@ type
 
   TScan2Track = class
   private
+    FOutputWAVFileName: String;
+
     FScan: TInputScan;
     FBitsPerSample: Integer;
     FSampleRate: Integer;
@@ -21,6 +23,8 @@ type
     FRadiansPerRevolutionPoint: Double;
 
     FTrack: TIntegerDynArray;
+
+    function PowellEvalTracking(const arg: TVector; obj: Pointer): TScalar;
   public
     constructor Create(ASampleRate: Integer = 48000; ABitsPerSample: Integer = 16; ADPI: Integer = 2400);
     destructor Destroy; override;
@@ -28,6 +32,8 @@ type
     procedure EvalTrack;
 
     procedure Run;
+
+    property OutputWAVFileName: String read FOutputWAVFileName write FOutputWAVFileName;
 
     property Scan: TInputScan read FScan;
     property SampleRate: Integer read FSampleRate;
@@ -71,25 +77,24 @@ var
     Sin, Cos: Double;
   end;
 
-function PowellEvalTracking(const arg: TVector; obj: Pointer): TScalar;
+function TScan2Track.PowellEvalTracking(const arg: TVector; obj: Pointer): TScalar;
 var
-  Self: TScan2Track absolute obj;
   i: Integer;
   r, x, predy, predx, fx: Double;
 begin
   r := pradius;
-  x := arg[0] * Self.PointsPerRevolution / (CPredictionPointCount * CPredictionRevolutionDiv);
+  x := arg[0] * PointsPerRevolution / (CPredictionPointCount * CPredictionRevolutionDiv);
 
   Result := 0;
   for i := 0 to CPredictionPointCount - 1 do
   begin
-    if InRange(r, Self.Scan.ConcentricGrooveRadius, Self.Scan.FirstGrooveRadius) and
-       InRange(r, Self.Scan.ConcentricGrooveRadius, Self.Scan.FirstGrooveRadius) then
+    if InRange(r, Scan.ConcentricGrooveRadius, Scan.FirstGrooveRadius) and
+       InRange(r, Scan.ConcentricGrooveRadius, Scan.FirstGrooveRadius) then
     begin
-      predx := SinCosLut[i].Cos * r + Self.Scan.Center.X;
-      predy := SinCosLut[i].Sin * r + Self.Scan.Center.Y;
+      predx := SinCosLut[i].Cos * r + Scan.Center.X;
+      predy := SinCosLut[i].Sin * r + Scan.Center.Y;
 
-      fx := Self.Scan.GetPointD(Self.Scan.Image, predy, predx, imLinear);
+      fx := Scan.GetPointD(Scan.Image, predy, predx, imLinear);
       Result -= fx;
 
       //main.Form1.Image.Picture.Bitmap.Canvas.Pixels[round(predx * CReducFactor), round(predy * CReducFactor)] := clBlue;
@@ -150,6 +155,7 @@ const
   CFCoeff: array[0 .. 7] of Double = (-1/280, 4/105, -1/5, 4/5, -4/5, 1/5, -4/105, 1/280);
   CXCoeff: array[0 .. 7] of Double = (4, 3, 2, 1, -1, -2, -3, -4);
 var
+  Self: TScan2Track absolute obj;
   ig, ic: Integer;
   x: TVector;
 begin
@@ -159,11 +165,11 @@ begin
   begin
     x := Copy(arg);
     x[ig] += CXCoeff[ic] * CH;
-    grad[ig] += CFCoeff[ic] * PowellEvalTracking(x, obj);
+    grad[ig] += CFCoeff[ic] * Self.PowellEvalTracking(x, obj);
   end;
   grad[ig] /= CH;
 
-  func := PowellEvalTracking(arg, obj);
+  func := Self.PowellEvalTracking(arg, obj);
 
   //for ig := 0 to High(arg) do
   //  Write(arg[ig]:14:6);
@@ -195,7 +201,7 @@ procedure TScan2Track.EvalTrack;
       a -= ai;
     end;
 
-{$if 0}
+{$if 1}
     PowellMinimize(@PowellEvalTracking, x, 1e-6, 1e-6, 1e-6, MaxInt, Self);
 
     radiusInc := x[0];
@@ -232,9 +238,11 @@ var
   ismp, smp:SmallInt;
   sf: TSimpleFilter;
   smpBuf: array[Low(ShortInt) .. High(ShortInt)] of Double;
+  samples: TSmallIntDynArray;
 begin
   WriteLn('EvalTrack');
 
+  SetLength(samples, FSampleRate);
   sf := TSimpleFilter.Create(CLowCutoffFreq * 2.0 / FSampleRate, 4, False);
   fs := TFileStream.Create('debug.raw', fmCreate or fmShareDenyNone);
   pbuf := specialize TFPGList<TPoint>.Create;
@@ -279,6 +287,10 @@ begin
 
       fs.WriteWord(Word(smp));
 
+      while pos >= Length(samples) do
+        SetLength(samples, Ceil(Length(samples) * cPhi));
+      samples[pos] := smp;
+
       px := cs * radius + Self.Scan.Center.X;
       py := sn * radius + Self.Scan.Center.Y;
 
@@ -310,7 +322,11 @@ begin
       radius += radiusIncSmoo;
       Inc(pos);
 
-    until radius <= Scan.ConcentricGrooveRadius;
+    until not InRange(radius, Scan.ConcentricGrooveRadius, C45RpmOuterSize * 0.5 * Scan.DPI);
+
+    SetLength(samples, pos);
+
+    CreateWAV(1, FBitsPerSample, FSampleRate, FOutputWAVFileName, samples);
   finally
     pbuf.Free;
     fs.Free;
