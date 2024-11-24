@@ -74,12 +74,12 @@ implementation
 { TScanCorrelator }
 
 const
-  CCorrectAngleCount = 16;
+  CCorrectAngleCount = 32;
   CPrecMul = 10;
   CInitAreaBegin = C45RpmInnerSize;
   CInitAreaEnd = C45RpmLabelOuterSize;
   CInitAreaWidth = (CInitAreaEnd - CInitAreaBegin) * 0.5;
-  CCorrectAreaBegin = C45RpmInnerSize;
+  CCorrectAreaBegin = C45RpmLabelOuterSize;
   CCorrectAreaEnd = (C45RpmFirstMusicGroove + C45RpmOuterSize) * 0.5;
   CCorrectAreaWidth = (CCorrectAreaEnd - CCorrectAreaBegin) * 0.5;
   CAreaGroovesPerInch = 16;
@@ -302,7 +302,7 @@ begin
     x[0] := DegToRad(-30.0);
     x[1] := DegToRad(30.0);
 
-    PowellMinimize(@PowellCrop, x, 1.0 / 360.0, 1e-6, 1e-9, MaxInt, Pointer(i));
+    PowellMinimize(@PowellCrop, x, 1.0 / 360.0, 1e-6, 1e-6, MaxInt, Pointer(i));
 
     FPerSnanCrops[i, 0] := AngleToArctanExtents(x[0]);
     FPerSnanCrops[i, 1] := AngleToArctanExtents(x[1]);
@@ -318,20 +318,21 @@ var
   angleIdx: PtrInt absolute obj;
   corrData: TDoubleDynArray2;
   i, j, pos, cnt, startAngle, endAngle, angleInc, angleExtents: Integer;
-  ri, t, r, rEnd, sn, cs, px, py, cx, cy, rri, skm: Double;
+  ri, t, bt, r, rEnd, sn, cs, px, py, cx, cy, rri, skm: Double;
+  angleCropped: Boolean;
 begin
   angleExtents := Round(FPointsPerRevolution / CCorrectAngleCount * 0.5);
   startAngle := angleIdx - angleExtents;
   endAngle := angleIdx + angleExtents;
   angleInc := Max(1, Round(FPointsPerRevolution / (360.0 * CPrecMul)));
 
-  SetLength(corrData, Length(FInputScans), Ceil(CCorrectAreaWidth * FOutputDPI * CPrecMul * (endAngle - startAngle) / angleInc));
+  SetLength(corrData, Length(FInputScans), Ceil(CCorrectAreaWidth * FOutputDPI * CPrecMul * (endAngle - startAngle + 1) / angleInc));
 
   ri := 1.0 / CPrecMul;
 
   for i := 0 to High(FInputScans) do
   begin
-    t  := FInputScans[i].GrooveStartAngle;
+    bt := FInputScans[i].GrooveStartAngle;
     cx := FInputScans[i].Center.X;
     cy := FInputScans[i].Center.Y;
     if i > 0 then
@@ -348,7 +349,10 @@ begin
 
     j := startAngle;
     repeat
-      SinCos(t + j * FRadiansPerRevolutionPoint, sn, cs);
+      t := AngleToArctanExtents(j * FRadiansPerRevolutionPoint);
+      angleCropped := InArctanExtentsAngle(t, FPerSnanCrops[i, 0], FPerSnanCrops[i, 1]) or InArctanExtentsAngle(t, FPerSnanCrops[i, 2], FPerSnanCrops[i, 3]);
+
+      SinCos(t + bt, sn, cs);
 
       sn *= skm;
       cs *= skm;
@@ -360,11 +364,12 @@ begin
         px := cs * rri + cx;
         py := sn * rri + cy;
 
-        while pos >= Length(corrData[i]) do
-          SetLength(corrData[i], Ceil(Length(corrData[i]) * 1.1));
+        Assert(pos < Length(corrData[i]));
 
-        if FInputScans[i].InRangePointD(py, px) then
-          corrData[i, pos] := FInputScans[i].GetPointD(FInputScans[i].Image, py, px, imLinear);
+        if FInputScans[i].InRangePointD(py, px) and not angleCropped then
+          corrData[i, pos] := FInputScans[i].GetPointD(FInputScans[i].Image, py, px, imLinear)
+        else
+          corrData[i, pos] := NaN;
 
         Inc(pos);
       until rri >= rEnd;
@@ -377,27 +382,18 @@ begin
 
   cnt := 0;
   Result := 0;
-  for i := 1 to High(FInputScans) do
-  begin
-    Result += RMSE(corrData[0], corrData[i]);
-    Inc(cnt);
-  end;
-  //for i := 0 to High(FInputScans) do
-  //  for j := i + 1 to High(FInputScans) do
-  //  begin
-  //    Result += RMSE(corrData[i], corrData[j]);
-  //    Inc(cnt);
-  //  end;
+  for i := 0 to High(FInputScans) do
+    for j := i + 1 to High(FInputScans) do
+    begin
+      Result += RMSE(corrData[i], corrData[j]);
+      Inc(cnt);
+    end;
   if cnt > 1 then
     Result /= cnt;
 
-  //if not FUseGradientDescent then
-  //begin
-  //  for i := 0 to High(x) do
-  //    Write(x[i]:12:6);
-  //  WriteLn(-Result:12:6);
-  // end;
-
+  //for i := 0 to High(x) do
+  //  Write(x[i]:12:6);
+  //WriteLn(Result:12:6);
 end;
 
 procedure TScanCorrelator.Correct;
@@ -499,6 +495,9 @@ var
           t  := FInputScans[i].GrooveStartAngle;
           cx := FInputScans[i].Center.X;
           cy := FInputScans[i].Center.Y;
+
+          ct := AngleToArctanExtents(bt + t);
+
           if i > 0 then
           begin
             skm := x[High(FInputScans) * 0 + i - 1];
@@ -509,11 +508,9 @@ var
             skm := 1.0;
           end;
 
-          SinCos(t + bt, sn, cs);
+          SinCos(ct, sn, cs);
           px := cs * r * skm + cx;
           py := sn * r * skm + cy;
-
-          ct := AngleToArctanExtents(bt + t);
 
           if FInputScans[i].InRangePointD(py, px) and
               (not InArctanExtentsAngle(ct, FPerSnanCrops[i, 0], FPerSnanCrops[i, 1]) and
