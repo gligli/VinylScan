@@ -10,34 +10,6 @@ interface
 uses
   Classes, SysUtils, Types, Math, Windows, MTProcs;
 
-const
-  C45RpmRevolutionsPerSecond = 45.0 / 60.0;
-  C45RpmOuterSize = 6.875;
-  C45RpmInnerSize = 1.504;
-  C45RpmLabelOuterSize = 3.5;
-  C45RpmConcentricGroove = 3.875;
-  C45RpmFirstMusicGroove = 6.625;
-  C45RpmLastMusicGroove = 4.25;
-  C45RpmLeadInGroovesPerInch = 16.0;
-  C45RpmMaxGrooveWidth = 0.003;
-
-  CLowCutoffFreq = 20.0;
-
-{$if 0}
-  cRedMul = 2126;
-  cGreenMul = 7152;
-  cBlueMul = 722;
-{$else}
-  cRedMul = 299;
-  cGreenMul = 587;
-  cBlueMul = 114;
-{$endif}
-
-  cLumaDiv = cRedMul + cGreenMul + cBlueMul;
-
-  cPhi = (1 + sqrt(5)) / 2;
-  cInvPhi = 1 / cPhi;
-
 type
   TSpinlock = LongInt;
   PSpinLock = ^TSpinlock;
@@ -46,9 +18,12 @@ type
     X, Y: Double;
   end;
 
+  TConvolutionKernel = array[-1..1, -1..1] of integer;
+
   TByteDynArray2 = array of TByteDynArray;
-  TDoubleDynArray2 = array of TDoubleDynArray;
+  TWordDynArray2 = array of TWordDynArray;
   TSingleDynArray2 = array of TSingleDynArray;
+  TDoubleDynArray2 = array of TDoubleDynArray;
 
   TGRSEvalFunc = function(x: Double; Data: Pointer): Double of object;
 
@@ -94,6 +69,37 @@ type
   end;
 
 
+const
+  C45RpmRevolutionsPerSecond = 45.0 / 60.0;
+  C45RpmOuterSize = 6.875;
+  C45RpmInnerSize = 1.504;
+  C45RpmLabelOuterSize = 3.5;
+  C45RpmConcentricGroove = 3.875;
+  C45RpmFirstMusicGroove = 6.625;
+  C45RpmLastMusicGroove = 4.25;
+  C45RpmLeadInGroovesPerInch = 16.0;
+  C45RpmMaxGrooveWidth = 0.003;
+
+  CLowCutoffFreq = 20.0;
+
+{$if 0}
+  cRedMul = 2126;
+  cGreenMul = 7152;
+  cBlueMul = 722;
+{$else}
+  cRedMul = 299;
+  cGreenMul = 587;
+  cBlueMul = 114;
+{$endif}
+
+  cLumaDiv = cRedMul + cGreenMul + cBlueMul;
+
+  cPhi = (1 + sqrt(5)) / 2;
+  cInvPhi = 1 / cPhi;
+
+  CSobelX: TConvolutionKernel = ((-1, 0, 1), (-2, 0, 2), (-1, 0, 1));
+  CSobelY: TConvolutionKernel = ((-1, -2, -1), (0, 0, 0), (1, 2, 1));
+
 procedure SpinEnter(Lock: PSpinLock); assembler;
 procedure SpinLeave(Lock: PSpinLock); assembler;
 function NumberOfProcessors: Integer;
@@ -119,7 +125,9 @@ function herp(y0, y1, y2, y3, alpha: Double): Double;
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double;
   EpsilonX, EpsilonY: Double; Data: Pointer): Double;
 
-procedure SobelEdgeDetector(const image: TSingleDynArray2; var out_gx, out_gy: TSingleDynArray2);
+function Convolve(const image:TSingleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double; overload;
+function Convolve(const image:TWordDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Integer; overload;
+procedure SobelEdgeDetector(const image: TSingleDynArray2; var out_image: TSingleDynArray2);
 
 function PearsonCorrelation(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
 function RMSE(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
@@ -302,10 +310,7 @@ begin
   end;
 end;
 
-type
-  TKernel = array[-1..1, -1..1] of integer;
-
-function Convolve(const image:TSingleDynArray2; const kernel: TKernel; row, col: Integer): Double;
+function Convolve(const image:TSingleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double; overload;
 var
   y, x: Integer;
 begin
@@ -315,10 +320,17 @@ begin
       Result += image[y + row, x + col] * kernel[y, x];
 end;
 
-procedure SobelEdgeDetector(const image: TSingleDynArray2; var out_gx, out_gy: TSingleDynArray2);
-const
-  mx: TKernel = ((-1, 0, 1), (-2, 0, 2), (-1, 0, 1));
-  my: TKernel = ((-1, -2, -1), (0, 0, 0), (1, 2, 1));
+function Convolve(const image:TWordDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Integer; overload;
+var
+  y, x: Integer;
+begin
+  Result := 0;
+  for y := -1 to 1 do
+    for x := -1 to 1 do
+      Result += image[y + row, x + col] * kernel[y, x];
+end;
+
+procedure SobelEdgeDetector(const image: TSingleDynArray2; var out_image: TSingleDynArray2);
 var
 	y, x: Integer;
   gx, gy: Double;
@@ -326,12 +338,10 @@ begin
   for y := 1 to Length(image) - 2 do
     for x := 1 to Length(image[0]) - 2 do
     begin
-			gx := Convolve(image, mx, y, x);
-			gy := Convolve(image, my, y, x);
+			gx := Convolve(image, CSobelX, y, x);
+			gy := Convolve(image, CSobelY, y, x);
 
-      out_gx[y, x] := gx;
-      out_gy[y, x] := gy;
-      //out_image[y, x] := Sqrt(gx * gx + gy * gy);
+      out_image[y, x] := Sqrt(gx * gx + gy * gy);
     end;
 end;
 
