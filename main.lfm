@@ -13,7 +13,7 @@ object MainForm: TMainForm
   Caption = 'VinylScan'
   ClientHeight = 600
   ClientWidth = 800
-  DoubleBuffered = True
+  DoubleBuffered = False
   ParentDoubleBuffered = False
   LCLVersion = '3.6.0.0'
   Scaled = False
@@ -26,69 +26,82 @@ object MainForm: TMainForm
     AutoSize = True
     ParentShowHint = False
   end
-  object edInputPNG: TEdit
-    Left = 8
-    Height = 23
-    Top = 120
-    Width = 168
-    TabOrder = 4
-    Text = 'data\think_correlated.png'
-  end
-  object btScan2Track: TButton
-    Left = 176
-    Height = 25
-    Top = 143
-    Width = 128
-    Caption = 'btScan2Track'
-    TabOrder = 6
-    OnClick = btScan2TrackClick
-  end
-  object mmInputPNGs: TMemo
-    Left = 8
-    Height = 80
-    Top = 8
-    Width = 168
-    Lines.Strings = (
-      'data\think0.png'
-      'data\think2.png'
-      'data\think4.png'
-      'data\think5.png'
-    )
-    ScrollBars = ssAutoBoth
+  object pnSettings: TPanel
+    Left = 0
+    Height = 176
+    Top = 0
+    Width = 314
+    BevelOuter = bvLowered
+    ClientHeight = 176
+    ClientWidth = 314
+    DoubleBuffered = False
+    FullRepaint = False
+    ParentDoubleBuffered = False
     TabOrder = 0
-  end
-  object edOutputPNG: TEdit
-    Left = 8
-    Height = 23
-    Top = 89
-    Width = 168
-    TabOrder = 2
-    Text = 'data\think_correlated.png'
-  end
-  object btScansCorrelator: TButton
-    Left = 176
-    Height = 25
-    Top = 88
-    Width = 128
-    Caption = 'btScansCorrelator'
-    TabOrder = 3
-    OnClick = btScansCorrelatorClick
-  end
-  object btTest: TButton
-    Left = 224
-    Height = 25
-    Top = 9
-    Width = 75
-    Caption = 'btTest'
-    TabOrder = 1
-    OnClick = btTestClick
-  end
-  object edOutputWAV: TEdit
-    Left = 8
-    Height = 23
-    Top = 144
-    Width = 168
-    TabOrder = 5
-    Text = 'data\think.wav'
+    object edOutputWAV: TEdit
+      Left = 8
+      Height = 23
+      Top = 144
+      Width = 168
+      TabOrder = 0
+      Text = 'data\think.wav'
+    end
+    object edInputPNG: TEdit
+      Left = 8
+      Height = 23
+      Top = 120
+      Width = 168
+      TabOrder = 1
+      Text = 'data\think_correlated.png'
+    end
+    object edOutputPNG: TEdit
+      Left = 8
+      Height = 23
+      Top = 89
+      Width = 168
+      TabOrder = 2
+      Text = 'data\think_correlated.png'
+    end
+    object mmInputPNGs: TMemo
+      Left = 8
+      Height = 80
+      Top = 8
+      Width = 168
+      Lines.Strings = (
+        'data\think0.png'
+        'data\think2.png'
+        'data\think4.png'
+        'data\think5.png'
+      )
+      ScrollBars = ssAutoBoth
+      TabOrder = 3
+    end
+    object btScansCorrelator: TButton
+      Left = 176
+      Height = 25
+      Top = 88
+      Width = 128
+      Caption = 'btScansCorrelator'
+      TabOrder = 4
+      OnClick = btScansCorrelatorClick
+    end
+    object btScan2Track: TButton
+      Left = 176
+      Height = 25
+      Top = 143
+      Width = 128
+      Caption = 'btScan2Track'
+      TabOrder = 5
+      OnClick = btScan2TrackClick
+    end
+    object btTest: TButton
+      Left = 224
+      Height = 25
+      Top = 9
+      Width = 75
+      Caption = 'btTest'
+      TabOrder = 6
+      OnClick = btTestClick
+    end
   end
 end

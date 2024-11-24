@@ -16,14 +16,15 @@ type
   { TMainForm }
 
   TMainForm = class(TForm)
-    btTest: TButton;
     btScan2Track: TButton;
     btScansCorrelator: TButton;
+    btTest: TButton;
     edInputPNG: TEdit;
-    edOutputWAV: TEdit;
     edOutputPNG: TEdit;
+    edOutputWAV: TEdit;
     Image: TImage;
     mmInputPNGs: TMemo;
+    pnSettings: TPanel;
     procedure btScan2TrackClick(Sender: TObject);
     procedure btScansCorrelatorClick(Sender: TObject);
     procedure btTestClick(Sender: TObject);
