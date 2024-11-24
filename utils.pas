@@ -366,16 +366,21 @@ end;
 
 function RMSE(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
 var
-  i: Integer;
+  i, cnt: Integer;
 begin
   Assert(Length(x) = Length(y));
 
+  cnt := 0;
   Result := 0;
   for i := 0 to High(x) do
-    Result += Sqr(x[i] - y[i]);
+    if not IsNan(x[i]) and not IsNan(y[i]) then
+    begin
+      Result += Sqr(x[i] - y[i]);
+      Inc(cnt);
+    end;
 
-  if Length(x) > 1 then
-    Result /= Length(x);
+  if cnt > 1 then
+    Result /= cnt;
 
   Result := Sqrt(Result);
 end;
