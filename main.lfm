@@ -28,11 +28,11 @@ object MainForm: TMainForm
   end
   object pnSettings: TPanel
     Left = 0
-    Height = 176
+    Height = 184
     Top = 0
     Width = 314
     BevelOuter = bvLowered
-    ClientHeight = 176
+    ClientHeight = 184
     ClientWidth = 314
     DoubleBuffered = False
     FullRepaint = False
@@ -41,7 +41,7 @@ object MainForm: TMainForm
     object edOutputWAV: TEdit
       Left = 8
       Height = 23
-      Top = 144
+      Top = 152
       Width = 168
       TabOrder = 0
       Text = 'data\think.wav'
@@ -49,7 +49,7 @@ object MainForm: TMainForm
     object edInputPNG: TEdit
       Left = 8
       Height = 23
-      Top = 120
+      Top = 128
       Width = 168
       TabOrder = 1
       Text = 'data\think_correlated.png'
@@ -57,29 +57,30 @@ object MainForm: TMainForm
     object edOutputPNG: TEdit
       Left = 8
       Height = 23
-      Top = 89
+      Top = 97
       Width = 168
       TabOrder = 2
       Text = 'data\think_correlated.png'
     end
     object mmInputPNGs: TMemo
       Left = 8
-      Height = 80
+      Height = 88
       Top = 8
       Width = 168
       Lines.Strings = (
-        'data\think0.png'
-        'data\think2.png'
-        'data\think4.png'
-        'data\think5.png'
+        'data\IMG_20241124_0001.png'
+        'data\IMG_20241124_0002.png'
+        'data\IMG_20241124_0003.png'
+        'data\IMG_20241124_0004.png'
       )
-      ScrollBars = ssAutoBoth
+      ScrollBars = ssBoth
       TabOrder = 3
+      WordWrap = False
     end
     object btScansCorrelator: TButton
       Left = 176
       Height = 25
-      Top = 88
+      Top = 96
       Width = 128
       Caption = 'btScansCorrelator'
       TabOrder = 4
@@ -88,7 +89,7 @@ object MainForm: TMainForm
     object btScan2Track: TButton
       Left = 176
       Height = 25
-      Top = 143
+      Top = 151
       Width = 128
       Caption = 'btScan2Track'
       TabOrder = 5

@@ -74,8 +74,8 @@ implementation
 { TScanCorrelator }
 
 const
-  CCorrectAngleCount = 32;
-  CPrecMul = 10;
+  CCorrectAngleCount = 4;
+  CPrecMul = 100;
   CInitAreaBegin = C45RpmInnerSize;
   CInitAreaEnd = C45RpmLabelOuterSize;
   CInitAreaWidth = (CInitAreaEnd - CInitAreaBegin) * 0.5;
@@ -167,7 +167,7 @@ var
       Assert(pos < Length(corrData[AIndex]));
 
       if FInputScans[AIndex].InRangePointD(py, px) then
-        corrData[AIndex, pos] := FInputScans[AIndex].GetPointD(py, px, isImage, imLinear);
+        corrData[AIndex, pos] := FInputScans[AIndex].GetPointD(py, px, isImage, imHermite);
 
       Inc(pos);
     until rri >= rEnd;
@@ -249,7 +249,7 @@ var
       if FInputScans[inputIdx].InRangePointD(AIndex, ox) and InRange(r, rBeg, rEnd) and
           not InArctanExtentsAngle(bt, a0a, a0b) and not InArctanExtentsAngle(bt, a1a, a1b) then
       begin
-        stdDevArr[stdDevPos] := FInputScans[inputIdx].GetPointD(AIndex, ox, isImage, imLinear);
+        stdDevArr[stdDevPos] := FInputScans[inputIdx].GetPointD(AIndex, ox, isImage, imHermite);
         Inc(stdDevPos);
       end;
     end;
@@ -302,7 +302,7 @@ begin
     x[0] := DegToRad(-30.0);
     x[1] := DegToRad(30.0);
 
-    PowellMinimize(@PowellCrop, x, 1.0 / 360.0, 1e-6, 1e-6, MaxInt, Pointer(i));
+    PowellMinimize(@PowellCrop, x, 1.0 / 36.0, 1e-6, 1e-6, MaxInt, Pointer(i));
 
     FPerSnanCrops[i, 0] := AngleToArctanExtents(x[0]);
     FPerSnanCrops[i, 1] := AngleToArctanExtents(x[1]);
@@ -318,7 +318,7 @@ var
   angleIdx: PtrInt absolute obj;
   corrData: TDoubleDynArray2;
   i, j, pos, cnt, startAngle, endAngle, angleInc, angleExtents: Integer;
-  ri, t, bt, r, rEnd, sn, cs, px, py, cx, cy, rri, skm: Double;
+  t, bt, r, rEnd, sn, cs, px, py, cx, cy, rri, skm: Double;
   angleCropped: Boolean;
 begin
   angleExtents := Round(FPointsPerRevolution / CCorrectAngleCount * 0.5);
@@ -326,9 +326,7 @@ begin
   endAngle := angleIdx + angleExtents;
   angleInc := Max(1, Round(FPointsPerRevolution / (360.0 * CPrecMul)));
 
-  SetLength(corrData, Length(FInputScans), Ceil(CCorrectAreaWidth * FOutputDPI * CPrecMul * (endAngle - startAngle + 1) / angleInc));
-
-  ri := 1.0 / CPrecMul;
+  SetLength(corrData, Length(FInputScans), Ceil(CCorrectAreaWidth * FOutputDPI * (endAngle - startAngle + 1) / angleInc));
 
   for i := 0 to High(FInputScans) do
   begin
@@ -360,14 +358,14 @@ begin
       r := CCorrectAreaBegin * 0.5 * FOutputDPI;
       rEnd := CCorrectAreaEnd * 0.5 * FOutputDPI;
       repeat
-        rri := r + ri * pos;
+        rri := r + pos;
         px := cs * rri + cx;
         py := sn * rri + cy;
 
         Assert(pos < Length(corrData[i]));
 
         if FInputScans[i].InRangePointD(py, px) and not angleCropped then
-          corrData[i, pos] := FInputScans[i].GetPointD(py, px, isImage, imLinear)
+          corrData[i, pos] := FInputScans[i].GetPointD(py, px, isImage, imHermite)
         else
           corrData[i, pos] := NaN;
 
