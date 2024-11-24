@@ -29,7 +29,8 @@ type
     procedure btTestClick(Sender: TObject);
   private
 
-    procedure DrawImage(const Img: TSingleDynArray2);
+    procedure DrawImage(const Img: TWordDynArray2); overload;
+    procedure DrawImage(const Img: TSingleDynArray2); overload;
   public
 
   end;
@@ -166,16 +167,13 @@ begin
   end;
 end;
 
-procedure TMainForm.DrawImage(const Img: TSingleDynArray2);
+procedure TMainForm.DrawImage(const Img: TWordDynArray2);
 var
   x, y, ix, iy: Integer;
   sc: PInteger;
   b: Byte;
-  acc: Double;
-  C: TCanvas;
+  acc: Integer;
 begin
-  C := Image.Picture.Bitmap.Canvas;
-
   Image.Picture.Bitmap.PixelFormat := pf32bit;
   Image.Picture.Bitmap.Width := Length(Img[0]) shr CReducShift;
   Image.Picture.Bitmap.Height := Length(Img) shr CReducShift;
@@ -191,9 +189,46 @@ begin
         for iy := 0 to (1 shl CReducShift) - 1 do
           for ix := 0 to (1 shl CReducShift) - 1 do
             acc += Img[(y shl CReducShift) + iy, (x shl CReducShift) + ix];
-        acc /=  1 shl (CReducShift * 2);
 
-        b := EnsureRange(round(acc * 255.0), 0, 255);
+        b := EnsureRange(Round(acc * (High(Byte)  / (High(Word) shl (CReducShift * 2)))), 0, High(Byte));
+
+        sc^ := ToRGB(b, b, b);
+
+        Inc(sc);
+      end;
+    end;
+  finally
+    Image.Picture.Bitmap.EndUpdate;
+  end;
+
+  Application.ProcessMessages;
+end;
+
+procedure TMainForm.DrawImage(const Img: TSingleDynArray2);
+var
+  x, y, ix, iy: Integer;
+  sc: PInteger;
+  b: Byte;
+  acc: Double;
+begin
+  Image.Picture.Bitmap.PixelFormat := pf32bit;
+  Image.Picture.Bitmap.Width := Length(Img[0]) shr CReducShift;
+  Image.Picture.Bitmap.Height := Length(Img) shr CReducShift;
+
+  Image.Picture.Bitmap.BeginUpdate;
+  try
+    for y := 0 to Image.Picture.Bitmap.Height - 1 do
+    begin
+      sc := Image.Picture.Bitmap.ScanLine[y];
+      for x := 0 to Image.Picture.Bitmap.Width - 1 do
+      begin
+        acc  := 0;
+        for iy := 0 to (1 shl CReducShift) - 1 do
+          for ix := 0 to (1 shl CReducShift) - 1 do
+            acc += Img[(y shl CReducShift) + iy, (x shl CReducShift) + ix];
+
+        b := EnsureRange(Round(acc * (High(Byte)  / (1 shl (CReducShift * 2)))), 0, High(Byte));
+
         sc^ := ToRGB(b, b, b);
 
         Inc(sc);

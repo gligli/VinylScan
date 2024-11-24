@@ -167,7 +167,7 @@ var
       Assert(pos < Length(corrData[AIndex]));
 
       if FInputScans[AIndex].InRangePointD(py, px) then
-        corrData[AIndex, pos] := FInputScans[AIndex].GetPointD(FInputScans[AIndex].Image, py, px, imLinear);
+        corrData[AIndex, pos] := FInputScans[AIndex].GetPointD(py, px, isImage, imLinear);
 
       Inc(pos);
     until rri >= rEnd;
@@ -249,7 +249,7 @@ var
       if FInputScans[inputIdx].InRangePointD(AIndex, ox) and InRange(r, rBeg, rEnd) and
           not InArctanExtentsAngle(bt, a0a, a0b) and not InArctanExtentsAngle(bt, a1a, a1b) then
       begin
-        stdDevArr[stdDevPos] := FInputScans[inputIdx].GetPointD(FInputScans[inputIdx].Image, AIndex, ox, imLinear);
+        stdDevArr[stdDevPos] := FInputScans[inputIdx].GetPointD(AIndex, ox, isImage, imLinear);
         Inc(stdDevPos);
       end;
     end;
@@ -367,7 +367,7 @@ begin
         Assert(pos < Length(corrData[i]));
 
         if FInputScans[i].InRangePointD(py, px) and not angleCropped then
-          corrData[i, pos] := FInputScans[i].GetPointD(FInputScans[i].Image, py, px, imLinear)
+          corrData[i, pos] := FInputScans[i].GetPointD(py, px, isImage, imLinear)
         else
           corrData[i, pos] := NaN;
 
@@ -478,14 +478,14 @@ var
     if High(FInputScans) > 0 then
       SetLength(x, High(FInputScans));
 
-    maxOutVal := 0;
+    maxOutVal := -Infinity;
     for ox := 0 to High(FOutputImage[0]) do
     begin
       r := Sqrt(Sqr(center - AIndex) + Sqr(center - ox));
-      bt := ArcTan2(center - AIndex, center - ox);
 
       if InRange(r, rBeg, rEnd) then
       begin
+        bt := ArcTan2(center - AIndex, center - ox);
         InterpolateX(bt, x);
 
         cnt := 0;
@@ -517,7 +517,7 @@ var
                not InArctanExtentsAngle(ct, FPerSnanCrops[i, 2], FPerSnanCrops[i, 3]) or
                (r < rLbl)) then
           begin
-            acc += FInputScans[i].GetPointD(FInputScans[i].Image, py, px, imHermite);
+            acc += FInputScans[i].GetPointD(py, px, isImage, imHermite);
             Inc(cnt);
           end;
         end;

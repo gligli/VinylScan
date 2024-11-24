@@ -94,7 +94,7 @@ begin
       predx := SinCosLut[i].Cos * r + Scan.Center.X;
       predy := SinCosLut[i].Sin * r + Scan.Center.Y;
 
-      fx := Scan.GetPointD(Scan.Image, predy, predx, imLinear);
+      fx := Scan.GetPointD(predy, predx, isImage, imLinear);
       Result -= fx;
 
       //main.Form1.Image.Picture.Bitmap.Canvas.Pixels[round(predx * CReducFactor), round(predy * CReducFactor)] := clBlue;
@@ -132,10 +132,10 @@ begin
       predx := SinCosLut[i].Cos * r + Self.Scan.Center.X;
       predy := SinCosLut[i].Sin * r + Self.Scan.Center.Y;
 
-      fx := Self.Scan.GetPointD(Self.Scan.Image, predy, predx, imLinear);
+      fx := Self.Scan.GetPointD(predy, predx, isImage, imLinear);
       func -= fx;
-      grad[0] -= Self.Scan.GetPointD(Self.Scan.XGradient, predy, predx, imLinear) * (SinCosLut[i].Cos * id) +
-                 Self.Scan.GetPointD(Self.Scan.YGradient, predy, predx, imLinear) * (SinCosLut[i].Sin * id);
+      grad[0] -= Self.Scan.GetPointD(predy, predx, isSobelX, imLinear) * (SinCosLut[i].Cos * id) +
+                 Self.Scan.GetPointD(predy, predx, isSobelY, imLinear) * (SinCosLut[i].Sin * id);
 
       //main.Form1.Image.Picture.Bitmap.Canvas.Pixels[round(predx * CReducFactor), round(predy * CReducFactor)] := clBlue;
     end;
@@ -267,7 +267,7 @@ begin
         py := sn * r + Self.Scan.Center.Y;
 
         if Scan.InRangePointD(py, px) then
-          smpBuf[ismp] := Scan.GetPointD(Scan.Image, py, px, imHermite);
+          smpBuf[ismp] := Scan.GetPointD(py, px, isImage, imHermite);
       end;
 
       middleSmp := (MinValue(smpBuf) + MaxValue(smpBuf)) * 0.5;
