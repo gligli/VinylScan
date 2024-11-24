@@ -10,6 +10,7 @@ uses
 
 type
   TInterpMode = (imNone, imLinear, imHermite);
+  TInterpSource = (isImage, isSobelX, isSobelY);
 
   { TInputScan }
 
@@ -27,9 +28,7 @@ type
     FGrooveStartAngle: Double;
     FGrooveStartPoint: TPointD;
 
-    FImage: TSingleDynArray2;
-    FXGradient: TSingleDynArray2;
-    FYGradient: TSingleDynArray2;
+    FImage: TWordDynArray2;
 
     function GetHeight: Integer;
     function GetWidth: Integer;
@@ -47,7 +46,7 @@ type
     procedure Run;
 
     function InRangePointD(Y, X: Double): Boolean;
-    function GetPointD(const Img: TSingleDynArray2; Y, X: Double; Mode: TInterpMode): Double; inline;
+    function GetPointD(Y, X: Double; Source: TInterpSource; Mode: TInterpMode): Double; inline;
 
     property PNGFileName: String read FPNGFileName write FPNGFileName;
     property DPI: Integer read FDPI;
@@ -62,9 +61,7 @@ type
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
 
-    property Image: TSingleDynArray2 read FImage;
-    property XGradient: TSingleDynArray2 read FXGradient;
-    property YGradient: TSingleDynArray2 read FYGradient;
+    property Image: TWordDynArray2 read FImage;
   end;
 
   { TDPIAwareReaderPNG }
@@ -131,9 +128,9 @@ begin
         xx := cs * r + arg[0];
         yy := sn * r + arg[1];
 
-        func += Self.GetPointD(Self.FImage, yy, xx, imLinear);
-        grad[0] += Self.GetPointD(Self.FXGradient, yy, xx, imLinear);
-        grad[1] += Self.GetPointD(Self.FYGradient, yy, xx, imLinear);
+        func += Self.GetPointD(yy, xx, isImage, imLinear);
+        grad[0] += Self.GetPointD(yy, xx, isSobelX, imLinear);
+        grad[1] += Self.GetPointD(yy, xx, isSobelY, imLinear);
       end;
 
     Inc(pos);
@@ -193,7 +190,7 @@ begin
       xx := cs * x[0] + Self.Center.X;
       yy := sn * x[0] + Self.Center.Y;
 
-      Result -= Self.GetPointD(Self.FImage, yy, xx, imLinear);
+      Result -= Self.GetPointD(yy, xx, isImage, imLinear);
     end;
 
   //WriteLn(x[0]:12:3,Result:20:3);
@@ -261,7 +258,7 @@ begin
 
     if InRangePointD(y, x) then
     begin
-      v := v * 0.99 + Self.GetPointD(FImage, y, x, imHermite) * 0.01;
+      v := v * 0.99 + Self.GetPointD(y, x, isImage, imHermite) * 0.01;
 
       if v > best then
       begin
@@ -285,7 +282,19 @@ begin
   Result := Length(FImage);
 end;
 
-function TInputScan.GetPointD(const Img: TSingleDynArray2; Y, X: Double; Mode: TInterpMode): Double;
+function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource; Mode: TInterpMode): Double; inline;
+
+  function GetSample(AY, AX: Integer): Double; inline;
+  begin
+    Result := 0;
+    case Source of
+      isImage: Result := FImage[AY, AX];
+      isSobelX: Result := Convolve(FImage, CSobelX, AY, AX);
+      isSobelY: Result := Convolve(FImage, CSobelY, AY, AX);
+    end;
+    Result *= (1.0 / High(Word));
+  end;
+
 var
   ix, iy: Integer;
   y0, y1, y2, y3: Double;
@@ -297,21 +306,21 @@ begin
   case mode of
     imNone:
     begin
-      Result := Img[iy, ix];
+      Result := GetSample(iy, ix);
     end;
     imLinear:
     begin
-      y1 := lerp(Img[iy + 0, ix + 0], Img[iy + 0, ix + 1], X - ix);
-      y2 := lerp(Img[iy + 1, ix + 0], Img[iy + 1, ix + 1], X - ix);
+      y1 := lerp(GetSample(iy + 0, ix + 0), GetSample(iy + 0, ix + 1), X - ix);
+      y2 := lerp(GetSample(iy + 1, ix + 0), GetSample(iy + 1, ix + 1), X - ix);
 
       Result := lerp(y1, y2, Y - iy);
     end;
     imHermite:
     begin
-      y0 := herp(Img[iy - 1, ix - 1], Img[iy - 1, ix + 0], Img[iy - 1, ix + 1], Img[iy - 1, ix + 2], X - ix);
-      y1 := herp(Img[iy + 0, ix - 1], Img[iy + 0, ix + 0], Img[iy + 0, ix + 1], Img[iy + 0, ix + 2], X - ix);
-      y2 := herp(Img[iy + 1, ix - 1], Img[iy + 1, ix + 0], Img[iy + 1, ix + 1], Img[iy + 1, ix + 2], X - ix);
-      y3 := herp(Img[iy + 2, ix - 1], Img[iy + 2, ix + 0], Img[iy + 2, ix + 1], Img[iy + 2, ix + 2], X - ix);
+      y0 := herp(GetSample(iy - 1, ix - 1), GetSample(iy - 1, ix + 0), GetSample(iy - 1, ix + 1), GetSample(iy - 1, ix + 2), X - ix);
+      y1 := herp(GetSample(iy + 0, ix - 1), GetSample(iy + 0, ix + 0), GetSample(iy + 0, ix + 1), GetSample(iy + 0, ix + 2), X - ix);
+      y2 := herp(GetSample(iy + 1, ix - 1), GetSample(iy + 1, ix + 0), GetSample(iy + 1, ix + 1), GetSample(iy + 1, ix + 2), X - ix);
+      y3 := herp(GetSample(iy + 2, ix - 1), GetSample(iy + 2, ix + 0), GetSample(iy + 2, ix + 1), GetSample(iy + 2, ix + 2), X - ix);
 
       Result := herp(y0, y1, y2, y3, Y - iy);
     end;
@@ -364,7 +373,7 @@ begin
             inc(p, y * png.RawImage.Description.BytesPerLine);
             for x := 0 to High(FImage[0]) do
             begin
-              FImage[y, x] := p^ * (1 / High(Byte));
+              FImage[y, x] := Round(p^ * (High(Word) / High(Byte)));
               Inc(p, 1);
             end;
           end;
@@ -375,7 +384,7 @@ begin
             inc(p, y * png.RawImage.Description.BytesPerLine);
             for x := 0 to High(FImage[0]) do
             begin
-              FImage[y, x] := PWord(p)^ * (1 / High(Word));
+              FImage[y, x] := PWord(p)^;
               Inc(p, 2);
             end;
           end;
@@ -386,7 +395,7 @@ begin
             inc(p, y * png.RawImage.Description.BytesPerLine);
             for x := 0 to High(FImage[0]) do
             begin
-              FImage[y, x] := ToLuma(p[0], p[1], p[2]) * (1 / (cLumaDiv * High(Byte)));
+              FImage[y, x] := Round(ToLuma(p[0], p[1], p[2]) * (High(Word) / (cLumaDiv * High(Byte))));
               Inc(p, 3);
             end;
           end;
@@ -397,7 +406,7 @@ begin
             inc(p, y * png.RawImage.Description.BytesPerLine);
             for x := 0 to High(FImage[0]) do
             begin
-              FImage[y, x] := ToLuma(p[0], p[1], p[2]) * (1 / (cLumaDiv * High(Byte)));
+              FImage[y, x] := Round(ToLuma(p[0], p[1], p[2]) * (High(Word) / (cLumaDiv * High(Byte))));
               Inc(p, 4);
             end;
           end;
@@ -408,7 +417,7 @@ begin
             inc(p, y * png.RawImage.Description.BytesPerLine);
             for x := 0 to High(FImage[0]) do
             begin
-              FImage[y, x] := ToLuma(PWord(p)[0], PWord(p)[1], PWord(p)[2]) * (1 / (cLumaDiv * High(Word)));
+              FImage[y, x] := Round(ToLuma(PWord(p)[0], PWord(p)[1], PWord(p)[2]) * (1 / cLumaDiv));
               Inc(p, 6);
             end;
           end;
@@ -428,10 +437,6 @@ begin
     png.Free;
     fs.Free;
   end;
-
-  SetLength(FXGradient, Length(FImage), Length(FImage[0]));
-  SetLength(FYGradient, Length(FImage), Length(FImage[0]));
-  SobelEdgeDetector(FImage, FXGradient, FYGradient);
 end;
 
 procedure TInputScan.FindTrack;
