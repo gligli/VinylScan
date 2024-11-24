@@ -363,69 +363,64 @@ begin
 
     if not FSilent then WriteLn(png.Width:6, 'x', png.Height:6);
 
-    png.BeginUpdate;
-    try
-      case png.RawImage.Description.BitsPerPixel of
-        8:
-          for y := 0 to High(FImage) do
+    case png.RawImage.Description.BitsPerPixel of
+      8:
+        for y := 0 to High(FImage) do
+        begin
+          p := png.RawImage.Data;
+          inc(p, y * png.RawImage.Description.BytesPerLine);
+          for x := 0 to High(FImage[0]) do
           begin
-            p := png.RawImage.Data;
-            inc(p, y * png.RawImage.Description.BytesPerLine);
-            for x := 0 to High(FImage[0]) do
-            begin
-              FImage[y, x] := Round(p^ * (High(Word) / High(Byte)));
-              Inc(p, 1);
-            end;
+            FImage[y, x] := Round(p^ * (High(Word) / High(Byte)));
+            Inc(p, 1);
           end;
-        16:
-          for y := 0 to High(FImage) do
+        end;
+      16:
+        for y := 0 to High(FImage) do
+        begin
+          p := png.RawImage.Data;
+          inc(p, y * png.RawImage.Description.BytesPerLine);
+          for x := 0 to High(FImage[0]) do
           begin
-            p := png.RawImage.Data;
-            inc(p, y * png.RawImage.Description.BytesPerLine);
-            for x := 0 to High(FImage[0]) do
-            begin
-              FImage[y, x] := PWord(p)^;
-              Inc(p, 2);
-            end;
+            FImage[y, x] := PWord(p)^;
+            Inc(p, 2);
           end;
-        24:
-          for y := 0 to High(FImage) do
+        end;
+      24:
+        for y := 0 to High(FImage) do
+        begin
+          p := png.RawImage.Data;
+          inc(p, y * png.RawImage.Description.BytesPerLine);
+          for x := 0 to High(FImage[0]) do
           begin
-            p := png.RawImage.Data;
-            inc(p, y * png.RawImage.Description.BytesPerLine);
-            for x := 0 to High(FImage[0]) do
-            begin
-              FImage[y, x] := Round(ToLuma(p[0], p[1], p[2]) * (High(Word) / (cLumaDiv * High(Byte))));
-              Inc(p, 3);
-            end;
+            FImage[y, x] := Round(ToLuma(p[0], p[1], p[2]) * (High(Word) / (cLumaDiv * High(Byte))));
+            Inc(p, 3);
           end;
-        32:
-          for y := 0 to High(FImage) do
+        end;
+      32:
+        for y := 0 to High(FImage) do
+        begin
+          p := png.RawImage.Data;
+          inc(p, y * png.RawImage.Description.BytesPerLine);
+          for x := 0 to High(FImage[0]) do
           begin
-            p := png.RawImage.Data;
-            inc(p, y * png.RawImage.Description.BytesPerLine);
-            for x := 0 to High(FImage[0]) do
-            begin
-              FImage[y, x] := Round(ToLuma(p[0], p[1], p[2]) * (High(Word) / (cLumaDiv * High(Byte))));
-              Inc(p, 4);
-            end;
+            FImage[y, x] := Round(ToLuma(p[0], p[1], p[2]) * (High(Word) / (cLumaDiv * High(Byte))));
+            Inc(p, 4);
           end;
-        48:
-          for y := 0 to High(FImage) do
+        end;
+      48:
+        for y := 0 to High(FImage) do
+        begin
+          p := png.RawImage.Data;
+          inc(p, y * png.RawImage.Description.BytesPerLine);
+          for x := 0 to High(FImage[0]) do
           begin
-            p := png.RawImage.Data;
-            inc(p, y * png.RawImage.Description.BytesPerLine);
-            for x := 0 to High(FImage[0]) do
-            begin
-              FImage[y, x] := Round(ToLuma(PWord(p)[0], PWord(p)[1], PWord(p)[2]) * (1 / cLumaDiv));
-              Inc(p, 6);
-            end;
+            FImage[y, x] := Round(ToLuma(PWord(p)[0], PWord(p)[1], PWord(p)[2]) * (1 / cLumaDiv));
+            Inc(p, 6);
           end;
-        else
-          Assert(False);
-      end;
-    finally
-      png.EndUpdate;
+        end;
+      else
+        Assert(False);
     end;
 
     if (png.DPI.X > 0) and (png.DPI.X = png.DPI.Y) then
