@@ -147,6 +147,7 @@ begin
 
     sc.LoadPNGs;
 
+    sc.AngleInit;
     sc.Analyze;
     sc.Crop;
     sc.Rebuild;

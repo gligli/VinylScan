@@ -181,8 +181,9 @@ object MainForm: TMainForm
       Top = 56
       Width = 131
       ItemHeight = 15
-      ItemIndex = 0
+      ItemIndex = 1
       Items.Strings = (
+        'No optimization'
         'Powell''s method'
         'MinASA (estimated)'
         'MinLBFGS (estimated)'

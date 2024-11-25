@@ -21,6 +21,7 @@ type
 
     FPerSnanCrops: TDoubleDynArray2;
     FPerSnanSkews: array of TPointD;
+    FPerSnanAngles: array of Double;
 
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
@@ -35,6 +36,7 @@ type
     destructor Destroy; override;
 
     procedure LoadPNGs;
+    procedure AngleInit;
     procedure Analyze;
     procedure Crop;
     procedure Rebuild;
@@ -135,6 +137,7 @@ begin
   FOutputDPI := AOutputDPI;
   SetLength(FInputScans, AFileNames.Count);
   SetLength(FPerSnanSkews, Length(FInputScans));
+  SetLength(FPerSnanAngles, Length(FInputScans));
   for i := 0 to AFileNames.Count - 1 do
   begin
     FInputScans[i] := TInputScan.Create(Ceil(Pi * C45RpmOuterSize * FOutputDPI), AOutputDPI, True);
@@ -185,6 +188,68 @@ begin
   SetLength(FOutputImage, Ceil(C45RpmOuterSize * FOutputDPI), Ceil(C45RpmOuterSize * FOutputDPI));
 end;
 
+procedure TScanCorrelator.AngleInit;
+var
+  iScan, iAngle, iRadius, pos: Integer;
+  sn, cs, r, bestr, bestAngle: Double;
+  base, angle: TDoubleDynArray;
+begin
+  WriteLn('AngleInit');
+
+  if Length(FInputScans) <= 0 then
+    Exit;
+
+  SetLength(base, FInputScans[0].Width);
+
+  pos := 0;
+  for iRadius:= -Round(C45RpmLabelOuterSize * 0.5 * FOutputDPI) to -Round(C45RpmInnerSize * 0.5 * FOutputDPI) do
+  begin
+    base[pos] := FInputScans[0].GetPointD(FInputScans[0].Center.Y, FInputScans[0].Center.X + iRadius, isImage, imLinear);
+    Inc(pos);
+  end;
+  for iRadius:= Round(C45RpmInnerSize * 0.5 * FOutputDPI) to Round(C45RpmLabelOuterSize * 0.5 * FOutputDPI) do
+  begin
+    base[pos] := FInputScans[0].GetPointD(FInputScans[0].Center.Y, FInputScans[0].Center.X + iRadius, isImage, imLinear);
+    Inc(pos);
+  end;
+  SetLength(base, pos);
+  SetLength(angle, pos);
+
+
+  for iScan := 1 to High(FInputScans) do
+  begin
+    bestr := Infinity;
+    bestAngle := 0.0;
+
+    for iAngle := 0 to 3599 do
+    begin
+      SinCos(DegToRad(iAngle * 0.1), sn, cs);
+
+      pos := 0;
+      for iRadius:= -Round(C45RpmLabelOuterSize * 0.5 * FOutputDPI) to -Round(C45RpmInnerSize * 0.5 * FOutputDPI) do
+      begin
+        angle[pos] := FInputScans[iScan].GetPointD(FInputScans[iScan].Center.Y + sn * iRadius, FInputScans[iScan].Center.X + cs * iRadius, isImage, imLinear);
+        Inc(pos);
+      end;
+      for iRadius:= Round(C45RpmInnerSize * 0.5 * FOutputDPI) to Round(C45RpmLabelOuterSize * 0.5 * FOutputDPI) do
+      begin
+        angle[pos] := FInputScans[iScan].GetPointD(FInputScans[iScan].Center.Y + sn * iRadius, FInputScans[iScan].Center.X + cs * iRadius, isImage, imLinear);
+        Inc(pos);
+      end;
+
+      r := RMSE(base, angle);
+
+      if r < bestr then
+      begin
+        bestr := r;
+        bestAngle := DegToRad(iAngle * 0.1);
+      end;
+    end;
+
+    FPerSnanAngles[iScan] := AngleToArctanExtents(bestAngle);
+  end;
+end;
+
 function TScanCorrelator.PowellAnalyze(const x: TVector; obj: Pointer): TScalar;
 var
   corrData: TDoubleDynArray2;
@@ -196,7 +261,7 @@ var
     pos: Integer;
     ti, ri, t, r, rEnd, sn, cs, px, py, cx, cy, rri, skx, sky: Double;
   begin
-    t  := FInputScans[AIndex].GrooveStartAngle;
+    t  := FPerSnanAngles[AIndex];
     cx := FInputScans[AIndex].Center.X;
     cy := FInputScans[AIndex].Center.Y;
 
@@ -324,7 +389,7 @@ begin
 
   for i := 1 to High(FInputScans) do
   begin
-    x[High(FInputScans) * 0 + i - 1] := AngleToArctanExtents(-FInputScans[0].GrooveStartAngle);
+    x[High(FInputScans) * 0 + i - 1] := 0.0;
     x[High(FInputScans) * 1 + i - 1] := 0.0;
     x[High(FInputScans) * 2 + i - 1] := 0.0;
     x[High(FInputScans) * 3 + i - 1] := 1.0;
@@ -368,7 +433,7 @@ begin
     end;
   end;
 
-  FInputScans[0].GrooveStartAngle := 0.0;
+  FPerSnanAngles[0] := 0.0;
 
   p := FInputScans[0].Center;
   p.X += x[High(FInputScans) * 5 + 0];
@@ -377,7 +442,7 @@ begin
 
   for i := 1 to High(FInputScans) do
   begin
-    FInputScans[i].GrooveStartAngle := AngleToArctanExtents(FInputScans[i].GrooveStartAngle + x[High(FInputScans) * 0 + i - 1]);
+    FPerSnanAngles[i] := AngleToArctanExtents(FPerSnanAngles[i] + x[High(FInputScans) * 0 + i - 1]);
 
     p := FInputScans[i].Center;
     p.X += x[High(FInputScans) * 1 + i - 1];
@@ -517,7 +582,7 @@ var
         acc := 0;
         for i := 0 to High(FInputScans) do
         begin
-          t  := FInputScans[i].GrooveStartAngle;
+          t  := FPerSnanAngles[i];
           cx := FInputScans[i].Center.X;
           cy := FInputScans[i].Center.Y;
           skx := FPerSnanSkews[i].X;
@@ -614,9 +679,12 @@ end;
 procedure TScanCorrelator.Run;
 begin
   LoadPNGs;
+
+  AngleInit;
   Analyze;
   Crop;
   Rebuild;
+
   Save;
 end;
 
