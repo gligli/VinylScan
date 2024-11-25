@@ -324,7 +324,7 @@ begin
 
   for i := 1 to High(FInputScans) do
   begin
-    x[High(FInputScans) * 0 + i - 1] := 0.0;
+    x[High(FInputScans) * 0 + i - 1] := AngleToArctanExtents(-FInputScans[0].GrooveStartAngle);
     x[High(FInputScans) * 1 + i - 1] := 0.0;
     x[High(FInputScans) * 2 + i - 1] := 0.0;
     x[High(FInputScans) * 3 + i - 1] := 1.0;

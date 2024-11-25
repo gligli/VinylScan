@@ -252,16 +252,16 @@ begin
   bestr := 0;
   v := 0;
 
-  for i := 0 to Self.FPointsPerRevolution - 1  do
+  for i := 0 to FPointsPerRevolution - 1  do
   begin
-    SinCos(i * Self.FRadiansPerRevolutionPoint, sn, cs);
+    SinCos(i * FRadiansPerRevolutionPoint, sn, cs);
 
     x := cs * FFirstGrooveRadius + Center.X;
     y := sn * FFirstGrooveRadius + Center.Y;
 
     if InRangePointD(y, x) then
     begin
-      v := v * 0.99 + Self.GetPointD(y, x, isImage, imHermite) * 0.01;
+      v := v * 0.99 + GetPointD(y, x, isImage, imHermite) * 0.01;
 
       if v > best then
       begin
