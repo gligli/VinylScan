@@ -169,7 +169,7 @@ var
       Assert(pos < Length(corrData[AIndex]));
 
       if FInputScans[AIndex].InRangePointD(py, px) then
-        corrData[AIndex, pos] := FInputScans[AIndex].GetPointD(py, px, isImage, imHermite);
+        corrData[AIndex, pos] := FInputScans[AIndex].GetPointD(py, px, isImage, imLinear);
 
       Inc(pos);
     until rri >= rEnd;
