@@ -16,18 +16,33 @@ type
   { TMainForm }
 
   TMainForm = class(TForm)
+    btInPNGs: TButton;
+    btOutPNG: TButton;
+    btInPNG: TButton;
+    btOutWAV: TButton;
     btScan2Track: TButton;
     btScansCorrelator: TButton;
     btTest: TButton;
+    cbDPI: TComboBox;
+    cbSR: TComboBox;
     edInputPNG: TEdit;
     edOutputPNG: TEdit;
     edOutputWAV: TEdit;
     Image: TImage;
     mmInputPNGs: TMemo;
+    odInPNGs: TOpenDialog;
+    odInPNG: TOpenDialog;
     pnSettings: TPanel;
+    sdOutPNG: TSaveDialog;
+    sdOutWAV: TSaveDialog;
+    procedure btOutPNGClick(Sender: TObject);
+    procedure btInPNGClick(Sender: TObject);
+    procedure btOutWAVClick(Sender: TObject);
+    procedure btInPNGsClick(Sender: TObject);
     procedure btScan2TrackClick(Sender: TObject);
     procedure btScansCorrelatorClick(Sender: TObject);
     procedure btTestClick(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
   private
 
     procedure DrawImage(const Img: TWordDynArray2); overload;
@@ -58,7 +73,7 @@ begin
   C.Pen.Color := clRed;
   C.Pen.Style := psSolid;
 
-  s2t := TScan2Track.Create;
+  s2t := TScan2Track.Create(StrToIntDef(cbSR.Text, 48000), 16, StrToIntDef(cbDPI.Text, 2400));
   try
     s2t.OutputWAVFileName := edOutputWAV.Text;
     s2t.Scan.PNGFileName := edInputPNG.Text;
@@ -96,11 +111,35 @@ begin
   end;
 end;
 
+procedure TMainForm.btInPNGsClick(Sender: TObject);
+begin
+  if odInPNGs.Execute then
+    mmInputPNGs.Lines.Assign(odInPNGs.Files);
+end;
+
+procedure TMainForm.btInPNGClick(Sender: TObject);
+begin
+  if odInPNG.Execute then
+    edInputPNG.Text := odInPNG.FileName;
+end;
+
+procedure TMainForm.btOutWAVClick(Sender: TObject);
+begin
+  if sdOutWAV.Execute then
+    edOutputWAV.Text := sdOutWAV.FileName;
+end;
+
+procedure TMainForm.btOutPNGClick(Sender: TObject);
+begin
+  if sdOutPNG.Execute then
+    edOutputPNG.Text := sdOutPNG.FileName;
+end;
+
 procedure TMainForm.btScansCorrelatorClick(Sender: TObject);
 var
   sc: TScanCorrelator;
 begin
-  sc := TScanCorrelator.Create(mmInputPNGs.Lines);
+  sc := TScanCorrelator.Create(mmInputPNGs.Lines, StrToIntDef(cbDPI.Text, 2400));
   try
     sc.OutputPNGFileName := edOutputPNG.Text;
 
@@ -169,6 +208,11 @@ begin
     sl.Free;
     DeleteFile(fn);
   end;
+end;
+
+procedure TMainForm.FormCreate(Sender: TObject);
+begin
+  pnSettings.ControlStyle := pnSettings.ControlStyle + [csOpaque];
 end;
 
 procedure TMainForm.DrawImage(const Img: TWordDynArray2);

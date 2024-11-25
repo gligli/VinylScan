@@ -14,6 +14,7 @@ object MainForm: TMainForm
   ClientHeight = 600
   ClientWidth = 800
   DoubleBuffered = False
+  OnCreate = FormCreate
   ParentDoubleBuffered = False
   LCLVersion = '3.6.0.0'
   Scaled = False
@@ -28,12 +29,12 @@ object MainForm: TMainForm
   end
   object pnSettings: TPanel
     Left = 0
-    Height = 184
+    Height = 200
     Top = 0
-    Width = 314
+    Width = 400
     BevelOuter = bvLowered
-    ClientHeight = 184
-    ClientWidth = 314
+    ClientHeight = 200
+    ClientWidth = 400
     DoubleBuffered = False
     FullRepaint = False
     ParentDoubleBuffered = False
@@ -42,23 +43,23 @@ object MainForm: TMainForm
       Left = 8
       Height = 23
       Top = 152
-      Width = 168
-      TabOrder = 0
+      Width = 200
+      TabOrder = 6
       Text = 'data\think.wav'
     end
     object edInputPNG: TEdit
       Left = 8
       Height = 23
       Top = 128
-      Width = 168
-      TabOrder = 1
+      Width = 200
+      TabOrder = 4
       Text = 'data\think_correlated.png'
     end
     object edOutputPNG: TEdit
       Left = 8
       Height = 23
       Top = 97
-      Width = 168
+      Width = 200
       TabOrder = 2
       Text = 'data\think_correlated.png'
     end
@@ -66,43 +67,139 @@ object MainForm: TMainForm
       Left = 8
       Height = 88
       Top = 8
-      Width = 168
+      Width = 200
       Lines.Strings = (
-        'data\IMG_20241124_0001.png'
-        'data\IMG_20241124_0002.png'
-        'data\IMG_20241124_0003.png'
-        'data\IMG_20241124_0004.png'
+        'data\0001.png'
+        'data\0002.png'
+        'data\0003.png'
+        'data\0004.png'
       )
       ScrollBars = ssBoth
-      TabOrder = 3
+      TabOrder = 0
       WordWrap = False
     end
     object btScansCorrelator: TButton
-      Left = 176
+      Left = 267
       Height = 25
       Top = 96
       Width = 128
-      Caption = 'btScansCorrelator'
-      TabOrder = 4
+      Caption = 'Scans correlator'
+      TabOrder = 10
       OnClick = btScansCorrelatorClick
     end
     object btScan2Track: TButton
-      Left = 176
+      Left = 267
       Height = 25
       Top = 151
       Width = 128
-      Caption = 'btScan2Track'
-      TabOrder = 5
+      Caption = 'Scan to track'
+      TabOrder = 11
       OnClick = btScan2TrackClick
     end
     object btTest: TButton
-      Left = 224
+      Left = 376
       Height = 25
-      Top = 9
-      Width = 75
-      Caption = 'btTest'
-      TabOrder = 6
+      Top = 176
+      Width = 25
+      Caption = 'UT'
+      TabOrder = 12
       OnClick = btTestClick
     end
+    object cbDPI: TComboBox
+      Left = 295
+      Height = 23
+      Top = 8
+      Width = 100
+      ItemHeight = 15
+      ItemIndex = 2
+      Items.Strings = (
+        '600'
+        '1200'
+        '2400'
+        '4800'
+      )
+      TabOrder = 8
+      Text = '2400'
+    end
+    object btInPNGs: TButton
+      Left = 208
+      Height = 23
+      Top = 8
+      Width = 23
+      Caption = '...'
+      TabOrder = 1
+      OnClick = btInPNGsClick
+    end
+    object btOutPNG: TButton
+      Left = 208
+      Height = 23
+      Top = 96
+      Width = 23
+      Caption = '...'
+      TabOrder = 3
+      OnClick = btOutPNGClick
+    end
+    object btInPNG: TButton
+      Left = 208
+      Height = 23
+      Top = 128
+      Width = 23
+      Caption = '...'
+      TabOrder = 5
+      OnClick = btInPNGClick
+    end
+    object btOutWAV: TButton
+      Left = 208
+      Height = 23
+      Top = 152
+      Width = 23
+      Caption = '...'
+      TabOrder = 7
+      OnClick = btOutWAVClick
+    end
+    object cbSR: TComboBox
+      Left = 295
+      Height = 23
+      Top = 32
+      Width = 100
+      ItemHeight = 15
+      ItemIndex = 1
+      Items.Strings = (
+        '44100'
+        '48000'
+        '96000'
+      )
+      TabOrder = 9
+      Text = '48000'
+    end
+  end
+  object odInPNGs: TOpenDialog
+    DefaultExt = '.PNG'
+    Filter = 'PNG|*.png'
+    InitialDir = 'data'
+    Options = [ofAllowMultiSelect, ofEnableSizing, ofViewDetail]
+    Left = 16
+    Top = 216
+  end
+  object odInPNG: TOpenDialog
+    DefaultExt = '.PNG'
+    Filter = 'PNG|*.png'
+    InitialDir = 'data'
+    Left = 80
+    Top = 216
+  end
+  object sdOutPNG: TSaveDialog
+    DefaultExt = '.PNG'
+    Filter = 'PNG|*.png'
+    InitialDir = 'data'
+    Left = 144
+    Top = 216
+  end
+  object sdOutWAV: TSaveDialog
+    DefaultExt = '.WAV'
+    Filter = 'WAV|*.wav'
+    InitialDir = 'data'
+    Left = 208
+    Top = 216
   end
 end
