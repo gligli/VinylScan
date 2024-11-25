@@ -79,7 +79,7 @@ const
 
 procedure EstimatedGradients(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 const
-  CH = 1e-9;
+  CH = 1e-7;
 {$if 0}
   CFCoeff: array[0 .. 7] of Double = (-1/280, 4/105, -1/5, 4/5, -4/5, 1/5, -4/105, 1/280);
   CXCoeff: array[0 .. 7] of Double = (4, 3, 2, 1, -1, -2, -3, -4);
