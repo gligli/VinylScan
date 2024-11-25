@@ -147,7 +147,6 @@ begin
 
     sc.Analyze;
     sc.Crop;
-    sc.Correct;
     sc.Rebuild;
 
     DrawImage(sc.OutputImage);

@@ -10,7 +10,7 @@ object MainForm: TMainForm
   VertScrollBar.Page = 480
   VertScrollBar.Tracking = True
   AutoScroll = True
-  Caption = 'VinylScan'
+  Caption = 'GliGli''s VinylScan'
   ClientHeight = 600
   ClientWidth = 800
   DoubleBuffered = False
