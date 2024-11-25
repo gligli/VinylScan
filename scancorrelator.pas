@@ -74,12 +74,12 @@ implementation
 { TScanCorrelator }
 
 const
-  CCorrectAngleCount = 4;
+  CCorrectAngleCount = 360;
   CPrecMul = 100;
   CInitAreaBegin = C45RpmInnerSize;
   CInitAreaEnd = C45RpmLabelOuterSize;
   CInitAreaWidth = (CInitAreaEnd - CInitAreaBegin) * 0.5;
-  CCorrectAreaBegin = C45RpmLabelOuterSize;
+  CCorrectAreaBegin = C45RpmLastMusicGroove;
   CCorrectAreaEnd = (C45RpmFirstMusicGroove + C45RpmOuterSize) * 0.5;
   CCorrectAreaWidth = (CCorrectAreaEnd - CCorrectAreaBegin) * 0.5;
   CAreaGroovesPerInch = 42;
@@ -348,9 +348,8 @@ function TScanCorrelator.PowellCorrect(const x: TVector; obj: Pointer): TScalar;
 var
   angleIdx: PtrInt absolute obj;
   corrData: TDoubleDynArray2;
-  i, j, pos, cnt, startAngle, endAngle, angleInc, angleExtents: Integer;
+  i, j, pos, startAngle, endAngle, angleInc, angleExtents: Integer;
   t, bt, r, rEnd, sn, cs, px, py, cx, cy, rri, skm: Double;
-  angleCropped: Boolean;
 begin
   angleExtents := Round(FPointsPerRevolution / CCorrectAngleCount * 0.5);
   startAngle := angleIdx - angleExtents;
@@ -367,7 +366,6 @@ begin
     if i > 0 then
     begin
       skm := x[High(FInputScans) * 0 + i - 1];
-      skm += 1.0;
     end
     else
     begin
@@ -375,11 +373,9 @@ begin
     end;
 
     pos := 0;
-
     j := startAngle;
     repeat
       t := AngleToArctanExtents(j * FRadiansPerRevolutionPoint);
-      angleCropped := InArctanExtentsAngle(t, FPerSnanCrops[i, 0], FPerSnanCrops[i, 1]) or InArctanExtentsAngle(t, FPerSnanCrops[i, 2], FPerSnanCrops[i, 3]);
 
       SinCos(t + bt, sn, cs);
 
@@ -395,10 +391,8 @@ begin
 
         Assert(pos < Length(corrData[i]));
 
-        if FInputScans[i].InRangePointD(py, px) and not angleCropped then
-          corrData[i, pos] := FInputScans[i].GetPointD(py, px, isImage, imHermite)
-        else
-          corrData[i, pos] := NaN;
+        if FInputScans[i].InRangePointD(py, px) then
+          corrData[i, pos] := FInputScans[i].GetPointD(py, px, isImage, imLinear);
 
         Inc(pos);
       until rri >= rEnd;
@@ -409,16 +403,11 @@ begin
     SetLength(corrData[i], pos);
   end;
 
-  cnt := 0;
   Result := 0;
-  for i := 0 to High(FInputScans) do
-    for j := i + 1 to High(FInputScans) do
-    begin
-      Result -= PearsonCorrelation(corrData[i], corrData[j]);
-      Inc(cnt);
-    end;
-  if cnt > 1 then
-    Result /= cnt;
+  for i := 1 to High(FInputScans) do
+    Result -= PearsonCorrelation(corrData[0], corrData[i]);
+  if Length(FInputScans) > 2 then
+    Result /= High(FInputScans);
 
   //for i := 0 to High(x) do
   //  Write(x[i]:12:6);
@@ -428,6 +417,8 @@ end;
 procedure TScanCorrelator.Correct;
 var
   x: TVector;
+  correls: TDoubleDynArray;
+
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
@@ -440,19 +431,25 @@ var
     lx := Copy(x);
     f := -PowellMinimize(@PowellCorrect, lx, 1e-9, 1e-6, 1e-9, MaxInt, Pointer(angleIdx))[0];
 
+    correls[AIndex] := f;
     FPerAngleX[AIndex] := lx;
 
-    WriteLn(AIndex + 1:6,' / ',Length(FPerAngleX):6,', Correlation: ', f:9:6);
+    Write(AIndex + 1:6,' / ',Length(FPerAngleX):6,', Correlation: ', f:9:6, #13);
   end;
 
+var
+  i: Integer;
 begin
   WriteLn('Correct');
 
   SetLength(FPerAngleX, CCorrectAngleCount);
+  SetLength(correls, CCorrectAngleCount);
 
   if Length(FInputScans) > 0 then
   begin
     SetLength(x, High(FInputScans) * 1);
+    for i := 0 to High(x) do
+      x[i] := 1.0;
   end
   else
   begin
@@ -460,6 +457,9 @@ begin
   end;
 
   ProcThreadPool.DoParallelLocalProc(@DoEval, 0, high(FPerAngleX));
+
+  WriteLn;
+  WriteLn('Worst correlation: ', MinValue(correls):9:6);
 end;
 
 procedure TScanCorrelator.Rebuild;
@@ -528,14 +528,9 @@ var
           ct := AngleToArctanExtents(bt + t);
 
           if i > 0 then
-          begin
-            skm := x[High(FInputScans) * 0 + i - 1];
-            skm += 1.0;
-          end
+            skm := x[High(FInputScans) * 0 + i - 1]
           else
-          begin
             skm := 1.0;
-          end;
 
           SinCos(ct, sn, cs);
           px := cs * r * skm + cx;

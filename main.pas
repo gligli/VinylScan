@@ -8,7 +8,7 @@ uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, scan2track, scancorrelator, utils, math;
 
 const
-  CReducShift = 2;
+  CReducShift = 0;
   CReducFactor = 1.0 / (1 shl CReducShift);
 
 type
@@ -148,15 +148,18 @@ begin
   sl := TStringList.Create;
   sc1 := TScanCorrelator.Create(sl, 1);
   sc100 := TScanCorrelator.Create(sl, 100);
-  sl.Text := 'data\think_mock.png';
+  sl.Add('data\think_mock.png');
+  sl.Add('data\think_mock2.png');
+  sl.Add('data\think_mock3.png');
   scm := TScanCorrelator.Create(sl);
   try
-    scm.OutputPNGFileName := fn;
-    scm.Run;
     sc1.OutputPNGFileName := fn;
     sc1.Run;
     sc100.OutputPNGFileName := fn;
     sc100.Run;
+
+    scm.OutputPNGFileName := fn;
+    scm.Run;
 
     DrawImage(scm.OutputImage);
   finally
@@ -171,11 +174,11 @@ end;
 procedure TMainForm.DrawImage(const Img: TWordDynArray2);
 var
   x, y, ix, iy: Integer;
-  sc: PInteger;
+  sc: PByte;
   b: Byte;
   acc: Integer;
 begin
-  Image.Picture.Bitmap.PixelFormat := pf32bit;
+  Image.Picture.Bitmap.PixelFormat := pf8bit;
   Image.Picture.Bitmap.Width := Length(Img[0]) shr CReducShift;
   Image.Picture.Bitmap.Height := Length(Img) shr CReducShift;
 
@@ -193,7 +196,7 @@ begin
 
         b := EnsureRange(Round(acc * (High(Byte)  / (High(Word) shl (CReducShift * 2)))), 0, High(Byte));
 
-        sc^ := ToRGB(b, b, b);
+        sc^ := b;
 
         Inc(sc);
       end;
@@ -208,11 +211,11 @@ end;
 procedure TMainForm.DrawImage(const Img: TSingleDynArray2);
 var
   x, y, ix, iy: Integer;
-  sc: PInteger;
+  sc: PByte;
   b: Byte;
   acc: Double;
 begin
-  Image.Picture.Bitmap.PixelFormat := pf32bit;
+  Image.Picture.Bitmap.PixelFormat := pf8bit;
   Image.Picture.Bitmap.Width := Length(Img[0]) shr CReducShift;
   Image.Picture.Bitmap.Height := Length(Img) shr CReducShift;
 
@@ -230,7 +233,7 @@ begin
 
         b := EnsureRange(Round(acc * (High(Byte)  / (1 shl (CReducShift * 2)))), 0, High(Byte));
 
-        sc^ := ToRGB(b, b, b);
+        sc^ := b;
 
         Inc(sc);
       end;
