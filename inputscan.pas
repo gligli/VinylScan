@@ -9,6 +9,7 @@ uses
   utils, minasa, powell;
 
 type
+  TMinimizeMethod = (mmPowell, mmASA, mmLBFGS);
   TInterpMode = (imPoint, imLinear, imHermite);
   TInterpSource = (isImage, isSobelX, isSobelY);
 

@@ -13,6 +13,7 @@ object MainForm: TMainForm
   Caption = 'GliGli''s VinylScan'
   ClientHeight = 600
   ClientWidth = 800
+  Color = 4210752
   DoubleBuffered = False
   OnCreate = FormCreate
   ParentDoubleBuffered = False
@@ -37,6 +38,8 @@ object MainForm: TMainForm
     ClientWidth = 400
     DoubleBuffered = False
     FullRepaint = False
+    ParentBackground = False
+    ParentColor = False
     ParentDoubleBuffered = False
     TabOrder = 0
     object edOutputWAV: TEdit
@@ -79,21 +82,21 @@ object MainForm: TMainForm
       WordWrap = False
     end
     object btScansCorrelator: TButton
-      Left = 267
+      Left = 264
       Height = 25
       Top = 96
-      Width = 128
+      Width = 131
       Caption = 'Scans correlator'
-      TabOrder = 10
+      TabOrder = 11
       OnClick = btScansCorrelatorClick
     end
     object btScan2Track: TButton
-      Left = 267
+      Left = 264
       Height = 25
       Top = 151
-      Width = 128
+      Width = 131
       Caption = 'Scan to track'
-      TabOrder = 11
+      TabOrder = 12
       OnClick = btScan2TrackClick
     end
     object btTest: TButton
@@ -102,14 +105,14 @@ object MainForm: TMainForm
       Top = 176
       Width = 25
       Caption = 'UT'
-      TabOrder = 12
+      TabOrder = 13
       OnClick = btTestClick
     end
     object cbDPI: TComboBox
-      Left = 295
+      Left = 264
       Height = 23
       Top = 8
-      Width = 100
+      Width = 131
       ItemHeight = 15
       ItemIndex = 2
       Items.Strings = (
@@ -158,10 +161,10 @@ object MainForm: TMainForm
       OnClick = btOutWAVClick
     end
     object cbSR: TComboBox
-      Left = 295
+      Left = 264
       Height = 23
       Top = 32
-      Width = 100
+      Width = 131
       ItemHeight = 15
       ItemIndex = 1
       Items.Strings = (
@@ -171,6 +174,22 @@ object MainForm: TMainForm
       )
       TabOrder = 9
       Text = '48000'
+    end
+    object cbMethod: TComboBox
+      Left = 264
+      Height = 23
+      Top = 56
+      Width = 131
+      ItemHeight = 15
+      ItemIndex = 0
+      Items.Strings = (
+        'Powell''s method'
+        'MinASA (estimated)'
+        'MinLBFGS (estimated)'
+      )
+      Style = csDropDownList
+      TabOrder = 10
+      Text = 'Powell''s method'
     end
   end
   object odInPNGs: TOpenDialog

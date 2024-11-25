@@ -5,7 +5,7 @@ unit main;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, scan2track, scancorrelator, utils, math;
+  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, scan2track, scancorrelator, utils, math, inputscan;
 
 const
   CReducShift = 0;
@@ -25,6 +25,7 @@ type
     btTest: TButton;
     cbDPI: TComboBox;
     cbSR: TComboBox;
+    cbMethod: TComboBox;
     edInputPNG: TEdit;
     edOutputPNG: TEdit;
     edOutputWAV: TEdit;
@@ -141,6 +142,7 @@ var
 begin
   sc := TScanCorrelator.Create(mmInputPNGs.Lines, StrToIntDef(cbDPI.Text, 2400));
   try
+    sc.Method := TMinimizeMethod(cbMethod.ItemIndex);
     sc.OutputPNGFileName := edOutputPNG.Text;
 
     sc.LoadPNGs;
@@ -163,7 +165,7 @@ var
   img: TSingleDynArray2;
   i: Integer;
   fn: String;
-  sc1, sc100, scm: TScanCorrelator;
+  sc1, sc100, scmP, scmA, scmL: TScanCorrelator;
   sl: TStringList;
 begin
   SetLength(img, 2048, 2048);
@@ -189,21 +191,39 @@ begin
   sl.Add('data\think_mock.png');
   sl.Add('data\think_mock2.png');
   sl.Add('data\think_mock3.png');
-  scm := TScanCorrelator.Create(sl);
+  scmL := TScanCorrelator.Create(sl);
+  scmA := TScanCorrelator.Create(sl);
+  scmP := TScanCorrelator.Create(sl);
   try
     sc1.OutputPNGFileName := fn;
     sc1.Run;
     sc100.OutputPNGFileName := fn;
     sc100.Run;
 
-    scm.OutputPNGFileName := fn;
-    scm.Run;
+    scmL.Method := mmLBFGS;
+    scmL.OutputPNGFileName := fn;
+    scmL.Run;
 
-    DrawImage(scm.OutputImage);
+    DrawImage(scmL.OutputImage);
+
+    scmA.Method := mmASA;
+    scmA.OutputPNGFileName := fn;
+    scmA.Run;
+
+    DrawImage(scmA.OutputImage);
+
+    scmP.Method := mmPowell;
+    scmP.OutputPNGFileName := fn;
+    scmP.Run;
+
+    DrawImage(scmP.OutputImage);
+
   finally
     sc100.Free;
     sc1.Free;
-    scm.Free;
+    scmL.Free;
+    scmA.Free;
+    scmP.Free;
     sl.Free;
     DeleteFile(fn);
   end;

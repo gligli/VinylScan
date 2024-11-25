@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Graphics, GraphType, IntfGraphics, FPCanvas, FPImage, FPWritePNG, ZStream, MTProcs,
-  utils, inputscan, powell;
+  utils, inputscan, powell, minasa, minlbfgs;
 
 type
 
@@ -15,13 +15,12 @@ type
   TScanCorrelator = class
   private
     FInputScans: array of TInputScan;
+    FMethod: TMinimizeMethod;
     FOutputPNGFileName: String;
     FOutputDPI: Integer;
 
     FPerSnanCrops: TDoubleDynArray2;
     FPerSnanSkews: array of TPointD;
-    FInitF: Double;
-
 
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
@@ -44,6 +43,7 @@ type
     procedure Run;
 
     property OutputPNGFileName: String read FOutputPNGFileName write FOutputPNGFileName;
+    property Method: TMinimizeMethod read FMethod write FMethod;
 
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
@@ -73,9 +73,60 @@ implementation
 
 const
   CAreaBegin = C45RpmInnerSize;
-  CAreaEnd = C45RpmLabelOuterSize;
+  CAreaEnd = C45RpmLastMusicGroove;
   CAreaWidth = (CAreaEnd - CAreaBegin) * 0.5;
-  CAreaGroovesPerInch = 42;
+  CAreaGroovesPerInch = 16;
+
+procedure EstimatedGradients(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+const
+  CH = 1e-9;
+{$if 0}
+  CFCoeff: array[0 .. 7] of Double = (-1/280, 4/105, -1/5, 4/5, -4/5, 1/5, -4/105, 1/280);
+  CXCoeff: array[0 .. 7] of Double = (4, 3, 2, 1, -1, -2, -3, -4);
+{$else}
+  CFCoeff: array[0 .. 3] of Double = (1/12, -2/3, 2/3, -1/12);
+  CXCoeff: array[0 .. 3] of Double = (-2, -1, 1, 2);
+{$ifend}
+var
+  MTGrads: TDoubleDynArray2;
+
+  procedure DoOne(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  var
+    x: TVector;
+    ig, ic: Integer;
+  begin
+    if AIndex = 0 then
+      func := TScanCorrelator(obj).PowellAnalyze(arg, obj)
+    else
+    begin
+      DivMod(AIndex - 1, Length(CFCoeff), ig, ic);
+
+      x := Copy(arg);
+      x[ig] += CXCoeff[ic] * CH;
+      MTGrads[ig, ic] := CFCoeff[ic] * TScanCorrelator(obj).PowellAnalyze(x, obj);
+    end;
+  end;
+
+var
+  ig, ic: Integer;
+begin
+  SetLength(MTGrads, Length(arg), Length(CFCoeff));
+
+  ProcThreadPool.DoParallelLocalProc(@DoOne, 0, Length(CFCoeff) * Length(arg) + 1 - 1);
+
+  for ig := 0 to High(MTGrads) do
+  begin
+    grad[ig] := 0;
+    for ic := 0 to High(MTGrads[0]) do
+      grad[ig] += MTGrads[ig, ic];
+    grad[ig] /= CH;
+  end;
+
+  for ig := 0 to High(arg) do
+    Write(arg[ig]:10:6);
+  WriteLn(func:10:6);
+end;
+
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
@@ -83,10 +134,14 @@ var
 begin
   FOutputDPI := AOutputDPI;
   SetLength(FInputScans, AFileNames.Count);
+  SetLength(FPerSnanSkews, Length(FInputScans));
   for i := 0 to AFileNames.Count - 1 do
   begin
     FInputScans[i] := TInputScan.Create(Ceil(Pi * C45RpmOuterSize * FOutputDPI), AOutputDPI, True);
     FInputScans[i].PNGFileName := AFileNames[i];
+
+    FPerSnanSkews[i].X := 1.0;
+    FPerSnanSkews[i].Y := 1.0;
   end;
 end;
 
@@ -141,11 +196,26 @@ var
     pos: Integer;
     ti, ri, t, r, rEnd, sn, cs, px, py, cx, cy, rri, skx, sky: Double;
   begin
-    t  :=  x[Length(FInputScans) * 0 + AIndex];
-    cx :=  x[Length(FInputScans) * 1 + AIndex];
-    cy :=  x[Length(FInputScans) * 2 + AIndex];
-    skx := x[Length(FInputScans) * 3 + AIndex];
-    sky := x[Length(FInputScans) * 4 + AIndex];
+    t  := FInputScans[AIndex].GrooveStartAngle;
+    cx := FInputScans[AIndex].Center.X;
+    cy := FInputScans[AIndex].Center.Y;
+
+    if AIndex > 0 then
+    begin
+      t   += x[High(FInputScans) * 0 + AIndex - 1];
+      cx  += x[High(FInputScans) * 1 + AIndex - 1];
+      cy  += x[High(FInputScans) * 2 + AIndex - 1];
+      skx := x[High(FInputScans) * 3 + AIndex - 1];
+      sky := x[High(FInputScans) * 4 + AIndex - 1];
+    end
+    else
+    begin
+      t   := 0.0;
+      cx  += x[High(FInputScans) * 5 + 0];
+      cy  += x[High(FInputScans) * 5 + 1];
+      skx := 1.0;
+      sky := 1.0;
+    end;
 
     ti := FRadiansPerRevolutionPoint;
     ri := CAreaWidth * FOutputDPI / (CAreaGroovesPerInch * (FPointsPerRevolution - 1));
@@ -182,22 +252,38 @@ var
 begin
   SetLength(corrData, Length(FInputScans), Ceil(CAreaWidth * CAreaGroovesPerInch) * FPointsPerRevolution);
 
-  ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FInputScans));
+  if Method <> mmPowell then
+  begin
+    for i := 0 to High(FInputScans) do
+      DoEval(i, nil, nil);
+  end
+  else
+  begin
+    ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FInputScans));
+  end;
 
-  SetLength(corrCoords, Length(FInputScans) * High(FInputScans) div 2);
+
+  SetLength(corrCoords, High(FInputScans));
   SetLength(corrMatrix, Length(corrCoords));
 
   cnt := 0;
-  for i := 0 to High(FInputScans) do
-    for j := i + 1 to High(FInputScans) do
-    begin
-      corrCoords[cnt].X := i;
-      corrCoords[cnt].Y := j;
-      Inc(cnt);
-    end;
+  for i := 1 to High(FInputScans) do
+  begin
+    corrCoords[cnt].X := 0;
+    corrCoords[cnt].Y := i;
+    Inc(cnt);
+  end;
   Assert(cnt = Length(corrCoords));
 
-  ProcThreadPool.DoParallelLocalProc(@DoPearson, 0, cnt - 1);
+  if Method <> mmPowell then
+  begin
+    for i := 0 to cnt - 1 do
+      DoPearson(i, nil, nil);
+  end
+  else
+  begin
+    ProcThreadPool.DoParallelLocalProc(@DoPearson, 0, cnt - 1);
+  end;
 
   Result := 0;
   for i := 0 to cnt - 1 do
@@ -210,33 +296,96 @@ end;
 
 procedure TScanCorrelator.Analyze;
 var
-  x: TVector;
+  x, bl, bu: TVector;
   i: Integer;
   p: TPointD;
+  ASAState: MinASAState;
+  ASARep: MinASAReport;
+  LBFGSState: MinLBFGSState;
+  LBFGSRep: MinLBFGSReport;
 begin
   WriteLn('Analyze');
 
-  SetLength(FPerSnanSkews, Length(FInputScans));
-  SetLength(x, Length(FInputScans) * 5);
-  for i := 0 to High(FInputScans) do
+  if Length(FInputScans) <= 0 then
+    Exit;
+
+  SetLength(x, High(FInputScans) * 5 + 2);
+  SetLength(bl, Length(x));
+  SetLength(bu, Length(x));
+
+  x[High(FInputScans) * 5 + 0] := 0.0;
+  x[High(FInputScans) * 5 + 1] := 0.0;
+
+  bl[High(FInputScans) * 5 + 0] := -(FInputScans[0].Width - FInputScans[0].FirstGrooveRadius * 2.0) * 0.5;
+  bl[High(FInputScans) * 5 + 1] := -(FInputScans[0].Height - FInputScans[0].FirstGrooveRadius * 2.0) * 0.5;
+
+  bu[High(FInputScans) * 5 + 0] := (FInputScans[0].Width - FInputScans[0].FirstGrooveRadius * 2.0) * 0.5;
+  bu[High(FInputScans) * 5 + 1] := (FInputScans[0].Height - FInputScans[0].FirstGrooveRadius * 2.0) * 0.5;
+
+  for i := 1 to High(FInputScans) do
   begin
-    x[Length(FInputScans) * 0 + i] := FInputScans[i].GrooveStartAngle;
-    x[Length(FInputScans) * 1 + i] := FInputScans[i].Center.X;
-    x[Length(FInputScans) * 2 + i] := FInputScans[i].Center.Y;
-    x[Length(FInputScans) * 3 + i] := 1.0;
-    x[Length(FInputScans) * 4 + i] := 1.0;
+    x[High(FInputScans) * 0 + i - 1] := 0.0;
+    x[High(FInputScans) * 1 + i - 1] := 0.0;
+    x[High(FInputScans) * 2 + i - 1] := 0.0;
+    x[High(FInputScans) * 3 + i - 1] := 1.0;
+    x[High(FInputScans) * 4 + i - 1] := 1.0;
+
+    bl[High(FInputScans) * 0 + i - 1] := -Pi;
+    bl[High(FInputScans) * 1 + i - 1] := -(FInputScans[i].Width - FInputScans[i].FirstGrooveRadius * 2.0) * 0.5;
+    bl[High(FInputScans) * 2 + i - 1] := -(FInputScans[i].Height - FInputScans[i].FirstGrooveRadius * 2.0) * 0.5;
+    bl[High(FInputScans) * 3 + i - 1] := 0.9;
+    bl[High(FInputScans) * 4 + i - 1] := 0.9;
+
+    bu[High(FInputScans) * 0 + i - 1] := Pi;
+    bu[High(FInputScans) * 1 + i - 1] := (FInputScans[i].Width - FInputScans[i].FirstGrooveRadius * 2.0) * 0.5;
+    bu[High(FInputScans) * 2 + i - 1] := (FInputScans[i].Height - FInputScans[i].FirstGrooveRadius * 2.0) * 0.5;
+    bu[High(FInputScans) * 3 + i - 1] := 1.1;
+    bu[High(FInputScans) * 4 + i - 1] := 1.1;
   end;
 
-  FInitF := PowellMinimize(@PowellAnalyze, x, 1e-9, 1e-6, 1e-9, MaxInt, nil)[0];
+  case Method of
+    mmPowell:
+    begin
+      PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-9, 1e-12, MaxInt, nil);
+    end;
+    mmASA:
+    begin
+      MinASACreate(Length(x), x, bl, bu, ASAState);
+      MinASASetCond(ASAState, 0, 1e-12, 1e-9, 0);
+      while MinASAIteration(ASAState) do
+        if ASAState.NeedFG then
+          EstimatedGradients(ASAState.X, ASAState.F, ASAState.G, Self);
+      MinASAResults(ASAState, x, ASARep);
+    end;
+    mmLBFGS:
+    begin
+      MinLBFGSCreate(Length(x), 5, x, LBFGSState);
+      MinLBFGSSetCond(LBFGSState, 0, 1e-12, 1e-9, 0);
+      while MinLBFGSIteration(LBFGSState) do
+        if LBFGSState.NeedFG then
+          EstimatedGradients(LBFGSState.X, LBFGSState.F, LBFGSState.G, Self);
+      MinLBFGSResults(LBFGSState, x, LBFGSRep);
+    end;
+  end;
 
-  for i := 0 to High(FInputScans) do
+  FInputScans[0].GrooveStartAngle := 0.0;
+
+  p := FInputScans[0].Center;
+  p.X += x[High(FInputScans) * 5 + 0];
+  p.Y += x[High(FInputScans) * 5 + 1];
+  FInputScans[0].Center := p;
+
+  for i := 1 to High(FInputScans) do
   begin
-    FInputScans[i].GrooveStartAngle := AngleToArctanExtents(x[Length(FInputScans) * 0 + i]);
-    p.X := x[Length(FInputScans) * 1 + i];
-    p.Y := x[Length(FInputScans) * 2 + i];
+    FInputScans[i].GrooveStartAngle := AngleToArctanExtents(FInputScans[i].GrooveStartAngle + x[High(FInputScans) * 0 + i - 1]);
+
+    p := FInputScans[i].Center;
+    p.X += x[High(FInputScans) * 1 + i - 1];
+    p.Y += x[High(FInputScans) * 2 + i - 1];
     FInputScans[i].Center := p;
-    p.X := x[Length(FInputScans) * 3 + i];
-    p.Y := x[Length(FInputScans) * 4 + i];
+
+    p.X := x[High(FInputScans) * 3 + i - 1];
+    p.Y := x[High(FInputScans) * 4 + i - 1];
     FPerSnanSkews[i] := p;
   end;
 
