@@ -402,9 +402,9 @@ end;
 
 function AngleToArctanExtents(x: Double): Double;
 begin
-  if x < -Pi then
-    x += 2.0 * Pi
-  else if x > Pi then
+  while x < -Pi do
+    x += 2.0 * Pi;
+  while x > Pi do
     x -= 2.0 * Pi;
 
   Assert(InRange(x, -Pi, Pi));

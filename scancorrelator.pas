@@ -230,12 +230,12 @@ var
   inputIdx: PtrInt absolute obj;
   accCnts: TIntegerDynArray;
   accs: TDoubleDynArray;
-  center, rBeg, rEnd, a0a, a1a, a0b, a1b: Double;
+  center, rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy: Double;
 
   procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     ox, stdDevPos: Integer;
-    r, bt: Double;
+    r, bt, px, py: Double;
     stdDevArr: TDoubleDynArray;
   begin
     stdDevPos := 0;
@@ -246,10 +246,13 @@ var
       r := Sqrt(Sqr(center - AIndex) + Sqr(center - ox));
       bt := ArcTan2(center - AIndex, center - ox);
 
-      if FInputScans[inputIdx].InRangePointD(AIndex, ox) and InRange(r, rBeg, rEnd) and
+      px := ox - center + cx;
+      py := AIndex - center + cy;
+
+      if FInputScans[inputIdx].InRangePointD(py, px) and InRange(r, rBeg, rEnd) and
           not InArctanExtentsAngle(bt, a0a, a0b) and not InArctanExtentsAngle(bt, a1a, a1b) then
       begin
-        stdDevArr[stdDevPos] := FInputScans[inputIdx].GetPointD(AIndex, ox, isImage, imHermite);
+        stdDevArr[stdDevPos] := FInputScans[inputIdx].GetPointD(py, px, isImage, imLinear);
         Inc(stdDevPos);
       end;
     end;
@@ -276,6 +279,8 @@ begin
   rEnd := C45RpmFirstMusicGroove * 0.5 * FOutputDPI;
 
   center := Length(FOutputImage) / 2.0;
+  cx := FInputScans[inputIdx].Center.X;
+  cy := FInputScans[inputIdx].Center.Y;
 
   SetLength(accs, Length(FOutputImage));
   SetLength(accCnts, Length(FOutputImage));
@@ -299,10 +304,10 @@ begin
 
   for i := 0 to High(FInputScans) do
   begin
-    x[0] := DegToRad(-30.0);
-    x[1] := DegToRad(30.0);
+    x[0] := DegToRad(-45.0);
+    x[1] := DegToRad(45.0);
 
-    PowellMinimize(@PowellCrop, x, 1.0 / 36.0, 1e-6, 1e-6, MaxInt, Pointer(i));
+    PowellMinimize(@PowellCrop, x, 1.0 / 360.0, 1e-6, 1e-6, MaxInt, Pointer(i));
 
     FPerSnanCrops[i, 0] := AngleToArctanExtents(x[0]);
     FPerSnanCrops[i, 1] := AngleToArctanExtents(x[1]);

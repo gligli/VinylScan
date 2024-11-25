@@ -9,7 +9,7 @@ uses
   utils, minasa, powell;
 
 type
-  TInterpMode = (imNone, imLinear, imHermite);
+  TInterpMode = (imPoint, imLinear, imHermite);
   TInterpSource = (isImage, isSobelX, isSobelY);
 
   { TInputScan }
@@ -120,18 +120,20 @@ begin
   repeat
     r := radiusInner + ri * pos;
 
-    if Self.InRangePointD(arg[1], arg[0]) and Self.InRangePointD(arg[1] - r, arg[0] - r) then
-      for t := 0 to CRevolutionPointCount - 1  do
+    for t := 0 to CRevolutionPointCount - 1  do
+    begin
+      SinCos(t * CRadiansPerPoint, sn, cs);
+
+      xx := cs * r + arg[0];
+      yy := sn * r + arg[1];
+
+      if Self.InRangePointD(yy, xx) then
       begin
-        SinCos(t * CRadiansPerPoint, sn, cs);
-
-        xx := cs * r + arg[0];
-        yy := sn * r + arg[1];
-
         func += Self.GetPointD(yy, xx, isImage, imLinear);
         grad[0] += Self.GetPointD(yy, xx, isSobelX, imLinear);
         grad[1] += Self.GetPointD(yy, xx, isSobelY, imLinear);
       end;
+    end;
 
     Inc(pos);
   until r >= radiusOuter;
@@ -304,7 +306,7 @@ begin
   iy := trunc(Y);
 
   case mode of
-    imNone:
+    imPoint:
     begin
       Result := GetSample(iy, ix);
     end;
