@@ -248,7 +248,7 @@ var
   end;
 
 var
-  i, j, cnt: Integer;
+  i, cnt: Integer;
 begin
   SetLength(corrData, Length(FInputScans), Ceil(CAreaWidth * CAreaGroovesPerInch) * FPointsPerRevolution);
 
@@ -330,13 +330,13 @@ begin
     x[High(FInputScans) * 3 + i - 1] := 1.0;
     x[High(FInputScans) * 4 + i - 1] := 1.0;
 
-    bl[High(FInputScans) * 0 + i - 1] := -Pi;
+    bl[High(FInputScans) * 0 + i - 1] := -2.0 * Pi;
     bl[High(FInputScans) * 1 + i - 1] := -(FInputScans[i].Width - FInputScans[i].FirstGrooveRadius * 2.0) * 0.5;
     bl[High(FInputScans) * 2 + i - 1] := -(FInputScans[i].Height - FInputScans[i].FirstGrooveRadius * 2.0) * 0.5;
     bl[High(FInputScans) * 3 + i - 1] := 0.9;
     bl[High(FInputScans) * 4 + i - 1] := 0.9;
 
-    bu[High(FInputScans) * 0 + i - 1] := Pi;
+    bu[High(FInputScans) * 0 + i - 1] := 2.0 * Pi;
     bu[High(FInputScans) * 1 + i - 1] := (FInputScans[i].Width - FInputScans[i].FirstGrooveRadius * 2.0) * 0.5;
     bu[High(FInputScans) * 2 + i - 1] := (FInputScans[i].Height - FInputScans[i].FirstGrooveRadius * 2.0) * 0.5;
     bu[High(FInputScans) * 3 + i - 1] := 1.1;
