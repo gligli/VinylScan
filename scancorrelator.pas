@@ -82,7 +82,7 @@ const
   CCorrectAreaBegin = C45RpmLabelOuterSize;
   CCorrectAreaEnd = (C45RpmFirstMusicGroove + C45RpmOuterSize) * 0.5;
   CCorrectAreaWidth = (CCorrectAreaEnd - CCorrectAreaBegin) * 0.5;
-  CAreaGroovesPerInch = 16;
+  CAreaGroovesPerInch = 42;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
@@ -140,8 +140,10 @@ end;
 function TScanCorrelator.PowellAnalyze(const x: TVector; obj: Pointer): TScalar;
 var
   corrData: TDoubleDynArray2;
+  corrMatrix: TDoubleDynArray;
+  corrCoords: array of TPoint;
 
-  procedure DoOne(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     pos: Integer;
     ti, ri, t, r, rEnd, sn, cs, px, py, cx, cy, rri: Double;
@@ -175,25 +177,40 @@ var
     SetLength(corrData[AIndex], pos);
   end;
 
+  procedure DoPearson(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  begin
+    corrMatrix[AIndex] := PearsonCorrelation(corrData[corrCoords[AIndex].X], corrData[corrCoords[AIndex].Y]);
+  end;
+
 var
   i, j, cnt: Integer;
 begin
   SetLength(corrData, Length(FInputScans), Ceil(CInitAreaWidth * CAreaGroovesPerInch) * FPointsPerRevolution);
 
-  ProcThreadPool.DoParallelLocalProc(@DoOne, 0, High(FInputScans));
+  ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FInputScans));
+
+  SetLength(corrCoords, Length(FInputScans) * High(FInputScans) div 2);
+  SetLength(corrMatrix, Length(corrCoords));
 
   cnt := 0;
-  Result := 0;
   for i := 0 to High(FInputScans) do
     for j := i + 1 to High(FInputScans) do
     begin
-      Result += RMSE(corrData[i], corrData[j]);
+      corrCoords[cnt].X := i;
+      corrCoords[cnt].Y := j;
       Inc(cnt);
     end;
+  Assert(cnt = Length(corrCoords));
+
+  ProcThreadPool.DoParallelLocalProc(@DoPearson, 0, cnt - 1);
+
+  Result := 0;
+  for i := 0 to cnt - 1 do
+    Result -= corrMatrix[i];
   if cnt > 1 then
     Result /= cnt;
 
-  Write('RMSE: ', Result:9:6,#13);
+  Write('Correlation: ', -Result:9:6,#13);
 end;
 
 procedure TScanCorrelator.Analyze;
@@ -212,7 +229,7 @@ begin
     x[Length(FInputScans) * 2 + i] := FInputScans[i].Center.Y;
   end;
 
-  FInitF := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-6, 1e-9, MaxInt, nil)[0];
+  FInitF := PowellMinimize(@PowellAnalyze, x, 1e-9, 1e-6, 1e-9, MaxInt, nil)[0];
 
   for i := 0 to High(FInputScans) do
   begin
@@ -260,10 +277,12 @@ var
     if stdDevPos > 0 then
     begin
       accs[AIndex] := -StdDev(PDouble(@stdDevArr[0]), stdDevPos);
-      accCnts[AIndex] := 1;
+      accCnts[AIndex] := stdDevPos;
     end;
   end;
 
+var
+  i, cnt: Integer;
 begin
   Result := 1000.0;
 
@@ -287,9 +306,16 @@ begin
 
   ProcThreadPool.DoParallelLocalProc(@DoY, 0, High(FOutputImage));
 
-  Result := DivDef(Sum(accs), SumInt(accCnts), Result);
+  cnt := 0;
+  Result := 0;
+  for i := 0 to High(FOutputImage) do
+  begin
+    Result += accs[i] * accCnts[i];
+    cnt += accCnts[i];
+  end;
+  Result := DivDef(Result, cnt, 1000.0);
 
-  Write(inputIdx + 1:4, ' / ', Length(FInputScans):4, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', -Result:9:6, #13);
+  Write(inputIdx + 1:4, ' / ', Length(FInputScans):4, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', -Result:12:6, #13);
 end;
 
 procedure TScanCorrelator.Crop;
@@ -388,7 +414,7 @@ begin
   for i := 0 to High(FInputScans) do
     for j := i + 1 to High(FInputScans) do
     begin
-      Result += RMSE(corrData[i], corrData[j]);
+      Result -= PearsonCorrelation(corrData[i], corrData[j]);
       Inc(cnt);
     end;
   if cnt > 1 then
@@ -403,7 +429,7 @@ procedure TScanCorrelator.Correct;
 var
   x: TVector;
 
-  procedure DoOne(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     angleIdx: PtrInt;
     lx: TVector;
@@ -412,11 +438,11 @@ var
     angleIdx := Round(AIndex * FPointsPerRevolution / CCorrectAngleCount);
 
     lx := Copy(x);
-    f := PowellMinimize(@PowellCorrect, lx, 1e-8, 1e-6, 1e-9, MaxInt, Pointer(angleIdx))[0];
+    f := -PowellMinimize(@PowellCorrect, lx, 1e-9, 1e-6, 1e-9, MaxInt, Pointer(angleIdx))[0];
 
     FPerAngleX[AIndex] := lx;
 
-    WriteLn(AIndex + 1:6,' / ',Length(FPerAngleX):6,', RMSE: ', f:9:6);
+    WriteLn(AIndex + 1:6,' / ',Length(FPerAngleX):6,', Correlation: ', f:9:6);
   end;
 
 begin
@@ -433,7 +459,7 @@ begin
     SetLength(x, 0);
   end;
 
-  ProcThreadPool.DoParallelLocalProc(@DoOne, 0, high(FPerAngleX));
+  ProcThreadPool.DoParallelLocalProc(@DoEval, 0, high(FPerAngleX));
 end;
 
 procedure TScanCorrelator.Rebuild;
