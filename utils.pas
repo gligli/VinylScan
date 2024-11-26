@@ -18,6 +18,10 @@ type
     X, Y: Double;
   end;
 
+  TRectD = record
+    L, T, R, B: Double;
+  end;
+
   TConvolutionKernel = array[-1..1, -1..1] of integer;
 
   TByteDynArray2 = array of TByteDynArray;
@@ -79,6 +83,7 @@ const
   C45RpmLastMusicGroove = 4.25;
   C45RpmLeadInGroovesPerInch = 16.0;
   C45RpmMaxGrooveWidth = 0.003;
+  C45RpmAdapterSize = 1.496;
 
   CLowCutoffFreq = 20.0;
 

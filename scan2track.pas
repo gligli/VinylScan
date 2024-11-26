@@ -280,7 +280,7 @@ begin
           aboveAcc += ismp;
           Inc(aboveCnt);
         end;
-      smp := Round(aboveAcc / (High(ShortInt) * aboveCnt) * High(SmallInt));
+      smp := EnsureRange(Round(aboveAcc / (High(ShortInt) * aboveCnt) * High(SmallInt)), Low(SmallInt), High(SmallInt));
 
       while pos >= Length(samples) do
         SetLength(samples, Ceil(Length(samples) * cPhi));

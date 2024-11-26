@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Graphics, FPReadPNG, FPImage, PNGComn, bufstream,
-  utils, minasa, powell;
+  utils, minlbfgs, powell;
 
 type
   TMinimizeMethod = (mmNone, mmPowell, mmASA, mmLBFGS);
@@ -98,20 +98,23 @@ implementation
 
 procedure BFGSEvalCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 const
-  CAreaBegin = C45RpmLabelOuterSize;
-  CAreaEnd = C45RpmOuterSize;
+  CAreaBegin = 0;
+  CAreaEnd = C45RpmAdapterSize;
   CAreaGroovesPerInch = 800;
-
   CRevolutionPointCount = 360;
   CRadiansPerPoint = Pi * 2.0 / CRevolutionPointCount;
 var
   Self: TInputScan absolute obj;
-  t, pos: Integer;
-  r, sn, cs, xx, yy, ri, radiusInner, radiusOuter: Double;
+  i, t, pos: Integer;
+  r, xx, yy, ri, radiusInner, radiusOuter: Double;
+  sncs: array[0 .. CRevolutionPointCount - 1] of TPointD;
 begin
   func := 0;
   grad[0] := 0;
   grad[1] := 0;
+
+  for i := 0 to CRevolutionPointCount - 1 do
+   SinCos(i * CRadiansPerPoint, sncs[i].Y, sncs[i].X);
 
   radiusInner := CAreaBegin * Self.FDPI * 0.5;
   radiusOuter := CAreaEnd * Self.FDPI * 0.5;
@@ -122,53 +125,42 @@ begin
 
     for t := 0 to CRevolutionPointCount - 1  do
     begin
-      SinCos(t * CRadiansPerPoint, sn, cs);
-
-      xx := cs * r + arg[0];
-      yy := sn * r + arg[1];
+      xx := sncs[t].X * r + arg[0];
+      yy := min(sncs[t].Y * r, 0.6 * radiusOuter) + arg[1];
 
       if Self.InRangePointD(yy, xx) then
       begin
-        func += Self.GetPointD(yy, xx, isImage, imLinear);
-        grad[0] += Self.GetPointD(yy, xx, isSobelX, imLinear);
-        grad[1] += Self.GetPointD(yy, xx, isSobelY, imLinear);
+        func -= Self.GetPointD(yy, xx, isImage, imLinear);
+        grad[0] -= Self.GetPointD(yy, xx, isSobelX, imLinear);
+        grad[1] -= Self.GetPointD(yy, xx, isSobelY, imLinear);
       end;
     end;
 
     Inc(pos);
   until r >= radiusOuter;
 
-  //WriteLn(arg[0]:12:3,arg[1]:12:3,func:20:3,grad[0]:20:3,grad[1]:20:3);
+  //WriteLn(arg[0]:12:3,arg[1]:12:3,func:20:3);
 end;
 
 procedure TInputScan.FindCenter;
 var
-  radiusOuter: Double;
-  x, bl, bu: TVector;
-  state: MinASAState;
-  rep: MinASAReport;
+  x: TVector;
+  state: MinLBFGSState;
+  rep: MinLBFGSReport;
 begin
   FCenter.X := Length(FImage[0]) * 0.5;
   FCenter.Y := Length(FImage) * 0.5;
 
-  radiusOuter := Round(C45RpmOuterSize * Self.FDPI * 0.5);
-
   SetLength(x, 2);
-  SetLength(bl, 2);
-  SetLength(bu, 2);
   x[0] := FCenter.X;
   x[1] := FCenter.Y;
-  bl[0] := radiusOuter;
-  bl[1] := radiusOuter;
-  bu[0] := Length(FImage[0]) - radiusOuter;
-  bu[1] := Length(FImage) - radiusOuter;
 
-  MinASACreate(2, x, bl, bu, state);
-  MinASASetCond(state, 0, 0, 0, 0);
-  while MinASAIteration(state) do
+  MinLBFGSCreate(Length(x), 2, x, state);
+  MinLBFGSSetCond(state, 0, 1e-12, 0, 0);
+  while MinLBFGSIteration(state) do
     if State.NeedFG then
       BFGSEvalCenter(State.X, state.F, state.G, Self);
-  MinASAResults(state, x, rep);
+  MinLBFGSResults(state, x, rep);
 
   FCenter.X := x[0];
   FCenter.Y := x[1];

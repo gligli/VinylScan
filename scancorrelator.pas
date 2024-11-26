@@ -18,6 +18,7 @@ type
     FMethod: TMinimizeMethod;
     FOutputPNGFileName: String;
     FOutputDPI: Integer;
+    FCorrelation: Double;
 
     FPerSnanCrops: TDoubleDynArray2;
     FPerSnanSkews: array of TPointD;
@@ -31,24 +32,25 @@ type
 
     function PowellAnalyze(const x: TVector; obj: Pointer): TScalar;
     function PowellCrop(const x: TVector; obj: Pointer): TScalar;
+
+    procedure AngleInit;
+    procedure Analyze;
+    procedure Crop;
+    procedure Rebuild;
   public
     constructor Create(const AFileNames: TStrings; AOutputDPI: Integer = 2400);
     destructor Destroy; override;
 
     procedure LoadPNGs;
-    procedure AngleInit;
-    procedure Analyze;
-    procedure Crop;
-    procedure Rebuild;
+    procedure Process;
     procedure Save;
-
-    procedure Run;
 
     property OutputPNGFileName: String read FOutputPNGFileName write FOutputPNGFileName;
     property Method: TMinimizeMethod read FMethod write FMethod;
 
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
+    property Correlation: Double read FCorrelation;
 
     property OutputImage: TSingleDynArray2 read FOutputImage;
   end;
@@ -75,14 +77,14 @@ implementation
 
 const
   CAreaBegin = C45RpmInnerSize;
-  CAreaEnd = C45RpmLastMusicGroove;
+  CAreaEnd = C45RpmFirstMusicGroove;
   CAreaWidth = (CAreaEnd - CAreaBegin) * 0.5;
   CAreaGroovesPerInch = 16;
 
 procedure EstimatedGradients(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 const
   CH = 1e-7;
-{$if 0}
+{$if 1}
   CFCoeff: array[0 .. 7] of Double = (-1/280, 4/105, -1/5, 4/5, -4/5, 1/5, -4/105, 1/280);
   CXCoeff: array[0 .. 7] of Double = (4, 3, 2, 1, -1, -2, -3, -4);
 {$else}
@@ -124,9 +126,9 @@ begin
     grad[ig] /= CH;
   end;
 
-  for ig := 0 to High(arg) do
-    Write(arg[ig]:10:6);
-  WriteLn(func:10:6);
+  //for ig := 0 to High(arg) do
+  //  Write(arg[ig]:10:6);
+  //WriteLn(func:10:6);
 end;
 
 
@@ -135,6 +137,7 @@ var
   i: Integer;
 begin
   FOutputDPI := AOutputDPI;
+  FCorrelation := NaN;
   SetLength(FInputScans, AFileNames.Count);
   SetLength(FPerSnanSkews, Length(FInputScans));
   SetLength(FPerSnanAngles, Length(FInputScans));
@@ -221,9 +224,9 @@ begin
     bestr := Infinity;
     bestAngle := 0.0;
 
-    for iAngle := 0 to 3599 do
+    for iAngle := 0 to 359 do
     begin
-      SinCos(DegToRad(iAngle * 0.1), sn, cs);
+      SinCos(DegToRad(iAngle), sn, cs);
 
       pos := 0;
       for iRadius:= -Round(C45RpmLabelOuterSize * 0.5 * FOutputDPI) to -Round(C45RpmInnerSize * 0.5 * FOutputDPI) do
@@ -242,7 +245,7 @@ begin
       if r < bestr then
       begin
         bestr := r;
-        bestAngle := DegToRad(iAngle * 0.1);
+        bestAngle := DegToRad(iAngle);
       end;
     end;
 
@@ -374,18 +377,9 @@ begin
   if Length(FInputScans) <= 0 then
     Exit;
 
-  SetLength(x, High(FInputScans) * 5 + 2);
+  SetLength(x, High(FInputScans) * 5);
   SetLength(bl, Length(x));
   SetLength(bu, Length(x));
-
-  x[High(FInputScans) * 5 + 0] := 0.0;
-  x[High(FInputScans) * 5 + 1] := 0.0;
-
-  bl[High(FInputScans) * 5 + 0] := -(FInputScans[0].Width - FInputScans[0].FirstGrooveRadius * 2.0) * 0.5;
-  bl[High(FInputScans) * 5 + 1] := -(FInputScans[0].Height - FInputScans[0].FirstGrooveRadius * 2.0) * 0.5;
-
-  bu[High(FInputScans) * 5 + 0] := (FInputScans[0].Width - FInputScans[0].FirstGrooveRadius * 2.0) * 0.5;
-  bu[High(FInputScans) * 5 + 1] := (FInputScans[0].Height - FInputScans[0].FirstGrooveRadius * 2.0) * 0.5;
 
   for i := 1 to High(FInputScans) do
   begin
@@ -411,38 +405,39 @@ begin
   case Method of
     mmNone:
     begin
-      PowellAnalyze(x, Self);
+      FCorrelation := PowellAnalyze(x, Self);
     end;
     mmPowell:
     begin
-      PowellMinimize(@PowellAnalyze, x, 1e-9, 1e-6, 0, MaxInt, nil);
+      FCorrelation := PowellMinimize(@PowellAnalyze, x, 1e-9, 1e-9, 0, MaxInt, nil)[0];
     end;
     mmASA:
     begin
       MinASACreate(Length(x), x, bl, bu, ASAState);
-      MinASASetCond(ASAState, 0, 1e-12, 1e-9, 0);
+      MinASASetCond(ASAState, 0, 0, 1e-9, 0);
       while MinASAIteration(ASAState) do
         if ASAState.NeedFG then
           EstimatedGradients(ASAState.X, ASAState.F, ASAState.G, Self);
       MinASAResults(ASAState, x, ASARep);
+
+      FCorrelation := ASAState.F;
     end;
     mmLBFGS:
     begin
       MinLBFGSCreate(Length(x), 5, x, LBFGSState);
-      MinLBFGSSetCond(LBFGSState, 0, 1e-12, 1e-9, 0);
+      MinLBFGSSetCond(LBFGSState, 0, 0, 1e-9, 0);
       while MinLBFGSIteration(LBFGSState) do
         if LBFGSState.NeedFG then
           EstimatedGradients(LBFGSState.X, LBFGSState.F, LBFGSState.G, Self);
       MinLBFGSResults(LBFGSState, x, LBFGSRep);
+
+      FCorrelation := LBFGSState.F;
     end;
   end;
 
-  FPerSnanAngles[0] := 0.0;
+  Assert(not IsNan(FCorrelation));
 
-  p := FInputScans[0].Center;
-  p.X += x[High(FInputScans) * 5 + 0];
-  p.Y += x[High(FInputScans) * 5 + 1];
-  FInputScans[0].Center := p;
+  FPerSnanAngles[0] := 0.0;
 
   for i := 1 to High(FInputScans) do
   begin
@@ -682,16 +677,12 @@ begin
   end;
 end;
 
-procedure TScanCorrelator.Run;
+procedure TScanCorrelator.Process;
 begin
-  LoadPNGs;
-
   AngleInit;
   Analyze;
   Crop;
   Rebuild;
-
-  Save;
 end;
 
 { TScanImage }

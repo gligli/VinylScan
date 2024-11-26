@@ -147,10 +147,7 @@ begin
 
     sc.LoadPNGs;
 
-    sc.AngleInit;
-    sc.Analyze;
-    sc.Crop;
-    sc.Rebuild;
+    sc.Process;
 
     DrawImage(sc.OutputImage);
 
@@ -197,28 +194,37 @@ begin
   scmP := TScanCorrelator.Create(sl);
   try
     sc1.OutputPNGFileName := fn;
-    sc1.Run;
     sc100.OutputPNGFileName := fn;
-    sc100.Run;
+    scmL.OutputPNGFileName := fn;
+    scmA.OutputPNGFileName := fn;
+    scmP.OutputPNGFileName := fn;
 
     scmL.Method := mmLBFGS;
-    scmL.OutputPNGFileName := fn;
-    scmL.Run;
-
-    DrawImage(scmL.OutputImage);
-
     scmA.Method := mmASA;
-    scmA.OutputPNGFileName := fn;
-    scmA.Run;
-
-    DrawImage(scmA.OutputImage);
-
     scmP.Method := mmPowell;
-    scmP.OutputPNGFileName := fn;
-    scmP.Run;
 
+    sc1.LoadPNGs;
+    sc1.Process;
+    sc1.Save;
+
+    sc100.LoadPNGs;
+    sc100.Process;
+    sc100.Save;
+
+    scmL.LoadPNGs;
+    scmL.Process;
+    DrawImage(scmL.OutputImage);
+    scmL.Save;
+
+    scmA.LoadPNGs;
+    scmA.Process;
+    DrawImage(scmA.OutputImage);
+    scmA.Save;
+
+    scmP.LoadPNGs;
+    scmP.Process;
     DrawImage(scmP.OutputImage);
-
+    scmP.Save;
   finally
     sc100.Free;
     sc1.Free;
