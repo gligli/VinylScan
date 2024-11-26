@@ -409,6 +409,10 @@ begin
   end;
 
   case Method of
+    mmNone:
+    begin
+      PowellAnalyze(x, Self);
+    end;
     mmPowell:
     begin
       PowellMinimize(@PowellAnalyze, x, 1e-9, 1e-6, 0, MaxInt, nil);
