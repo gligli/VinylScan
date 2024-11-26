@@ -100,8 +100,7 @@ procedure BFGSEvalCenter(const arg: TVector; var func: Double; grad: TVector; ob
 const
   CAreaBegin = C45RpmLabelOuterSize;
   CAreaEnd = C45RpmOuterSize;
-  CAreaWidth = (CAreaEnd - CAreaBegin) * 0.5;
-  CAreaGroovesPerInch = 100;
+  CAreaGroovesPerInch = 800;
 
   CRevolutionPointCount = 360;
   CRadiansPerPoint = Pi * 2.0 / CRevolutionPointCount;
