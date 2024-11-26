@@ -411,7 +411,7 @@ begin
   case Method of
     mmPowell:
     begin
-      PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-9, 1e-12, MaxInt, nil);
+      PowellMinimize(@PowellAnalyze, x, 1e-9, 1e-6, 0, MaxInt, nil);
     end;
     mmASA:
     begin
@@ -455,6 +455,8 @@ begin
   end;
 
   WriteLn;
+  for i := 0 to High(FInputScans) do
+    WriteLn(FInputScans[i].PNGFileName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', SkewX: ', FPerSnanSkews[i].X:9:6, ', SkewY: ', FPerSnanSkews[i].Y:9:6);
 end;
 
 function TScanCorrelator.PowellCrop(const x: TVector; obj: Pointer): TScalar;
