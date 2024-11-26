@@ -532,7 +532,7 @@ begin
   end;
   Result := DivDef(Result, cnt, 1000.0);
 
-  Write(inputIdx + 1:4, ' / ', Length(FInputScans):4, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', -Result:12:6, #13);
+  Write(FInputScans[inputIdx].PNGFileName, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', -Result:12:6, #13);
 end;
 
 procedure TScanCorrelator.Crop;
