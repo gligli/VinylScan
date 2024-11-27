@@ -72,8 +72,8 @@ begin
 end;
 
 const
-  CPredictionPointCount = 200;
-  CPredictionRevolutionDiv = 720;
+  CPredictionPointCount = 600;
+  CPredictionRevolutionDiv = 360;
 var
   pradius, dumx, dumy: Double;
 
@@ -201,7 +201,7 @@ procedure TScan2Track.EvalTrack;
 
     x[0] := radiusInc;
     bl[0] := -(Scan.DPI / C45RpmLeadInGroovesPerInch) / FPointsPerRevolution * 10.0;
-    bu[0] := -(Scan.DPI / C45RpmLeadInGroovesPerInch) / FPointsPerRevolution * -0.1;
+    bu[0] := (Scan.DPI / C45RpmLeadInGroovesPerInch) / FPointsPerRevolution * 10.0;
 
     pradius := radius;
 
@@ -229,15 +229,15 @@ procedure TScan2Track.EvalTrack;
         while MinASAIteration(ASAState) do
           if ASAState.NeedFG then
           begin
-            //BFGSEvalTracking(ASAState.X, ASAState.F, ASAState.G, Self);
-            BFGSEvalTracking_(ASAState.X, ASAState.F, ASAState.G, Self);
+            BFGSEvalTracking(ASAState.X, ASAState.F, ASAState.G, Self);
+            //BFGSEvalTracking_(ASAState.X, ASAState.F, ASAState.G, Self);
           end;
 
         MinASAResults(ASAState, x, ASARep);
 
         radiusInc := x[0];
-        //BFGSEvalTracking(x, f, g, self);
-        BFGSEvalTracking_(x, f, g, self);
+        BFGSEvalTracking(x, f, g, self);
+        //BFGSEvalTracking_(x, f, g, self);
       end;
       mmLBFGS:
       begin
@@ -247,15 +247,15 @@ procedure TScan2Track.EvalTrack;
         while MinLBFGSIteration(LBFGSState) do
           if LBFGSState.NeedFG then
           begin
-            //BFGSEvalTracking(LBFGSState.X, LBFGSState.F, LBFGSState.G, Self);
-            BFGSEvalTracking_(LBFGSState.X, LBFGSState.F, LBFGSState.G, Self);
+            BFGSEvalTracking(LBFGSState.X, LBFGSState.F, LBFGSState.G, Self);
+            //BFGSEvalTracking_(LBFGSState.X, LBFGSState.F, LBFGSState.G, Self);
           end;
 
         MinLBFGSResults(LBFGSState, x, LBFGSRep);
 
         radiusInc := x[0];
-        //BFGSEvalTracking(x, f, g, self);
-        BFGSEvalTracking_(x, f, g, self);
+        BFGSEvalTracking(x, f, g, self);
+        //BFGSEvalTracking_(x, f, g, self);
       end;
     end;
 
