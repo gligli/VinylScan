@@ -22,6 +22,7 @@ type
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
     FSilent: Boolean;
+    FSinCosLUT: TPointDDynArray;
 
     FCenter: TPointD;
     FConcentricGrooveRadius: Double;
@@ -94,27 +95,23 @@ type
 
 implementation
 
-{ TInputScan }
-
-procedure BFGSEvalCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 const
   CAreaBegin = 0;
   CAreaEnd = C45RpmAdapterSize;
   CAreaGroovesPerInch = 800;
   CRevolutionPointCount = 360;
-  CRadiansPerPoint = Pi * 2.0 / CRevolutionPointCount;
+
+{ TInputScan }
+
+procedure BFGSEvalCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 var
   Self: TInputScan absolute obj;
-  i, t, pos: Integer;
+  t, pos: Integer;
   r, xx, yy, ri, radiusInner, radiusOuter: Double;
-  sncs: array[0 .. CRevolutionPointCount - 1] of TPointD;
 begin
   func := 0;
   grad[0] := 0;
   grad[1] := 0;
-
-  for i := 0 to CRevolutionPointCount - 1 do
-   SinCos(i * CRadiansPerPoint, sncs[i].Y, sncs[i].X);
 
   radiusInner := CAreaBegin * Self.FDPI * 0.5;
   radiusOuter := CAreaEnd * Self.FDPI * 0.5;
@@ -125,8 +122,8 @@ begin
 
     for t := 0 to CRevolutionPointCount - 1  do
     begin
-      xx := sncs[t].X * r + arg[0];
-      yy := min(sncs[t].Y * r, 0.6 * radiusOuter) + arg[1];
+      xx := Self.FSinCosLUT[t].X * r + arg[0];
+      yy := min(Self.FSinCosLUT[t].Y * r, 0.6 * radiusOuter) + arg[1];
 
       if Self.InRangePointD(yy, xx) then
       begin
@@ -148,6 +145,8 @@ var
   state: MinLBFGSState;
   rep: MinLBFGSReport;
 begin
+  BuildSinCosLUT(CRevolutionPointCount, FSinCosLUT);
+
   FCenter.X := Length(FImage[0]) * 0.5;
   FCenter.Y := Length(FImage) * 0.5;
 
