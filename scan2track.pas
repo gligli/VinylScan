@@ -5,8 +5,8 @@ unit scan2track;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, GraphType, FPCanvas, FPImage, FPWritePNG, minlbfgs, MTProcs,
-  utils, fgl, powell, inputscan;
+  Classes, SysUtils, Types, Math, Graphics, GraphType, FPCanvas, FPImage, FPWritePNG, MTProcs,
+  utils, fgl, powell, inputscan, minlbfgs, minasa;
 
 type
 
@@ -15,6 +15,8 @@ type
   TScan2Track = class
   private
     FOutputWAVFileName: String;
+    FMethod: TMinimizeMethod;
+    FSinCosLUT: TPointDDynArray;
 
     FScan: TInputScan;
     FBitsPerSample: Integer;
@@ -34,6 +36,7 @@ type
     procedure Run;
 
     property OutputWAVFileName: String read FOutputWAVFileName write FOutputWAVFileName;
+    property Method: TMinimizeMethod read FMethod write FMethod;
 
     property Scan: TInputScan read FScan;
     property SampleRate: Integer read FSampleRate;
@@ -73,9 +76,6 @@ const
   CPredictionRevolutionDiv = 720;
 var
   pradius, dumx, dumy: Double;
-  SinCosLut: array[0 .. CPredictionPointCount - 1] of record
-    Sin, Cos: Double;
-  end;
 
 function TScan2Track.PowellEvalTracking(const arg: TVector; obj: Pointer): TScalar;
 var
@@ -85,14 +85,17 @@ begin
   r := pradius;
   x := arg[0] * PointsPerRevolution / (CPredictionPointCount * CPredictionRevolutionDiv);
 
+  predx := 0;
+  predy := 0;
+
   Result := 0;
   for i := 0 to CPredictionPointCount - 1 do
   begin
     if InRange(r, Scan.ConcentricGrooveRadius, Scan.FirstGrooveRadius) and
        InRange(r, Scan.ConcentricGrooveRadius, Scan.FirstGrooveRadius) then
     begin
-      predx := SinCosLut[i].Cos * r + Scan.Center.X;
-      predy := SinCosLut[i].Sin * r + Scan.Center.Y;
+      predx := FSinCosLut[i].X * r + Scan.Center.X;
+      predy := FSinCosLut[i].Y * r + Scan.Center.Y;
 
       fx := Scan.GetPointD(predy, predx, isImage, imLinear);
       Result -= fx;
@@ -119,6 +122,9 @@ var
 begin
   x := arg[0];
 
+  predx := 0;
+  predy := 0;
+
   func := 0;
   grad[0] := 0;
   for i := 0 to CPredictionPointCount - 1 do
@@ -129,13 +135,13 @@ begin
 
     if InRange(r, Self.Scan.ConcentricGrooveRadius, Self.Scan.FirstGrooveRadius) then
     begin
-      predx := SinCosLut[i].Cos * r + Self.Scan.Center.X;
-      predy := SinCosLut[i].Sin * r + Self.Scan.Center.Y;
+      predx := Self.FSinCosLut[i].X * r + Self.Scan.Center.X;
+      predy := Self.FSinCosLut[i].Y * r + Self.Scan.Center.Y;
 
       fx := Self.Scan.GetPointD(predy, predx, isImage, imLinear);
       func -= fx;
-      grad[0] -= Self.Scan.GetPointD(predy, predx, isSobelX, imLinear) * (SinCosLut[i].Cos * id) +
-                 Self.Scan.GetPointD(predy, predx, isSobelY, imLinear) * (SinCosLut[i].Sin * id);
+      grad[0] -= Self.Scan.GetPointD(predy, predx, isSobelX, imLinear) * (Self.FSinCosLut[i].X * id) +
+                 Self.Scan.GetPointD(predy, predx, isSobelY, imLinear) * (Self.FSinCosLut[i].Y * id);
 
       //main.Form1.Image.Picture.Bitmap.Canvas.Pixels[round(predx * CReducFactor), round(predy * CReducFactor)] := clBlue;
     end;
@@ -182,48 +188,76 @@ procedure TScan2Track.EvalTrack;
   var
     ai, a, f: Double;
     i: Integer;
-    x, g: TVector;
-    state: MinLBFGSState;
-    rep: MinLBFGSReport;
+    x, g, bl, bu: TVector;
+    ASAState: MinASAState;
+    ASARep: MinASAReport;
+    LBFGSState: MinLBFGSState;
+    LBFGSRep: MinLBFGSReport;
   begin
     SetLength(x, 1);
+    SetLength(bl, 1);
+    SetLength(bu, 1);
     SetLength(g, 1);
 
     x[0] := radiusInc;
+    bl[0] := -(Scan.DPI / C45RpmLeadInGroovesPerInch) / FPointsPerRevolution * 10.0;
+    bu[0] := -(Scan.DPI / C45RpmLeadInGroovesPerInch) / FPointsPerRevolution * -0.1;
 
     pradius := radius;
 
+    SetLength(FSinCosLUT, CPredictionPointCount);
     ai := Pi * 2.0 / (CPredictionPointCount * CPredictionRevolutionDiv);
     a := angle;
     for i := 0 to CPredictionPointCount - 1 do
     begin
-      SinCos(a, SinCosLut[i].Sin, SinCosLut[i].Cos);
+      SinCos(a, FSinCosLut[i].Y, FSinCosLut[i].X);
       a -= ai;
     end;
 
-{$if 1}
-    PowellMinimize(@PowellEvalTracking, x, 1e-8, 1e-6, 0, MaxInt, Self);
-
-    radiusInc := x[0];
-
-    PowellEvalTracking(x, self);
-{$else}
-    MinLBFGSCreate(1, 1, x, state);
-    MinLBFGSSetCond(state, 0, 0, 0, 0);
-
-    while MinLBFGSIteration(state) do
-      if State.NeedFG then
+    case Method of
+      mmPowell:
       begin
-        //BFGSEvalTracking(State.X, state.F, state.G, Self);
-        BFGSEvalTracking_(State.X, state.F, state.G, Self);
+        PowellMinimize(@PowellEvalTracking, x, 1e-8, 1e-6, 0, MaxInt, Self);
+        radiusInc := x[0];
+        PowellEvalTracking(x, self);
       end;
+      mmASA:
+      begin
+        MinASACreate(1, x, bl, bu, ASAState);
+        MinASASetCond(ASAState, 0, 0, 0, 0);
 
-    MinLBFGSResults(state, x, rep);
+        while MinASAIteration(ASAState) do
+          if ASAState.NeedFG then
+          begin
+            //BFGSEvalTracking(ASAState.X, ASAState.F, ASAState.G, Self);
+            BFGSEvalTracking_(ASAState.X, ASAState.F, ASAState.G, Self);
+          end;
 
-    radiusInc := x[0];
-    //BFGSEvalTracking(x, f, g, self);
-    BFGSEvalTracking_(x, f, g, self);
-{$ifend}
+        MinASAResults(ASAState, x, ASARep);
+
+        radiusInc := x[0];
+        //BFGSEvalTracking(x, f, g, self);
+        BFGSEvalTracking_(x, f, g, self);
+      end;
+      mmLBFGS:
+      begin
+        MinLBFGSCreate(1, 1, x, LBFGSState);
+        MinLBFGSSetCond(LBFGSState, 0, 0, 0, 0);
+
+        while MinLBFGSIteration(LBFGSState) do
+          if LBFGSState.NeedFG then
+          begin
+            //BFGSEvalTracking(LBFGSState.X, LBFGSState.F, LBFGSState.G, Self);
+            BFGSEvalTracking_(LBFGSState.X, LBFGSState.F, LBFGSState.G, Self);
+          end;
+
+        MinLBFGSResults(LBFGSState, x, LBFGSRep);
+
+        radiusInc := x[0];
+        //BFGSEvalTracking(x, f, g, self);
+        BFGSEvalTracking_(x, f, g, self);
+      end;
+    end;
 
     main.MainForm.Image.Picture.Bitmap.Canvas.Pixels[round(dumx * CReducFactor), round(dumy * CReducFactor)] := clTeal;
   end;
@@ -301,7 +335,7 @@ begin
 ////////////////////////
       t := GetTickCount64;
       pbuf.Add(Point(round(px * CReducFactor), round(py * CReducFactor)));
-      if t - pt >= 4000 then
+      if t - pt >= 2000 then
       begin
 
         for i := 0 to pbuf.Count - 1 do
