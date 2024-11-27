@@ -139,8 +139,8 @@ function PearsonCorrelation(const x: TDoubleDynArray; const y: TDoubleDynArray):
 function RMSE(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
 
 function Make16BitSample(smp: Double): SmallInt;
-function AngleToArctanExtents(x: Double): Double;
-function InArctanExtentsAngle(x, xmin, xmax: Double): Boolean;
+function AngleTo02Pi(x: Double): Double;
+function In02PiExtentsAngle(x, xmin, xmax: Double): Boolean;
 
 procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TPointDDynArray);
 
@@ -408,26 +408,27 @@ begin
   Result := EnsureRange(round(smp * High(SmallInt)), Low(SmallInt), High(SmallInt));
 end;
 
-function AngleToArctanExtents(x: Double): Double;
+function AngleTo02Pi(x: Double): Double;
 begin
-  while x < -Pi do
+  while x < 0.0 do
     x += 2.0 * Pi;
-  while x > Pi do
+  while x >= 2.0 * Pi do
     x -= 2.0 * Pi;
 
-  Assert(InRange(x, -Pi, Pi));
+  Assert(InRange(x, 0, 2.0 * Pi));
 
   Result := x;
 end;
 
-function InArctanExtentsAngle(x, xmin, xmax: Double): Boolean;
+function In02PiExtentsAngle(x, xmin, xmax: Double): Boolean;
 begin
-  Assert(InRange(xmin, -Pi, Pi));
-  Assert(InRange(xmax, -Pi, Pi));
+  Assert(InRange(x, 0, 2.0 * Pi));
+  Assert(InRange(xmin, 0, 2.0 * Pi));
+  Assert(InRange(xmax, 0, 2.0 * Pi));
   if xmax >= xmin then
     Result := InRange(x, xmin, xmax)
   else
-    Result := InRange(x, -Pi, xmax) or InRange(x, xmin, Pi);
+    Result := InRange(x, 0, xmax) or InRange(x, xmin, 2.0 * Pi);
 end;
 
 constructor TSimpleFilter.Create(AFc: Double; AStages: Integer; AHighPass: Boolean; AInitValue: Double);

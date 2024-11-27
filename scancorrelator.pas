@@ -250,7 +250,7 @@ begin
       end;
     end;
 
-    FPerSnanAngles[iScan] := AngleToArctanExtents(bestAngle);
+    FPerSnanAngles[iScan] := AngleTo02Pi(bestAngle);
   end;
 end;
 
@@ -287,8 +287,8 @@ var
       sky := x[High(FInputScans) * 5 + 1];
     end;
 
-    tii := Floor((AngleToArctanExtents(t) + Pi) / FRadiansPerRevolutionPoint);
-    ta := Frac((AngleToArctanExtents(t) + Pi) / FRadiansPerRevolutionPoint);
+    tii := Floor(AngleTo02Pi(t) / FRadiansPerRevolutionPoint);
+    ta := Frac(AngleTo02Pi(t) / FRadiansPerRevolutionPoint);
     Assert(ta >= 0);
 
     ri := CAreaWidth * FOutputDPI / (CAreaGroovesPerInch * (FPointsPerRevolution - 1));
@@ -296,7 +296,7 @@ var
     r := CAreaBegin * 0.5 * FOutputDPI;
     rEnd := CAreaEnd * 0.5 * FOutputDPI;
     pos := 0;
-    ti0 := tii;
+    ti0 := tii mod Length(FSinCosLUT);
     ti1 := (tii + 1) mod Length(FSinCosLUT);
     repeat
       cs := lerp(FSinCosLUT[ti1].X, FSinCosLUT[ti1].X, ta);
@@ -314,8 +314,8 @@ var
 
       Inc(pos);
 
-      ti0 := IfThen(ti0 < Length(FSinCosLUT), ti0 + 1, 0);
-      ti1 := IfThen(ti1 < Length(FSinCosLUT), ti1 + 1, 0);
+      ti0 := IfThen(ti0 < High(FSinCosLUT), ti0 + 1, 0);
+      ti1 := IfThen(ti1 < High(FSinCosLUT), ti1 + 1, 0);
     until rri >= rEnd;
 
     SetLength(corrData[AIndex], pos);
@@ -452,7 +452,7 @@ begin
 
   for i := 1 to High(FInputScans) do
   begin
-    FPerSnanAngles[i] := AngleToArctanExtents(FPerSnanAngles[i] + x[High(FInputScans) * 0 + i - 1]);
+    FPerSnanAngles[i] := AngleTo02Pi(FPerSnanAngles[i] + x[High(FInputScans) * 0 + i - 1]);
 
     p := FInputScans[i].Center;
     p.X += x[High(FInputScans) * 1 + i - 1];
@@ -487,13 +487,13 @@ var
     for ox := 0 to High(FOutputImage[0]) do
     begin
       r := Sqrt(Sqr(center - AIndex) + Sqr(center - ox));
-      bt := ArcTan2(center - AIndex, center - ox);
+      bt := AngleTo02Pi(ArcTan2(center - AIndex, center - ox));
 
       px := ox - center + cx;
       py := AIndex - center + cy;
 
       if FInputScans[inputIdx].InRangePointD(py, px) and InRange(r, rBeg, rEnd) and
-          not InArctanExtentsAngle(bt, a0a, a0b) and not InArctanExtentsAngle(bt, a1a, a1b) then
+          not In02PiExtentsAngle(bt, a0a, a0b) and not In02PiExtentsAngle(bt, a1a, a1b) then
       begin
         stdDevArr[stdDevPos] := FInputScans[inputIdx].GetPointD(py, px, isImage, imLinear);
         Inc(stdDevPos);
@@ -512,13 +512,13 @@ var
 begin
   Result := 1000.0;
 
-  if (x[1] - x[0]) >= DegToRad(120.0) then
+  if AngleTo02Pi(x[1] - x[0]) >= DegToRad(120.0) then
     Exit;
 
-  a0a := AngleToArctanExtents(x[0]);
-  a0b := AngleToArctanExtents(x[1]);
-  a1a := AngleToArctanExtents(x[0] + Pi);
-  a1b := AngleToArctanExtents(x[1] + Pi);
+  a0a := AngleTo02Pi(x[0]);
+  a0b := AngleTo02Pi(x[1]);
+  a1a := AngleTo02Pi(x[0] + Pi);
+  a1b := AngleTo02Pi(x[1] + Pi);
 
   rBeg := C45RpmLastMusicGroove * 0.5 * FOutputDPI;
   rEnd := C45RpmFirstMusicGroove * 0.5 * FOutputDPI;
@@ -556,15 +556,15 @@ begin
 
   for i := 0 to High(FInputScans) do
   begin
-    x[0] := DegToRad(-45.0);
-    x[1] := DegToRad(45.0);
+    x[0] := AngleTo02Pi(DegToRad(-45.0));
+    x[1] := AngleTo02Pi(DegToRad(45.0));
 
     PowellMinimize(@PowellCrop, x, 1.0 / 360.0, 1e-6, 1e-6, MaxInt, Pointer(i));
 
-    FPerSnanCrops[i, 0] := AngleToArctanExtents(x[0]);
-    FPerSnanCrops[i, 1] := AngleToArctanExtents(x[1]);
-    FPerSnanCrops[i, 2] := AngleToArctanExtents(x[0] + Pi);
-    FPerSnanCrops[i, 3] := AngleToArctanExtents(x[1] + Pi);
+    FPerSnanCrops[i, 0] := AngleTo02Pi(x[0]);
+    FPerSnanCrops[i, 1] := AngleTo02Pi(x[1]);
+    FPerSnanCrops[i, 2] := AngleTo02Pi(x[0] + Pi);
+    FPerSnanCrops[i, 3] := AngleTo02Pi(x[1] + Pi);
 
     WriteLn;
   end;
@@ -587,7 +587,7 @@ var
 
       if InRange(r, rBeg, rEnd) then
       begin
-        bt := ArcTan2(center - AIndex, center - ox);
+        bt := AngleTo02Pi(ArcTan2(center - AIndex, center - ox));
 
         cnt := 0;
         acc := 0;
@@ -599,15 +599,15 @@ var
           skx := FPerSnanSkews[i].X;
           sky := FPerSnanSkews[i].Y;
 
-          ct := AngleToArctanExtents(bt + t);
+          ct := AngleTo02Pi(t + bt);
 
           SinCos(ct, sn, cs);
           px := cs * r * skx + cx;
           py := sn * r * sky + cy;
 
           if FInputScans[i].InRangePointD(py, px) and
-              (not InArctanExtentsAngle(ct, FPerSnanCrops[i, 0], FPerSnanCrops[i, 1]) and
-               not InArctanExtentsAngle(ct, FPerSnanCrops[i, 2], FPerSnanCrops[i, 3]) or
+              (not In02PiExtentsAngle(ct, FPerSnanCrops[i, 0], FPerSnanCrops[i, 1]) and
+               not In02PiExtentsAngle(ct, FPerSnanCrops[i, 2], FPerSnanCrops[i, 3]) or
                (r < rLbl)) then
           begin
             acc += FInputScans[i].GetPointD(py, px, isImage, imHermite);
