@@ -77,7 +77,7 @@ implementation
 
 const
   CAreaBegin = C45RpmInnerSize;
-  CAreaEnd = C45RpmFirstMusicGroove;
+  CAreaEnd = C45RpmLastMusicGroove;
   CAreaWidth = (CAreaEnd - CAreaBegin) * 0.5;
   CAreaGroovesPerInch = 16;
 
@@ -279,10 +279,8 @@ var
     else
     begin
       t   := 0.0;
-      cx  += x[High(FInputScans) * 5 + 0];
-      cy  += x[High(FInputScans) * 5 + 1];
-      skx := 1.0;
-      sky := 1.0;
+      skx := x[High(FInputScans) * 5 + 0];
+      sky := x[High(FInputScans) * 5 + 1];
     end;
 
     ti := FRadiansPerRevolutionPoint;
@@ -377,9 +375,18 @@ begin
   if Length(FInputScans) <= 0 then
     Exit;
 
-  SetLength(x, High(FInputScans) * 5);
+  SetLength(x, High(FInputScans) * 5 + 2);
   SetLength(bl, Length(x));
   SetLength(bu, Length(x));
+
+  x[High(FInputScans) * 5 + 0] := 1.0;
+  x[High(FInputScans) * 5 + 1] := 1.0;
+
+  bl[High(FInputScans) * 5 + 0] := 0.9;
+  bl[High(FInputScans) * 5 + 1] := 0.9;
+
+  bu[High(FInputScans) * 5 + 0] := 1.1;
+  bu[High(FInputScans) * 5 + 1] := 1.1;
 
   for i := 1 to High(FInputScans) do
   begin
@@ -439,6 +446,9 @@ begin
 
   FPerSnanAngles[0] := 0.0;
 
+  FPerSnanSkews[0].X := x[High(FInputScans) * 5 + 0];
+  FPerSnanSkews[0].Y := x[High(FInputScans) * 5 + 1];
+
   for i := 1 to High(FInputScans) do
   begin
     FPerSnanAngles[i] := AngleToArctanExtents(FPerSnanAngles[i] + x[High(FInputScans) * 0 + i - 1]);
@@ -448,9 +458,8 @@ begin
     p.Y += x[High(FInputScans) * 2 + i - 1];
     FInputScans[i].Center := p;
 
-    p.X := x[High(FInputScans) * 3 + i - 1];
-    p.Y := x[High(FInputScans) * 4 + i - 1];
-    FPerSnanSkews[i] := p;
+    FPerSnanSkews[i].X := x[High(FInputScans) * 3 + i - 1];
+    FPerSnanSkews[i].Y := x[High(FInputScans) * 4 + i - 1];
   end;
 
   WriteLn;
