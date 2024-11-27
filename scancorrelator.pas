@@ -19,6 +19,7 @@ type
     FOutputPNGFileName: String;
     FOutputDPI: Integer;
     FCorrelation: Double;
+    FSinCosLUT: TPointDDynArray;
 
     FPerSnanCrops: TDoubleDynArray2;
     FPerSnanSkews: array of TPointD;
@@ -261,9 +262,12 @@ var
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
-    pos: Integer;
-    ti, ri, t, r, rEnd, sn, cs, px, py, cx, cy, rri, skx, sky: Double;
+    pos, ti0, ti1, tii: Integer;
+    ri, t, r, rEnd, px, py, cx, cy, rri, skx, sky, ta, sn, cs: Double;
   begin
+    if not InRange(AIndex, 0, High(FInputScans)) then
+      Exit;
+
     t  := FPerSnanAngles[AIndex];
     cx := FInputScans[AIndex].Center.X;
     cy := FInputScans[AIndex].Center.Y;
@@ -283,14 +287,20 @@ var
       sky := x[High(FInputScans) * 5 + 1];
     end;
 
-    ti := FRadiansPerRevolutionPoint;
+    tii := Floor((AngleToArctanExtents(t) + Pi) / FRadiansPerRevolutionPoint);
+    ta := Frac((AngleToArctanExtents(t) + Pi) / FRadiansPerRevolutionPoint);
+    Assert(ta >= 0);
+
     ri := CAreaWidth * FOutputDPI / (CAreaGroovesPerInch * (FPointsPerRevolution - 1));
 
     r := CAreaBegin * 0.5 * FOutputDPI;
     rEnd := CAreaEnd * 0.5 * FOutputDPI;
     pos := 0;
+    ti0 := tii;
+    ti1 := (tii + 1) mod Length(FSinCosLUT);
     repeat
-      SinCos(t + ti * pos, sn, cs);
+      cs := lerp(FSinCosLUT[ti1].X, FSinCosLUT[ti1].X, ta);
+      sn := lerp(FSinCosLUT[ti0].Y, FSinCosLUT[ti1].Y, ta);
 
       rri := r + ri * pos;
 
@@ -303,6 +313,9 @@ var
         corrData[AIndex, pos] := FInputScans[AIndex].GetPointD(py, px, isImage, imLinear);
 
       Inc(pos);
+
+      ti0 := IfThen(ti0 < Length(FSinCosLUT), ti0 + 1, 0);
+      ti1 := IfThen(ti1 < Length(FSinCosLUT), ti1 + 1, 0);
     until rri >= rEnd;
 
     SetLength(corrData[AIndex], pos);
@@ -310,6 +323,9 @@ var
 
   procedure DoPearson(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   begin
+    if not InRange(AIndex, 0, High(corrCoords)) then
+      Exit;
+
     corrMatrix[AIndex] := PearsonCorrelation(corrData[corrCoords[AIndex].X], corrData[corrCoords[AIndex].Y]);
   end;
 
@@ -318,16 +334,7 @@ var
 begin
   SetLength(corrData, Length(FInputScans), Ceil(CAreaWidth * CAreaGroovesPerInch) * FPointsPerRevolution);
 
-  if Method <> mmPowell then
-  begin
-    for i := 0 to High(FInputScans) do
-      DoEval(i, nil, nil);
-  end
-  else
-  begin
-    ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FInputScans));
-  end;
-
+  ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FInputScans));
 
   SetLength(corrCoords, High(FInputScans));
   SetLength(corrMatrix, Length(corrCoords));
@@ -341,15 +348,7 @@ begin
   end;
   Assert(cnt = Length(corrCoords));
 
-  if Method <> mmPowell then
-  begin
-    for i := 0 to cnt - 1 do
-      DoPearson(i, nil, nil);
-  end
-  else
-  begin
-    ProcThreadPool.DoParallelLocalProc(@DoPearson, 0, cnt - 1);
-  end;
+  ProcThreadPool.DoParallelLocalProc(@DoPearson, 0, cnt - 1);
 
   Result := 0;
   for i := 0 to cnt - 1 do
@@ -374,6 +373,8 @@ begin
 
   if Length(FInputScans) <= 0 then
     Exit;
+
+  BuildSinCosLUT(FPointsPerRevolution, FSinCosLUT);
 
   SetLength(x, High(FInputScans) * 5 + 2);
   SetLength(bl, Length(x));
