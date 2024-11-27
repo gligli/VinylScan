@@ -24,6 +24,7 @@ type
 
   TConvolutionKernel = array[-1..1, -1..1] of integer;
 
+  TPointDDynArray = array of TPointD;
   TByteDynArray2 = array of TByteDynArray;
   TWordDynArray2 = array of TWordDynArray;
   TSingleDynArray2 = array of TSingleDynArray;
@@ -140,6 +141,8 @@ function RMSE(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
 function Make16BitSample(smp: Double): SmallInt;
 function AngleToArctanExtents(x: Double): Double;
 function InArctanExtentsAngle(x, xmin, xmax: Double): Boolean;
+
+procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TPointDDynArray);
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray);
 
@@ -455,6 +458,19 @@ begin
   if HighPass then
     Result := Smp - Result;
 end;
+
+procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TPointDDynArray);
+var
+  i: Integer;
+  rprp: Double;
+begin
+  SetLength(ASinCosLUT, APointCount);
+  rprp := Pi * 2.0 / APointCount;
+  for i := 0 to APointCount - 1 do
+    SinCos(i * rprp, ASinCosLUT[i].Y, ASinCosLUT[i].X);
+end;
+
+
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray);
 var
