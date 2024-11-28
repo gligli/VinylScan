@@ -295,8 +295,8 @@ var
     else
     begin
       t   := 0.0;
-      skx := x[High(FInputScans) * 5 + 0];
-      sky := x[High(FInputScans) * 5 + 1];
+      skx := 1.0;
+      sky := 1.0;
     end;
 
     tii := Floor(AngleTo02Pi(t) / FRadiansPerRevolutionPoint);
@@ -388,18 +388,9 @@ begin
 
   BuildSinCosLUT(FPointsPerRevolution, FSinCosLUT);
 
-  SetLength(x, High(FInputScans) * 5 + 2);
+  SetLength(x, High(FInputScans) * 5);
   SetLength(bl, Length(x));
   SetLength(bu, Length(x));
-
-  x[High(FInputScans) * 5 + 0] := 1.0;
-  x[High(FInputScans) * 5 + 1] := 1.0;
-
-  bl[High(FInputScans) * 5 + 0] := 0.9;
-  bl[High(FInputScans) * 5 + 1] := 0.9;
-
-  bu[High(FInputScans) * 5 + 0] := 1.1;
-  bu[High(FInputScans) * 5 + 1] := 1.1;
 
   for i := 1 to High(FInputScans) do
   begin
@@ -429,7 +420,7 @@ begin
     end;
     mmPowell:
     begin
-      FCorrelation := PowellMinimize(@PowellAnalyze, x, 1e-9, 1e-9, 0, MaxInt, nil)[0];
+      FCorrelation := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-9, 0, MaxInt, nil)[0];
     end;
     mmASA:
     begin
@@ -458,9 +449,6 @@ begin
   Assert(not IsNan(FCorrelation));
 
   FPerSnanAngles[0] := 0.0;
-
-  FPerSnanSkews[0].X := x[High(FInputScans) * 5 + 0];
-  FPerSnanSkews[0].Y := x[High(FInputScans) * 5 + 1];
 
   for i := 1 to High(FInputScans) do
   begin

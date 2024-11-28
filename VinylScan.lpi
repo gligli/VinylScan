@@ -43,9 +43,9 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <GenerateDebugInfo Value="False"/>
               <RunWithoutDebug Value="True"/>
               <DebugInfoType Value="dsDwarf3"/>
+              <UseExternalDbgSyms Value="True"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
