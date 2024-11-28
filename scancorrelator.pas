@@ -84,7 +84,7 @@ const
 
 procedure EstimatedGradients(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 const
-  CH = 1e-7;
+  CH = 1e-8;
 {$if 1}
   CFCoeff: array[0 .. 7] of Double = (-1/280, 4/105, -1/5, 4/5, -4/5, 1/5, -4/105, 1/280);
   CXCoeff: array[0 .. 7] of Double = (4, 3, 2, 1, -1, -2, -3, -4);
@@ -193,9 +193,37 @@ begin
 end;
 
 procedure TScanCorrelator.AngleInit;
+const
+  CAngleCount = 60;
 var
-  iScan, iAngle, iRadius, pos: Integer;
-  sn, cs, r, bestr, bestAngle: Double;
+  rBeg, rEnd: Integer;
+
+   function DoOne(iScan: Integer; a: Double; var arr: TDoubleDynArray): Integer;
+   var
+     iRadius, iAngle: Integer;
+     sn, cs, cy, cx: Double;
+     scn: TInputScan;
+   begin
+     Result := 0;
+     scn := FInputScans[iScan];
+     cx := scn.Center.X;
+     cy := scn.Center.Y;
+
+     for iAngle := 0 to CAngleCount - 1 do
+     begin
+       SinCos(a + DegToRad(iAngle * (180 / CAngleCount)), sn, cs);
+       for iRadius:= rBeg to rEnd do
+       begin
+         arr[Result + 0] := scn.GetPointD(cy + sn * iRadius, cx + cs * iRadius, isImage, imLinear);
+         arr[Result + 1] := scn.GetPointD(cy - sn * iRadius, cx - cs * iRadius, isImage, imLinear);
+         Inc(Result, 2);
+       end;
+     end;
+  end;
+
+var
+  iScan, iAngle, pos: Integer;
+  a,r, bestr, bestAngle: Double;
   base, angle: TDoubleDynArray;
 begin
   WriteLn('AngleInit');
@@ -203,19 +231,13 @@ begin
   if Length(FInputScans) <= 0 then
     Exit;
 
-  SetLength(base, FInputScans[0].Width);
+  SetLength(base, FInputScans[0].Width * CAngleCount);
 
-  pos := 0;
-  for iRadius:= -Round(C45RpmLabelOuterSize * 0.5 * FOutputDPI) to -Round(C45RpmInnerSize * 0.5 * FOutputDPI) do
-  begin
-    base[pos] := FInputScans[0].GetPointD(FInputScans[0].Center.Y, FInputScans[0].Center.X + iRadius, isImage, imLinear);
-    Inc(pos);
-  end;
-  for iRadius:= Round(C45RpmInnerSize * 0.5 * FOutputDPI) to Round(C45RpmLabelOuterSize * 0.5 * FOutputDPI) do
-  begin
-    base[pos] := FInputScans[0].GetPointD(FInputScans[0].Center.Y, FInputScans[0].Center.X + iRadius, isImage, imLinear);
-    Inc(pos);
-  end;
+  rBeg := Round(C45RpmInnerSize * 0.5 * FOutputDPI);
+  rEnd := Round(C45RpmLabelOuterSize * 0.5 * FOutputDPI);
+
+  pos := DoOne(0, 0, base);
+
   SetLength(base, pos);
   SetLength(angle, pos);
 
@@ -227,30 +249,20 @@ begin
 
     for iAngle := 0 to 359 do
     begin
-      SinCos(DegToRad(iAngle), sn, cs);
+      a := DegToRad(iAngle);
 
-      pos := 0;
-      for iRadius:= -Round(C45RpmLabelOuterSize * 0.5 * FOutputDPI) to -Round(C45RpmInnerSize * 0.5 * FOutputDPI) do
-      begin
-        angle[pos] := FInputScans[iScan].GetPointD(FInputScans[iScan].Center.Y + sn * iRadius, FInputScans[iScan].Center.X + cs * iRadius, isImage, imLinear);
-        Inc(pos);
-      end;
-      for iRadius:= Round(C45RpmInnerSize * 0.5 * FOutputDPI) to Round(C45RpmLabelOuterSize * 0.5 * FOutputDPI) do
-      begin
-        angle[pos] := FInputScans[iScan].GetPointD(FInputScans[iScan].Center.Y + sn * iRadius, FInputScans[iScan].Center.X + cs * iRadius, isImage, imLinear);
-        Inc(pos);
-      end;
+      DoOne(iScan, a, angle);
 
       r := RMSE(base, angle);
 
-      if r < bestr then
+      if r <= bestr then
       begin
         bestr := r;
-        bestAngle := DegToRad(iAngle);
+        bestAngle := a;
       end;
     end;
 
-    FPerSnanAngles[iScan] := AngleTo02Pi(bestAngle);
+    FPerSnanAngles[iScan] := bestAngle;
   end;
 end;
 
@@ -452,7 +464,7 @@ begin
 
   for i := 1 to High(FInputScans) do
   begin
-    FPerSnanAngles[i] := AngleTo02Pi(FPerSnanAngles[i] + x[High(FInputScans) * 0 + i - 1]);
+    FPerSnanAngles[i] += x[High(FInputScans) * 0 + i - 1];
 
     p := FInputScans[i].Center;
     p.X += x[High(FInputScans) * 1 + i - 1];
@@ -471,44 +483,9 @@ end;
 function TScanCorrelator.PowellCrop(const x: TVector; obj: Pointer): TScalar;
 var
   inputIdx: PtrInt absolute obj;
-  accCnts: TIntegerDynArray;
-  accs: TDoubleDynArray;
-  center, rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy: Double;
-
-  procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
-  var
-    ox, stdDevPos: Integer;
-    r, bt, px, py: Double;
-    stdDevArr: TDoubleDynArray;
-  begin
-    stdDevPos := 0;
-    SetLength(stdDevArr, Length(FOutputImage[0]));
-
-    for ox := 0 to High(FOutputImage[0]) do
-    begin
-      r := Sqrt(Sqr(center - AIndex) + Sqr(center - ox));
-      bt := AngleTo02Pi(ArcTan2(center - AIndex, center - ox));
-
-      px := ox - center + cx;
-      py := AIndex - center + cy;
-
-      if FInputScans[inputIdx].InRangePointD(py, px) and InRange(r, rBeg, rEnd) and
-          not In02PiExtentsAngle(bt, a0a, a0b) and not In02PiExtentsAngle(bt, a1a, a1b) then
-      begin
-        stdDevArr[stdDevPos] := FInputScans[inputIdx].GetPointD(py, px, isImage, imLinear);
-        Inc(stdDevPos);
-      end;
-    end;
-
-    if stdDevPos > 0 then
-    begin
-      accs[AIndex] := -StdDev(PDouble(@stdDevArr[0]), stdDevPos);
-      accCnts[AIndex] := stdDevPos;
-    end;
-  end;
-
-var
-  i, cnt: Integer;
+  rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy, ri, rri, sn, cs, bt, px, py: Double;
+  pos, arrPos: Integer;
+  stdDevArr: TDoubleDynArray;
 begin
   Result := 1000.0;
 
@@ -523,23 +500,38 @@ begin
   rBeg := C45RpmLastMusicGroove * 0.5 * FOutputDPI;
   rEnd := C45RpmFirstMusicGroove * 0.5 * FOutputDPI;
 
-  center := Length(FOutputImage) / 2.0;
   cx := FInputScans[inputIdx].Center.X;
   cy := FInputScans[inputIdx].Center.Y;
 
-  SetLength(accs, Length(FOutputImage));
-  SetLength(accCnts, Length(FOutputImage));
+  SetLength(stdDevArr, Ceil((rEnd - rBeg) / FOutputDPI * CAreaGroovesPerInch) * FPointsPerRevolution);
 
-  ProcThreadPool.DoParallelLocalProc(@DoY, 0, High(FOutputImage));
+  ri := (rEnd - rBeg) / (CAreaGroovesPerInch * (FPointsPerRevolution - 1));
 
-  cnt := 0;
-  Result := 0;
-  for i := 0 to High(FOutputImage) do
-  begin
-    Result += accs[i] * accCnts[i];
-    cnt += accCnts[i];
-  end;
-  Result := DivDef(Result, cnt, 1000.0);
+  pos := 0;
+  arrPos := 0;
+  repeat
+    bt := AngleTo02Pi(FRadiansPerRevolutionPoint * pos);
+
+    SinCos(bt, sn, cs);
+
+    rri := rBeg + ri * pos;
+
+    px := cs * rri + cx;
+    py := sn * rri + cy;
+
+    Assert(pos < Length(stdDevArr));
+
+    if FInputScans[inputIdx].InRangePointD(py, px) and
+        not In02PiExtentsAngle(bt, a0a, a0b) and not In02PiExtentsAngle(bt, a1a, a1b) then
+    begin
+      stdDevArr[arrPos] := FInputScans[inputIdx].GetPointD(py, px, isImage, imLinear);
+      Inc(arrPos);
+    end;
+
+    Inc(pos);
+  until rri >= rEnd;
+
+  Result := -StdDev(PDouble(@stdDevArr[0]), arrPos);
 
   Write(FInputScans[inputIdx].PNGFileName, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', -Result:12:6, #13);
 end;

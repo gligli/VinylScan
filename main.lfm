@@ -48,7 +48,7 @@ object MainForm: TMainForm
       Top = 152
       Width = 200
       TabOrder = 6
-      Text = 'data\think.wav'
+      Text = 'data\sample.wav'
     end
     object edInputPNG: TEdit
       Left = 8
@@ -56,7 +56,7 @@ object MainForm: TMainForm
       Top = 128
       Width = 200
       TabOrder = 4
-      Text = 'data\think_correlated.png'
+      Text = 'data\sample_correlated.png'
     end
     object edOutputPNG: TEdit
       Left = 8
@@ -64,7 +64,7 @@ object MainForm: TMainForm
       Top = 97
       Width = 200
       TabOrder = 2
-      Text = 'data\think_correlated.png'
+      Text = 'data\sample_correlated.png'
     end
     object mmInputPNGs: TMemo
       Left = 8
@@ -72,10 +72,10 @@ object MainForm: TMainForm
       Top = 8
       Width = 200
       Lines.Strings = (
-        'data\0001.png'
-        'data\0002.png'
-        'data\0003.png'
-        'data\0004.png'
+        'data\sample_0001.png'
+        'data\sample_0002.png'
+        'data\sample_0003.png'
+        'data\sample_0004.png'
       )
       ScrollBars = ssBoth
       TabOrder = 0
@@ -112,7 +112,7 @@ object MainForm: TMainForm
       Left = 264
       Height = 23
       Top = 8
-      Width = 131
+      Width = 64
       ItemHeight = 15
       ItemIndex = 2
       Items.Strings = (
@@ -161,10 +161,10 @@ object MainForm: TMainForm
       OnClick = btOutWAVClick
     end
     object cbSR: TComboBox
-      Left = 264
+      Left = 329
       Height = 23
-      Top = 32
-      Width = 131
+      Top = 8
+      Width = 66
       ItemHeight = 15
       ItemIndex = 1
       Items.Strings = (
@@ -178,7 +178,7 @@ object MainForm: TMainForm
     object cbMethod: TComboBox
       Left = 264
       Height = 23
-      Top = 56
+      Top = 32
       Width = 131
       ItemHeight = 15
       ItemIndex = 1

@@ -8,7 +8,7 @@ uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, scan2track, scancorrelator, utils, math, inputscan;
 
 const
-  CReducShift = 0;
+  CReducShift = 1;
   CReducFactor = 1.0 / (1 shl CReducShift);
 
 type

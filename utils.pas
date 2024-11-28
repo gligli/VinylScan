@@ -412,7 +412,7 @@ function AngleTo02Pi(x: Double): Double;
 begin
   while x < 0.0 do
     x += 2.0 * Pi;
-  while x >= 2.0 * Pi do
+  while x > 2.0 * Pi do
     x -= 2.0 * Pi;
 
   Assert(InRange(x, 0, 2.0 * Pi));
