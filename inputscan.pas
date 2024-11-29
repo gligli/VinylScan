@@ -11,7 +11,7 @@ uses
 type
   TMinimizeMethod = (mmNone, mmPowell, mmASA, mmLBFGS);
   TInterpMode = (imPoint, imLinear, imHermite);
-  TInterpSource = (isImage, isSobelX, isSobelY);
+  TInterpSource = (isImage, isXGradient, isYGradient);
 
   { TInputScan }
 
@@ -128,8 +128,8 @@ begin
       if Self.InRangePointD(yy, xx) then
       begin
         func -= Self.GetPointD(yy, xx, isImage, imLinear);
-        grad[0] -= Self.GetPointD(yy, xx, isSobelX, imLinear);
-        grad[1] -= Self.GetPointD(yy, xx, isSobelY, imLinear);
+        grad[0] -= Self.GetPointD(yy, xx, isXGradient, imLinear);
+        grad[1] -= Self.GetPointD(yy, xx, isYGradient, imLinear);
       end;
     end;
 
@@ -282,8 +282,8 @@ function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource; Mode: TInterp
     Result := 0;
     case Source of
       isImage: Result := FImage[AY, AX];
-      isSobelX: Result := Convolve(FImage, CSobelX, AY, AX);
-      isSobelY: Result := Convolve(FImage, CSobelY, AY, AX);
+      isXGradient: Result := Convolve(FImage, CSobelX, AY, AX);
+      isYGradient: Result := Convolve(FImage, CSobelY, AY, AX);
     end;
     Result *= (1.0 / High(Word));
   end;

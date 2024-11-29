@@ -140,8 +140,8 @@ begin
 
       fx := Self.Scan.GetPointD(predy, predx, isImage, imLinear);
       func -= fx;
-      grad[0] -= Self.Scan.GetPointD(predy, predx, isSobelX, imLinear) * (Self.FSinCosLut[i].X * id) +
-                 Self.Scan.GetPointD(predy, predx, isSobelY, imLinear) * (Self.FSinCosLut[i].Y * id);
+      grad[0] -= Self.Scan.GetPointD(predy, predx, isXGradient, imLinear) * (Self.FSinCosLut[i].X * id) +
+                 Self.Scan.GetPointD(predy, predx, isYGradient, imLinear) * (Self.FSinCosLut[i].Y * id);
 
       //main.Form1.Image.Picture.Bitmap.Canvas.Pixels[round(predx * CReducFactor), round(predy * CReducFactor)] := clBlue;
     end;

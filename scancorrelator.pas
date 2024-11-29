@@ -223,7 +223,7 @@ var
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     pos: Integer;
-    ti, ri, t, r, rEnd, px, py, cx, cy, rri, skx, sky, sn, cs: Double;
+    ti, ri, t, r, px, py, cx, cy, rri, skx, sky, sn, cs: Double;
   begin
     if not InRange(AIndex, 0, High(FInputScans)) then
       Exit;
@@ -246,10 +246,9 @@ var
     end;
 
     ti := FRadiansPerRevolutionPoint;
-    ri := CAreaWidth * FOutputDPI / (CAreaGroovesPerInch * (FPointsPerRevolution - 1));
+    ri := FOutputDPI / (CAreaGroovesPerInch * (FPointsPerRevolution - 1));
 
     r := CAreaBegin * 0.5 * FOutputDPI;
-    rEnd := CAreaEnd * 0.5 * FOutputDPI;
     pos := 0;
     repeat
       SinCos(t + ti * pos, sn, cs);
@@ -259,13 +258,11 @@ var
       px := cs * rri * skx + cx;
       py := sn * rri * sky + cy;
 
-      Assert(pos < Length(imgData[AIndex]));
-
       if FInputScans[AIndex].InRangePointD(py, px) then
         imgData[AIndex, pos] := FInputScans[AIndex].GetPointD(py, px, isImage, imLinear);
 
       Inc(pos);
-    until rri >= rEnd;
+    until pos >= Length(imgData[0]);
 
     SetLength(imgData[AIndex], pos);
   end;
@@ -304,8 +301,8 @@ var
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
-    pos, iArg: Integer;
-    ri, t, r, rEnd, px, py, cx, cy, rri, skx, sky, ti, sn, cs, p, gimgx, gimgy, gt, gcx, gcy, gskx, gsky: Double;
+    pos: Integer;
+    ri, t, r, px, py, cx, cy, rri, skx, sky, ti, sn, cs, p, gimgx, gimgy, gt, gcx, gcy, gskx, gsky: Double;
   begin
     if not InRange(AIndex, 0, High(FInputScans)) then
       Exit;
@@ -328,10 +325,9 @@ var
     end;
 
     ti := FRadiansPerRevolutionPoint;
-    ri := CAreaWidth * FOutputDPI / (CAreaGroovesPerInch * (FPointsPerRevolution - 1));
+    ri := FOutputDPI / (CAreaGroovesPerInch * (FPointsPerRevolution - 1));
 
     r := CAreaBegin * 0.5 * FOutputDPI;
-    rEnd := CAreaEnd * 0.5 * FOutputDPI;
     pos := 0;
     repeat
       SinCos(t + ti * pos, sn, cs);
@@ -341,24 +337,22 @@ var
       px := cs * rri * skx + cx;
       py := sn * rri * sky + cy;
 
-      Assert(pos < Length(imgData[AIndex]));
-
       if FInputScans[AIndex].InRangePointD(py, px) then
       begin
-        p := FInputScans[AIndex].GetPointD(py, px, isImage, imHermite);
+        p := FInputScans[AIndex].GetPointD(py, px, isImage, imLinear);
         imgData[AIndex, pos] := p;
-
-        gimgx := FInputScans[AIndex].GetPointD(py, px, isSobelX, imHermite);
-        gimgy := FInputScans[AIndex].GetPointD(py, px, isSobelY, imHermite);
-
-        gt := gimgx * -sn * ri * skx + gimgy * cs * ri * sky;
-        gcx := gimgx;
-        gcy := gimgy;
-        gskx := gimgx * cs * ri;
-        gsky := gimgy * sn * ri;
 
         if AIndex > 0 then
         begin
+          gimgx := FInputScans[AIndex].GetPointD(py, px, isXGradient, imLinear);
+          gimgy := FInputScans[AIndex].GetPointD(py, px, isYGradient, imLinear);
+
+          gt := (gimgx * -sn + gimgy * cs) * ri;
+          gcx := gimgx;
+          gcy := gimgy;
+          gskx := gimgx * cs * ri;
+          gsky := gimgy * sn * ri;
+
           gradData[High(FInputScans) * 0 + AIndex - 1, pos] := gt;
           gradData[High(FInputScans) * 1 + AIndex - 1, pos] := gcx;
           gradData[High(FInputScans) * 2 + AIndex - 1, pos] := gcy;
@@ -368,13 +362,7 @@ var
       end;
 
       Inc(pos);
-    until rri >= rEnd;
-
-    SetLength(imgData[AIndex], pos);
-
-    if AIndex > 0 then
-      for iArg := 0 to 4 do
-        SetLength(gradData[High(FInputScans) * iArg + AIndex - 1], pos);
+    until pos >= Length(imgData[0]);
   end;
 
   procedure DoMSE(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
@@ -391,12 +379,13 @@ var
   end;
 
 var
-  i: Integer;
+  i, cnt: Integer;
 begin
   func := 0;
+  cnt := Ceil(CAreaWidth * CAreaGroovesPerInch * FPointsPerRevolution);
   SetLength(imgResults, High(FInputScans));
-  SetLength(imgData, Length(FInputScans), Ceil(CAreaWidth * CAreaGroovesPerInch) * FPointsPerRevolution);
-  SetLength(gradData, Length(grad), Ceil(CAreaWidth * CAreaGroovesPerInch) * FPointsPerRevolution);
+  SetLength(imgData, Length(FInputScans), cnt);
+  SetLength(gradData, Length(grad), cnt);
 
   ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FInputScans));
   ProcThreadPool.DoParallelLocalProc(@DoMSE, 0, High(FInputScans) - 1);
@@ -425,7 +414,7 @@ var
 begin
   WriteLn('Analyze');
 
-  if Length(FInputScans) <= 0 then
+  if Length(FInputScans) <= 1 then
     Exit;
 
   for i := 0 to High(FInputScans) do
@@ -445,13 +434,13 @@ begin
     x[High(FInputScans) * 3 + i - 1] := FPerSnanSkews[i].X;
     x[High(FInputScans) * 4 + i - 1] := FPerSnanSkews[i].Y;
 
-    bl[High(FInputScans) * 0 + i - 1] := -2.0 * Pi;
+    bl[High(FInputScans) * 0 + i - 1] := FPerSnanAngles[i] - 2.0 * Pi;
     bl[High(FInputScans) * 1 + i - 1] := radiusOuter;
     bl[High(FInputScans) * 2 + i - 1] := radiusOuter;
     bl[High(FInputScans) * 3 + i - 1] := 0.9;
     bl[High(FInputScans) * 4 + i - 1] := 0.9;
 
-    bu[High(FInputScans) * 0 + i - 1] := 2.0 * Pi;
+    bu[High(FInputScans) * 0 + i - 1] := FPerSnanAngles[i] + 2.0 * Pi;
     bu[High(FInputScans) * 1 + i - 1] := FInputScans[i].Width - radiusOuter;
     bu[High(FInputScans) * 2 + i - 1] := FInputScans[i].Height - radiusOuter;
     bu[High(FInputScans) * 3 + i - 1] := 1.1;

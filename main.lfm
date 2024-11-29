@@ -135,7 +135,7 @@ object MainForm: TMainForm
     object btOutPNG: TButton
       Left = 208
       Height = 23
-      Top = 96
+      Top = 97
       Width = 23
       Caption = '...'
       TabOrder = 3
