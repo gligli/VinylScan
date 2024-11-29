@@ -1,8 +1,8 @@
 object MainForm: TMainForm
   Left = 387
-  Height = 600
+  Height = 720
   Top = 87
-  Width = 800
+  Width = 960
   HorzScrollBar.Increment = 240
   HorzScrollBar.Page = 640
   HorzScrollBar.Tracking = True
@@ -11,15 +11,14 @@ object MainForm: TMainForm
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 600
-  ClientWidth = 800
+  ClientHeight = 720
+  ClientWidth = 960
   Color = 4210752
   DoubleBuffered = False
   OnCreate = FormCreate
   ParentDoubleBuffered = False
   LCLVersion = '3.6.0.0'
   Scaled = False
-  WindowState = wsMaximized
   object Image: TImage
     Left = 0
     Height = 480
@@ -181,16 +180,16 @@ object MainForm: TMainForm
       Top = 32
       Width = 131
       ItemHeight = 15
-      ItemIndex = 1
+      ItemIndex = 3
       Items.Strings = (
         'No optimization'
         'Powell''s method'
-        'MinASA (estimated)'
-        'MinLBFGS (estimated)'
+        'MinASA'
+        'MinLBFGS'
       )
       Style = csDropDownList
       TabOrder = 10
-      Text = 'Powell''s method'
+      Text = 'MinLBFGS'
     end
   end
   object odInPNGs: TOpenDialog

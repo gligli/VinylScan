@@ -29,6 +29,7 @@ type
   TWordDynArray2 = array of TWordDynArray;
   TSingleDynArray2 = array of TSingleDynArray;
   TDoubleDynArray2 = array of TDoubleDynArray;
+  TDoubleDynArray3 = array of TDoubleDynArray2;
 
   TGRSEvalFunc = function(x: Double; Data: Pointer): Double of object;
 
@@ -136,7 +137,8 @@ function Convolve(const image:TWordDynArray2; const kernel: TConvolutionKernel; 
 procedure SobelEdgeDetector(const image: TSingleDynArray2; var out_image: TSingleDynArray2);
 
 function PearsonCorrelation(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
-function RMSE(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
+function MSE(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
+function MSEGradient(const x: TDoubleDynArray; const y: TDoubleDynArray; const g: TDoubleDynArray): Double;
 
 function Make16BitSample(smp: Double): SmallInt;
 function AngleTo02Pi(x: Double): Double;
@@ -382,7 +384,7 @@ begin
     Result := num / den;
 end;
 
-function RMSE(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
+function MSE(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
 var
   i, cnt: Integer;
 begin
@@ -399,8 +401,26 @@ begin
 
   if cnt > 1 then
     Result /= cnt;
+end;
 
-  Result := Sqrt(Result);
+function MSEGradient(const x: TDoubleDynArray; const y: TDoubleDynArray; const g: TDoubleDynArray): Double;
+var
+  i, cnt: Integer;
+begin
+  Assert(Length(x) = Length(y));
+  Assert(Length(x) = Length(g));
+
+  cnt := 0;
+  Result := 0;
+  for i := 0 to High(x) do
+    if not IsNan(x[i]) and not IsNan(y[i]) and not IsNan(g[i]) then
+    begin
+      Result -= 2.0 *(x[i] - y[i]) * g[i];
+      Inc(cnt);
+    end;
+
+  if cnt > 1 then
+    Result /= cnt;
 end;
 
 function Make16BitSample(smp: Double): SmallInt;
