@@ -78,7 +78,7 @@ implementation
 
 const
   CAreaBegin = C45RpmInnerSize;
-  CAreaEnd = C45RpmLastMusicGroove;
+  CAreaEnd = C45RpmFirstMusicGroove;
   CAreaWidth = (CAreaEnd - CAreaBegin) * 0.5;
   CAreaGroovesPerInch = 16;
 
@@ -223,7 +223,7 @@ var
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     pos: Integer;
-    ti, ri, t, r, rEnd, px, py, cx, cy, rri, skx, sky, ta, sn, cs: Double;
+    ti, ri, t, r, rEnd, px, py, cx, cy, rri, skx, sky, sn, cs: Double;
   begin
     if not InRange(AIndex, 0, High(FInputScans)) then
       Exit;

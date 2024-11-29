@@ -456,7 +456,7 @@ end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
 begin
-  Result := InRange(Y, 1, Height - 2) and InRange(X, 1, Width - 2);
+  Result := InRange(Y, 2, Height - 3) and InRange(X, 2, Width - 3);
 end;
 
 { TDPIAwareReaderPNG }
