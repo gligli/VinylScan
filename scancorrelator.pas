@@ -96,6 +96,8 @@ begin
   SetLength(FInputScans, AFileNames.Count);
   SetLength(FPerSnanSkews, Length(FInputScans));
   SetLength(FPerSnanAngles, Length(FInputScans));
+  SetLength(FPerSnanCrops, Length(FInputScans), 4);
+
   for i := 0 to AFileNames.Count - 1 do
   begin
     FInputScans[i] := TInputScan.Create(Ceil(Pi * C45RpmOuterSize * FOutputDPI), AOutputDPI, True);
@@ -236,7 +238,7 @@ var
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     i, pos: Integer;
-    ti, ri, t, r, px, py, cx, cy, rri, skx, sky, sn, cs: Double;
+    ri, t, r, px, py, cx, cy, rri, skx, sky, sn, cs: Double;
     sinCosLUT: TPointDDynArray;
   begin
     if not InRange(AIndex, 0, High(FInputScans)) then
@@ -261,7 +263,6 @@ var
 
     BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
 
-    ti := FRadiansPerRevolutionPoint;
     ri := FOutputDPI / (CAreaGroovesPerInch * (FPointsPerRevolution - 1));
 
     r := CAreaBegin * 0.5 * FOutputDPI;
@@ -302,7 +303,7 @@ begin
 
   Result := Sum(imgResults);
 
-  Write('RMSE: ', Sqrt(Mean(imgResults)):9:6,#13);
+  Write('RMSE: ', Sqrt(Mean(imgResults)):12:9,#13);
 end;
 
 procedure TScanCorrelator.GradientsAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
@@ -314,7 +315,7 @@ var
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     i, pos: Integer;
-    gr, ri, t, r, px, py, cx, cy, rri, skx, sky, ti, sn, cs, p, gimgx, gimgy, gt, gcx, gcy, gskx, gsky: Double;
+    ri, t, r, px, py, cx, cy, rri, skx, sky, sn, cs, p, gimgx, gimgy, gt, gcx, gcy, gskx, gsky: Double;
     sinCosLUT: TPointDDynArray;
   begin
     if not InRange(AIndex, 0, High(FInputScans)) then
@@ -339,7 +340,6 @@ var
 
     BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
 
-    ti := FRadiansPerRevolutionPoint;
     ri := FOutputDPI / (CAreaGroovesPerInch * (FPointsPerRevolution - 1));
 
     r := CAreaBegin * 0.5 * FOutputDPI;
@@ -411,7 +411,7 @@ begin
 
   func := Sum(imgResults);
 
-  Write('RMSE: ', Sqrt(Mean(imgResults)):9:6,#13);
+  Write('RMSE: ', Sqrt(Mean(imgResults)):12:9,#13);
 end;
 
 function TScanCorrelator.GetImageDerivationOperator: TImageDerivationOperator;
@@ -583,7 +583,6 @@ begin
   WriteLn('Crop');
 
   SetLength(x, 2);
-  SetLength(FPerSnanCrops, Length(FInputScans), 4);
 
   for i := 0 to High(FInputScans) do
   begin
@@ -614,11 +613,11 @@ var
     maxOutVal := -Infinity;
     for ox := 0 to High(FOutputImage[0]) do
     begin
-      r := Sqrt(Sqr(center - AIndex) + Sqr(center - ox));
+      r := Sqrt(Sqr(AIndex - center) + Sqr(ox - center));
 
       if InRange(r, rBeg, rEnd) then
       begin
-        bt := AngleTo02Pi(ArcTan2(center - AIndex, center - ox));
+        bt := ArcTan2(AIndex - center, ox - center);
 
         cnt := 0;
         acc := 0;
