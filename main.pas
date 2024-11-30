@@ -24,6 +24,7 @@ type
     btScansCorrelator: TButton;
     btTest: TButton;
     cbDPI: TComboBox;
+    cbImgDerv: TComboBox;
     cbSR: TComboBox;
     cbMethod: TComboBox;
     edInputPNG: TEdit;
@@ -79,6 +80,7 @@ begin
     s2t.Method := TMinimizeMethod(cbMethod.ItemIndex);
     s2t.OutputWAVFileName := edOutputWAV.Text;
     s2t.Scan.PNGFileName := edInputPNG.Text;
+    s2t.Scan.ImageDerivationOperator := TImageDerivationOperator(cbImgDerv.ItemIndex);
 
     s2t.Scan.LoadPNG;
 
@@ -144,6 +146,7 @@ begin
   sc := TScanCorrelator.Create(mmInputPNGs.Lines, StrToIntDef(cbDPI.Text, 2400));
   try
     sc.Method := TMinimizeMethod(cbMethod.ItemIndex);
+    sc.ImageDerivationOperator := TImageDerivationOperator(cbImgDerv.ItemIndex);
     sc.OutputPNGFileName := edOutputPNG.Text;
 
     sc.LoadPNGs;

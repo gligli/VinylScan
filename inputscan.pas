@@ -9,7 +9,6 @@ uses
   utils, minlbfgs, powell;
 
 type
-  TMinimizeMethod = (mmNone, mmPowell, mmASA, mmLBFGS);
   TInterpMode = (imPoint, imLinear, imHermite);
   TInterpSource = (isImage, isXGradient, isYGradient);
 
@@ -17,6 +16,7 @@ type
 
   TInputScan = class
   private
+    FImageDerivationOperator: TImageDerivationOperator;
     FPNGFileName: String;
     FDPI: Integer;
     FPointsPerRevolution: Integer;
@@ -51,6 +51,8 @@ type
     function GetPointD(Y, X: Double; Source: TInterpSource; Mode: TInterpMode): Double; inline;
 
     property PNGFileName: String read FPNGFileName write FPNGFileName;
+    property ImageDerivationOperator: TImageDerivationOperator read FImageDerivationOperator write FImageDerivationOperator;
+
     property DPI: Integer read FDPI;
     property Width: Integer read GetWidth;
     property Height: Integer read GetHeight;
@@ -58,7 +60,7 @@ type
     property Center: TPointD read FCenter write FCenter;
     property ConcentricGrooveRadius: Double read FConcentricGrooveRadius;
     property FirstGrooveRadius: Double read FFirstGrooveRadius;
-    property GrooveStartAngle: Double read FGrooveStartAngle write FGrooveStartAngle;
+    property GrooveStartAngle: Double read FGrooveStartAngle;
     property GrooveStartPoint: TPointD read FGrooveStartPoint;
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
@@ -282,8 +284,8 @@ function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource; Mode: TInterp
     Result := 0;
     case Source of
       isImage: Result := FImage[AY, AX];
-      isXGradient: Result := Convolve(FImage, CSobelX, AY, AX);
-      isYGradient: Result := Convolve(FImage, CSobelY, AY, AX);
+      isXGradient: Result := Convolve(FImage, CImageDerivationKernels[FImageDerivationOperator, False], AY, AX);
+      isYGradient: Result := Convolve(FImage, CImageDerivationKernels[FImageDerivationOperator, True], AY, AX);
     end;
     Result *= (1.0 / High(Word));
   end;
@@ -331,6 +333,7 @@ begin
   FPointsPerRevolution := APointsPerRevolution;
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
   FSilent := ASilent;
+  FImageDerivationOperator := idoSobel;
 end;
 
 destructor TInputScan.Destroy;

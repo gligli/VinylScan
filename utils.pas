@@ -22,6 +22,9 @@ type
     L, T, R, B: Double;
   end;
 
+  TMinimizeMethod = (mmNone, mmPowell, mmASA, mmLBFGS);
+
+  TImageDerivationOperator = (idoPrewitt, idoSobel, idoScharr);
   TConvolutionKernel = array[-1..1, -1..1] of integer;
 
   TPointDDynArray = array of TPointD;
@@ -104,12 +107,11 @@ const
   cPhi = (1 + sqrt(5)) / 2;
   cInvPhi = 1 / cPhi;
 
-  CSobelX: TConvolutionKernel = ((-1, 0, 1), (-2, 0, 2), (-1, 0, 1));
-  CSobelY: TConvolutionKernel = ((-1, -2, -1), (0, 0, 0), (1, 2, 1));
-  CPrewittX: TConvolutionKernel = ((-1, 0, 1), (-1, 0, 1), (-1, 0, 1));
-  CPrewittY: TConvolutionKernel = ((-1, -1, -1), (0, 0, 0), (1, 1, 1));
-  CSharrX: TConvolutionKernel = ((-3, 0, 3), (-10, 0, 10), (-3, 0, 3));
-  CSharrY: TConvolutionKernel = ((-3, -10, -3), (0, 0, 0), (3, 10, 3));
+  CImageDerivationKernels: array[TImageDerivationOperator, Boolean {Y?}] of TConvolutionKernel = (
+    (((-1, 0, 1), (-1, 0, 1), (-1, 0, 1)),   ((-1, -1, -1), (0, 0, 0), (1, 1, 1))),  // ckoPrewitt
+    (((-1, 0, 1), (-2, 0, 2), (-1, 0, 1)),   ((-1, -2, -1), (0, 0, 0), (1, 2, 1))),  // ckoSobel
+    (((-3, 0, 3), (-10, 0, 10), (-3, 0, 3)), ((-3, -10, -3), (0, 0, 0), (3, 10, 3))) // ckoScharr
+  );
 
 procedure SpinEnter(Lock: PSpinLock); assembler;
 procedure SpinLeave(Lock: PSpinLock); assembler;
@@ -138,7 +140,6 @@ function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: D
 
 function Convolve(const image:TSingleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double; overload;
 function Convolve(const image:TWordDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Integer; overload;
-procedure SobelEdgeDetector(const image: TSingleDynArray2; var out_image: TSingleDynArray2);
 
 function PearsonCorrelation(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
 function MSE(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
@@ -342,21 +343,6 @@ begin
   for y := -1 to 1 do
     for x := -1 to 1 do
       Result += image[y + row, x + col] * kernel[y, x];
-end;
-
-procedure SobelEdgeDetector(const image: TSingleDynArray2; var out_image: TSingleDynArray2);
-var
-	y, x: Integer;
-  gx, gy: Double;
-begin
-  for y := 1 to Length(image) - 2 do
-    for x := 1 to Length(image[0]) - 2 do
-    begin
-			gx := Convolve(image, CSobelX, y, x);
-			gy := Convolve(image, CSobelY, y, x);
-
-      out_image[y, x] := Sqrt(gx * gx + gy * gy);
-    end;
 end;
 
 function PearsonCorrelation(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;

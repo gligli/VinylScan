@@ -44,30 +44,40 @@ object MainForm: TMainForm
     object edOutputWAV: TEdit
       Left = 8
       Height = 23
+      Hint = 'Scan to track output WAV file'
       Top = 152
       Width = 200
+      ParentShowHint = False
+      ShowHint = True
       TabOrder = 6
       Text = 'data\sample.wav'
     end
     object edInputPNG: TEdit
       Left = 8
       Height = 23
+      Hint = 'Scan to track input PNG file'
       Top = 128
       Width = 200
+      ParentShowHint = False
+      ShowHint = True
       TabOrder = 4
       Text = 'data\sample_correlated.png'
     end
     object edOutputPNG: TEdit
       Left = 8
       Height = 23
+      Hint = 'Scans correlator output PNG file'
       Top = 97
       Width = 200
+      ParentShowHint = False
+      ShowHint = True
       TabOrder = 2
       Text = 'data\sample_correlated.png'
     end
     object mmInputPNGs: TMemo
       Left = 8
       Height = 88
+      Hint = 'Scans correlator input PNG files'
       Top = 8
       Width = 200
       Lines.Strings = (
@@ -80,7 +90,9 @@ object MainForm: TMainForm
         'data\sample_6.png'
         'data\sample_7.png'
       )
+      ParentShowHint = False
       ScrollBars = ssBoth
+      ShowHint = True
       TabOrder = 0
       WordWrap = False
     end
@@ -90,7 +102,7 @@ object MainForm: TMainForm
       Top = 96
       Width = 131
       Caption = 'Scans correlator'
-      TabOrder = 11
+      TabOrder = 12
       OnClick = btScansCorrelatorClick
     end
     object btScan2Track: TButton
@@ -99,21 +111,25 @@ object MainForm: TMainForm
       Top = 151
       Width = 131
       Caption = 'Scan to track'
-      TabOrder = 12
+      TabOrder = 13
       OnClick = btScan2TrackClick
     end
     object btTest: TButton
       Left = 376
       Height = 25
+      Hint = 'Unit tests'
       Top = 176
       Width = 25
       Caption = 'UT'
-      TabOrder = 13
+      ParentShowHint = False
+      ShowHint = True
+      TabOrder = 14
       OnClick = btTestClick
     end
     object cbDPI: TComboBox
       Left = 264
       Height = 23
+      Hint = 'Dots per inch'
       Top = 8
       Width = 64
       ItemHeight = 15
@@ -124,6 +140,8 @@ object MainForm: TMainForm
         '2400'
         '4800'
       )
+      ParentShowHint = False
+      ShowHint = True
       TabOrder = 8
       Text = '2400'
     end
@@ -166,6 +184,7 @@ object MainForm: TMainForm
     object cbSR: TComboBox
       Left = 329
       Height = 23
+      Hint = 'Sample rate'
       Top = 8
       Width = 66
       ItemHeight = 15
@@ -175,25 +194,49 @@ object MainForm: TMainForm
         '48000'
         '96000'
       )
+      ParentShowHint = False
+      ShowHint = True
       TabOrder = 9
       Text = '48000'
     end
     object cbMethod: TComboBox
       Left = 264
       Height = 23
+      Hint = 'Optimisation method'
       Top = 32
       Width = 131
       ItemHeight = 15
-      ItemIndex = 1
+      ItemIndex = 3
       Items.Strings = (
         'No optimization'
         'Powell''s method'
         'MinASA'
         'MinLBFGS'
       )
+      ParentShowHint = False
+      ShowHint = True
       Style = csDropDownList
       TabOrder = 10
-      Text = 'Powell''s method'
+      Text = 'MinLBFGS'
+    end
+    object cbImgDerv: TComboBox
+      Left = 264
+      Height = 23
+      Hint = 'Image derivation operator'
+      Top = 56
+      Width = 131
+      ItemHeight = 15
+      ItemIndex = 1
+      Items.Strings = (
+        'Prewitt'
+        'Sobel'
+        'Scharr'
+      )
+      ParentShowHint = False
+      ShowHint = True
+      Style = csDropDownList
+      TabOrder = 11
+      Text = 'Sobel'
     end
   end
   object odInPNGs: TOpenDialog

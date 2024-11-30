@@ -57,6 +57,7 @@ constructor TScan2Track.Create(ASampleRate: Integer; ABitsPerSample: Integer; AD
 begin
   FSampleRate := ASampleRate;
   FBitsPerSample := ABitsPerSample;
+  FMethod := mmLBFGS;
 
   FPointsPerRevolution := Round(FSampleRate / C45RpmRevolutionsPerSecond);
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;

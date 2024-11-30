@@ -30,6 +30,9 @@ type
 
     FOutputImage: TSingleDynArray2;
 
+    function GetImageDerivationOperator: TImageDerivationOperator;
+    procedure SetImageDerivationOperator(AValue: TImageDerivationOperator);
+
     procedure GradientsAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
     function PowellAnalyze(const arg: TVector; obj: Pointer): TScalar;
     function PowellCrop(const x: TVector; obj: Pointer): TScalar;
@@ -48,6 +51,7 @@ type
 
     property OutputPNGFileName: String read FOutputPNGFileName write FOutputPNGFileName;
     property Method: TMinimizeMethod read FMethod write FMethod;
+    property ImageDerivationOperator: TImageDerivationOperator read GetImageDerivationOperator write SetImageDerivationOperator;
 
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
@@ -88,6 +92,7 @@ var
 begin
   FOutputDPI := AOutputDPI;
   FCorrelation := NaN;
+  FMethod := mmLBFGS;
   SetLength(FInputScans, AFileNames.Count);
   SetLength(FPerSnanSkews, Length(FInputScans));
   SetLength(FPerSnanAngles, Length(FInputScans));
@@ -396,6 +401,13 @@ begin
   Write('RMSE: ', Sqrt(Mean(imgResults)):9:6,#13);
 end;
 
+function TScanCorrelator.GetImageDerivationOperator: TImageDerivationOperator;
+begin
+  Result := idoSobel;
+  if Length(FInputScans) > 0 then
+    Result := FInputScans[0].ImageDerivationOperator;
+end;
+
 procedure TScanCorrelator.Analyze;
 var
   x, bl, bu: TVector;
@@ -503,7 +515,7 @@ var
 begin
   Result := 1000.0;
 
-  if AngleTo02Pi(x[1] - x[0]) >= DegToRad(120.0) then
+  if AngleTo02Pi(x[1] - x[0]) >= DegToRad(90.0) then
     Exit;
 
   a0a := AngleTo02Pi(x[0]);
@@ -562,8 +574,8 @@ begin
 
   for i := 0 to High(FInputScans) do
   begin
-    x[0] := AngleTo02Pi(DegToRad(-45.0));
-    x[1] := AngleTo02Pi(DegToRad(45.0));
+    x[0] := AngleTo02Pi(DegToRad(-30.0));
+    x[1] := AngleTo02Pi(DegToRad(30.0));
 
     PowellMinimize(@PowellCrop, x, 1.0 / 360.0, 1e-6, 1e-6, MaxInt, Pointer(i));
 
@@ -650,6 +662,14 @@ begin
   ProcThreadPool.DoParallelLocalProc(@DoY, 0, High(FOutputImage));
 
   FMaxOutputImageValue := MaxValue(maxOutVals);
+end;
+
+procedure TScanCorrelator.SetImageDerivationOperator(AValue: TImageDerivationOperator);
+var
+  i: Integer;
+begin
+  for i := 0 to High(FInputScans) do
+    FInputScans[i].ImageDerivationOperator := AValue;
 end;
 
 procedure TScanCorrelator.Save;
