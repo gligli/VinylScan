@@ -206,7 +206,7 @@ object MainForm: TMainForm
       Top = 32
       Width = 131
       ItemHeight = 15
-      ItemIndex = 3
+      ItemIndex = 2
       Items.Strings = (
         'No optimization'
         'Powell''s method'
@@ -217,7 +217,7 @@ object MainForm: TMainForm
       ShowHint = True
       Style = csDropDownList
       TabOrder = 10
-      Text = 'MinLBFGS'
+      Text = 'MinASA'
     end
     object cbImgDerv: TComboBox
       Left = 264
@@ -226,7 +226,7 @@ object MainForm: TMainForm
       Top = 56
       Width = 131
       ItemHeight = 15
-      ItemIndex = 1
+      ItemIndex = 2
       Items.Strings = (
         'Prewitt'
         'Sobel'
@@ -236,7 +236,7 @@ object MainForm: TMainForm
       ShowHint = True
       Style = csDropDownList
       TabOrder = 11
-      Text = 'Sobel'
+      Text = 'Scharr'
     end
   end
   object odInPNGs: TOpenDialog
