@@ -3,7 +3,7 @@
 The goal of this project is to be able to play audio from scans of a vinyl (made using a >= 2400 DPI flatbed scanner).
 This project has two parts:
 - One to aggregate and correlate many scans of a single vinyl side, to get a sharp and clear picture of all the groove angles.
-- One to extract a .WAV track from a vinyl aggregeted picture.
+- One to extract a .WAV track from a vinyl aggregated picture.
 
 Sample copyright-free vinyl scans lodated here: <http://sfx.gligli.free.fr/zik/VinylScan/>
 
