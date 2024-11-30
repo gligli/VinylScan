@@ -80,7 +80,7 @@ const
   CAreaBegin = C45RpmInnerSize;
   CAreaEnd = C45RpmFirstMusicGroove;
   CAreaWidth = (CAreaEnd - CAreaBegin) * 0.5;
-  CAreaGroovesPerInch = 16;
+  CAreaGroovesPerInch = 60;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
@@ -143,11 +143,12 @@ end;
 
 procedure TScanCorrelator.AngleInit;
 const
-  CAngleCount = 60;
+  CAngleCount = 180;
 var
   rBeg, rEnd: Integer;
+  base: TDoubleDynArray;
 
-   function DoOne(iScan: Integer; a: Double; var arr: TDoubleDynArray): Integer;
+   function DoAngle(iScan: Integer; a: Double; var arr: TDoubleDynArray): Integer;
    var
      iRadius, iAngle: Integer;
      sn, cs, cy, cx: Double;
@@ -170,10 +171,40 @@ var
      end;
   end;
 
+  procedure DoScan(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  var
+    iAngle: Integer;
+    a, r, bestr, bestAngle: Double;
+    angle: TDoubleDynArray;
+  begin
+    if not InRange(AIndex, 1, High(FInputScans)) then
+      Exit;
+
+    SetLength(angle, Length(base));
+
+    bestr := Infinity;
+    bestAngle := 0.0;
+
+    for iAngle := 0 to 359 do
+    begin
+      a := DegToRad(iAngle);
+
+      DoAngle(AIndex, a, angle);
+
+      r := MSE(base, angle);
+
+      if r <= bestr then
+      begin
+        bestr := r;
+        bestAngle := a;
+      end;
+    end;
+
+    FPerSnanAngles[AIndex] := bestAngle;
+  end;
+
 var
-  iScan, iAngle, pos: Integer;
-  a,r, bestr, bestAngle: Double;
-  base, angle: TDoubleDynArray;
+  pos: Integer;
 begin
   WriteLn('AngleInit');
 
@@ -185,34 +216,11 @@ begin
   rBeg := Round(C45RpmInnerSize * 0.5 * FOutputDPI);
   rEnd := Round(C45RpmLabelOuterSize * 0.5 * FOutputDPI);
 
-  pos := DoOne(0, 0, base);
+  pos := DoAngle(0, 0, base);
 
   SetLength(base, pos);
-  SetLength(angle, pos);
 
-
-  for iScan := 1 to High(FInputScans) do
-  begin
-    bestr := Infinity;
-    bestAngle := 0.0;
-
-    for iAngle := 0 to 359 do
-    begin
-      a := DegToRad(iAngle);
-
-      DoOne(iScan, a, angle);
-
-      r := MSE(base, angle);
-
-      if r <= bestr then
-      begin
-        bestr := r;
-        bestAngle := a;
-      end;
-    end;
-
-    FPerSnanAngles[iScan] := bestAngle;
-  end;
+  ProcThreadPool.DoParallelLocalProc(@DoScan, 1, High(FInputScans));
 end;
 
 function TScanCorrelator.PowellAnalyze(const arg: TVector; obj: Pointer): TScalar;
@@ -275,22 +283,16 @@ var
     imgResults[AIndex] := MSE(imgData[0], imgData[AIndex + 1]);
   end;
 
-var
-  i: Integer;
 begin
-  Result := 0;
   SetLength(imgData, Length(FInputScans), Ceil(CAreaWidth * CAreaGroovesPerInch) * FPointsPerRevolution);
   SetLength(imgResults, High(FInputScans));
 
   ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FInputScans));
   ProcThreadPool.DoParallelLocalProc(@DoMSE, 0, High(FInputScans) - 1);
 
-  for i := 0 to High(FInputScans) - 1 do
-    Result += imgResults[i];
-  if High(FInputScans) > 1 then
-    Result /= High(FInputScans);
+  Result := Sum(imgResults);
 
-  Write('RMSE: ', Sqrt(Result):9:6,#13);
+  Write('RMSE: ', Sqrt(Mean(imgResults)):9:6,#13);
 end;
 
 procedure TScanCorrelator.GradientsAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
@@ -302,7 +304,7 @@ var
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     pos: Integer;
-    ri, t, r, px, py, cx, cy, rri, skx, sky, ti, sn, cs, p, gimgx, gimgy, gt, gcx, gcy, gskx, gsky: Double;
+    gr, ri, t, r, px, py, cx, cy, rri, skx, sky, ti, sn, cs, p, gimgx, gimgy, gt, gcx, gcy, gskx, gsky: Double;
   begin
     if not InRange(AIndex, 0, High(FInputScans)) then
       Exit;
@@ -379,9 +381,8 @@ var
   end;
 
 var
-  i, cnt: Integer;
+  cnt: Integer;
 begin
-  func := 0;
   cnt := Ceil(CAreaWidth * CAreaGroovesPerInch * FPointsPerRevolution);
   SetLength(imgResults, High(FInputScans));
   SetLength(imgData, Length(FInputScans), cnt);
@@ -390,15 +391,9 @@ begin
   ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FInputScans));
   ProcThreadPool.DoParallelLocalProc(@DoMSE, 0, High(FInputScans) - 1);
 
-  for i := 0 to High(FInputScans) - 1 do
-    func += imgResults[i];
-  if High(FInputScans) > 1 then
-    func /= High(FInputScans);
+  func := Sum(imgResults);
 
-  //for j := 0 to High(gradData) do
-  //  Write(grad[j]:12:6);
-
-  Write('RMSE: ', Sqrt(func):9:6,#13);
+  Write('RMSE: ', Sqrt(Mean(imgResults)):9:6,#13);
 end;
 
 procedure TScanCorrelator.Analyze;
@@ -418,7 +413,7 @@ begin
     Exit;
 
   for i := 0 to High(FInputScans) do
-    WriteLn(FInputScans[i].PNGFileName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', SkewX: ', FPerSnanSkews[i].X:9:6, ', SkewY: ', FPerSnanSkews[i].Y:9:6, ' (before)');
+    WriteLn(FInputScans[i].PNGFileName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (before)');
 
   SetLength(x, High(FInputScans) * 5);
   SetLength(bl, Length(x));
@@ -469,7 +464,7 @@ begin
     end;
     mmLBFGS:
     begin
-      MinLBFGSCreate(Length(x), 5, x, LBFGSState);
+      MinLBFGSCreate(Length(x), Length(x), x, LBFGSState);
       MinLBFGSSetCond(LBFGSState, 0, 1e-12, 0, 0);
       while MinLBFGSIteration(LBFGSState) do
         if LBFGSState.NeedFG then

@@ -71,10 +71,14 @@ object MainForm: TMainForm
       Top = 8
       Width = 200
       Lines.Strings = (
-        'data\sample_0001.png'
-        'data\sample_0002.png'
-        'data\sample_0003.png'
-        'data\sample_0004.png'
+        'data\sample_0.png'
+        'data\sample_1.png'
+        'data\sample_2.png'
+        'data\sample_3.png'
+        'data\sample_4.png'
+        'data\sample_5.png'
+        'data\sample_6.png'
+        'data\sample_7.png'
       )
       ScrollBars = ssBoth
       TabOrder = 0
@@ -180,7 +184,7 @@ object MainForm: TMainForm
       Top = 32
       Width = 131
       ItemHeight = 15
-      ItemIndex = 3
+      ItemIndex = 1
       Items.Strings = (
         'No optimization'
         'Powell''s method'
@@ -189,7 +193,7 @@ object MainForm: TMainForm
       )
       Style = csDropDownList
       TabOrder = 10
-      Text = 'MinLBFGS'
+      Text = 'Powell''s method'
     end
   end
   object odInPNGs: TOpenDialog
