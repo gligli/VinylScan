@@ -36,21 +36,6 @@ type
 
   TGRSEvalFunc = function(x: Double; Data: Pointer): Double of object;
 
-  { TSimpleFilter }
-
-  TSimpleFilter = class
-  private
-    prevSmp: TDoubleDynArray;
-  public
-    Count: Integer;
-    Stages: Integer;
-    HighPass: Boolean;
-
-    constructor Create(AFc: Double; AStages: Integer; AHighPass: Boolean; AInitValue: Double = 0.0);
-
-    function ProcessSample(Smp: Double): Double;
-  end;
-
   { format of WAV file header }
   TWavHeader = record         { parameter description }
     rId             : longint; { 'RIFF'  4 characters }
@@ -151,7 +136,8 @@ function In02PiExtentsAngle(x, xmin, xmax: Double): Boolean;
 
 procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TPointDDynArray; AOriginAngle: Double = 0.0);
 
-procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray);
+procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray); overload;
+procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TDoubleDynArray); overload;
 
 implementation
 
@@ -441,35 +427,6 @@ begin
     Result := InRange(x, 0, xmax) or InRange(x, xmin, 2.0 * Pi);
 end;
 
-constructor TSimpleFilter.Create(AFc: Double; AStages: Integer; AHighPass: Boolean; AInitValue: Double);
-var
-  i: Integer;
-begin
-  Stages := AStages;
-  HighPass := AHighPass;
-  Count := trunc(sqrt(0.196202 + sqr(AFc)) / AFc);
-  SetLength(prevSmp, Stages);
-  for i := 0 to Stages - 1 do
-    prevSmp[i] := AInitValue;
-end;
-
-function TSimpleFilter.ProcessSample(Smp: Double): Double;
-var
-  i: Integer;
-  v: Double;
-begin
-  Result := Smp;
-  for i := 0 to Stages - 1 do
-  begin
-    v := prevSmp[i];
-    prevSmp[i] := Result;
-    Result := (Count * v + Result) / (Count + 1);
-  end;
-
-  if HighPass then
-    Result := Smp - Result;
-end;
-
 procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TPointDDynArray; AOriginAngle: Double = 0.0);
 var
   i: Integer;
@@ -480,8 +437,6 @@ begin
   for i := 0 to APointCount - 1 do
     SinCos(AOriginAngle + i * rprp, ASinCosLUT[i].Y, ASinCosLUT[i].X);
 end;
-
-
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray);
 var
@@ -511,6 +466,18 @@ begin
   end;
 end;
 
+procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TDoubleDynArray);
+var
+  i: Integer;
+  idata: TSmallIntDynArray;
+begin
+  SetLength(idata, Length(data));
+
+  for i := 0 to High(idata) do
+    idata[i] := Make16BitSample(data[i]);
+
+  CreateWAV(channels, resolution, rate, fn, idata);
+end;
 
 initialization
 {$ifdef DEBUG}

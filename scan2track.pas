@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Graphics, GraphType, FPCanvas, FPImage, FPWritePNG, MTProcs,
-  utils, fgl, powell, inputscan, minlbfgs, minasa;
+  utils, fgl, powell, inputscan, minlbfgs, minasa, FilterIIRLPBessel, FilterIIRHPBessel;
 
 type
 
@@ -74,7 +74,7 @@ end;
 
 const
   CPredictionPointCount = 600;
-  CPredictionRevolutionDiv = 360;
+  CPredictionRevolutionDiv = 360.0 / 1.0;
 var
   pradius, dumx, dumy: Double;
 
@@ -263,27 +263,39 @@ procedure TScan2Track.EvalTrack;
     main.MainForm.Image.Picture.Bitmap.Canvas.Pixels[round(dumx * CReducFactor), round(dumy * CReducFactor)] := clTeal;
   end;
 
+type
+  TSampleDecoderType = SmallInt;
 
 var
-  angle, radius, sn, cs, px, py, r, radiusInc, radiusIncSmoo, c8a, middleSmp: Double;
+  angle, radius, sn, cs, px, py, r, radiusInc, radiusIncSmoo, cxa, middleSmp, fsmp: Double;
   i, pos, aboveCnt, aboveAcc: Integer;
   pbuf: specialize TFPGList<TPoint>;
   t, pt: QWord;
   ismp, smp:SmallInt;
-  sf: TSimpleFilter;
-  smpBuf: array[Low(ShortInt) .. High(ShortInt)] of Double;
+  fltRadiusInc: TFilterIIRLPBessel;
+  fltSamples: TFilterIIRHPBessel;
+  smpBuf: array[Low(TSampleDecoderType) .. High(TSampleDecoderType)] of Double;
   samples: TSmallIntDynArray;
 begin
   WriteLn('EvalTrack');
 
   SetLength(samples, FSampleRate);
-  sf := TSimpleFilter.Create(CLowCutoffFreq * 2.0 / FSampleRate, 4, False);
+  fltRadiusInc := TFilterIIRLPBessel.Create(nil);
+  fltSamples := TFilterIIRHPBessel.Create(nil);
   pbuf := specialize TFPGList<TPoint>.Create;
   try
+    fltRadiusInc.FreqCut1 := CLowCutoffFreq;
+    fltRadiusInc.SampleRate := FSampleRate;
+    fltRadiusInc.Order := 8;
+
+    fltSamples.FreqCut1 := CLowCutoffFreq;
+    fltSamples.SampleRate := FSampleRate;
+    fltSamples.Order := 4;
+
     pos := 0;
     pt := GetTickCount64;
 
-    c8a := C45RpmMaxGrooveWidth * Scan.DPI / High(ShortInt);
+    cxa := C45RpmMaxGrooveWidth * Scan.DPI / High(TSampleDecoderType);
     angle := Scan.GrooveStartAngle;
     radius := Scan.FirstGrooveRadius;
     radiusInc := -(Scan.DPI / C45RpmLeadInGroovesPerInch) / FPointsPerRevolution;
@@ -294,9 +306,9 @@ begin
       SinCos(angle, sn, cs);
 
       smp := 0;
-      for ismp := Low(ShortInt) to high(ShortInt) do
+      for ismp := Low(TSampleDecoderType) to high(TSampleDecoderType) do
       begin
-        r := radius + ismp * c8a;
+        r := radius + ismp * cxa;
 
         px := cs * r + Self.Scan.Center.X;
         py := sn * r + Self.Scan.Center.Y;
@@ -309,13 +321,16 @@ begin
 
       aboveAcc := 0;
       aboveCnt := 0;
-      for ismp := Low(ShortInt) to high(ShortInt) do
+      for ismp := Low(TSampleDecoderType) to high(TSampleDecoderType) do
         if smpBuf[ismp] >= middleSmp then
         begin
           aboveAcc += ismp;
           Inc(aboveCnt);
         end;
-      smp := EnsureRange(Round(aboveAcc / (High(ShortInt) * aboveCnt) * High(SmallInt)), Low(SmallInt), High(SmallInt));
+
+      fsmp := aboveAcc / (High(TSampleDecoderType) * aboveCnt);
+      fsmp := fltSamples.FilterFilter(fsmp);
+      smp :=  Make16BitSample(fsmp);
 
       while pos >= Length(samples) do
         SetLength(samples, Ceil(Length(samples) * cPhi));
@@ -326,9 +341,15 @@ begin
 
       Correct(angle, radius, radiusInc);
 
-      radiusIncSmoo := sf.ProcessSample(radiusInc);
+      //if Scan.InRangePointD(py, px) then
+      //begin
+      //  radiusInc := (-sn * Self.Scan.GetPointD(py, px, isXGradient, imHermite) + cs * Self.Scan.GetPointD(py, px, isYGradient, imHermite)) * -1.0;
+      //end;
 
-      Write(pos:8, aboveCnt:4, #13);
+
+      radiusIncSmoo := fltRadiusInc.FilterFilter(radiusInc);
+
+      Write(pos:8, aboveCnt:8, radiusInc:20:9, #13);
 
       radius += radiusIncSmoo;
       Inc(pos);
@@ -362,7 +383,8 @@ begin
     CreateWAV(1, FBitsPerSample, FSampleRate, FOutputWAVFileName, samples);
   finally
     pbuf.Free;
-    sf.Free;
+    fltRadiusInc.Free;
+    fltSamples.Free;
   end;
 end;
 

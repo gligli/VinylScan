@@ -14,7 +14,7 @@ type
 
   TScanCorrelator = class
   private
-    FInputScans: array of TInputScan;
+    FInputScans: TInputScanDynArray;
     FMethod: TMinimizeMethod;
     FOutputPNGFileName: String;
     FOutputDPI: Integer;
@@ -57,6 +57,7 @@ type
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
     property Correlation: Double read FCorrelation;
 
+    property InputScans: TInputScanDynArray read FInputScans;
     property OutputImage: TSingleDynArray2 read FOutputImage;
   end;
 
@@ -263,7 +264,7 @@ var
 
     BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
 
-    ri := FOutputDPI / (CAreaGroovesPerInch * (FPointsPerRevolution - 1));
+    ri := FOutputDPI / (CAreaGroovesPerInch * FPointsPerRevolution);
 
     r := CAreaBegin * 0.5 * FOutputDPI;
     pos := 0;
@@ -340,7 +341,7 @@ var
 
     BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
 
-    ri := FOutputDPI / (CAreaGroovesPerInch * (FPointsPerRevolution - 1));
+    ri := FOutputDPI / (CAreaGroovesPerInch * FPointsPerRevolution);
 
     r := CAreaBegin * 0.5 * FOutputDPI;
     pos := 0;
@@ -528,7 +529,7 @@ var
 begin
   Result := 1000.0;
 
-  if AngleTo02Pi(x[1] - x[0]) >= DegToRad(90.0) then
+  if AngleTo02Pi(x[1] - x[0]) >= DegToRad(120.0) then
     Exit;
 
   a0a := AngleTo02Pi(x[0]);

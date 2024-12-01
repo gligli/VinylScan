@@ -25,7 +25,7 @@
           </Target>
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir)"/>
-            <OtherUnitFiles Value="alglib"/>
+            <OtherUnitFiles Value="alglib;LazFiltersIIR"/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)-$(BuildMode)"/>
           </SearchPaths>
           <Parsing>
@@ -61,7 +61,7 @@
           </Target>
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir)"/>
-            <OtherUnitFiles Value="alglib"/>
+            <OtherUnitFiles Value="alglib;LazFiltersIIR"/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)-$(BuildMode)"/>
           </SearchPaths>
           <Parsing>
@@ -145,7 +145,7 @@
     </Target>
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir)"/>
-      <OtherUnitFiles Value="alglib"/>
+      <OtherUnitFiles Value="alglib;LazFiltersIIR"/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)-$(BuildMode)"/>
     </SearchPaths>
     <Parsing>

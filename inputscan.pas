@@ -68,6 +68,8 @@ type
     property Image: TWordDynArray2 read FImage;
   end;
 
+  TInputScanDynArray = array of TInputScan;
+
   { TDPIAwareReaderPNG }
 
   TDPIAwareReaderPNG = class(TFPReaderPNG)

@@ -5,10 +5,10 @@ unit main;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, scan2track, scancorrelator, utils, math, inputscan;
+  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, Types, scan2track, scancorrelator, utils, math, inputscan, FilterIIRLPBessel, FilterIIRHPBessel;
 
 const
-  CReducShift = 1;
+  CReducShift = 0;
   CReducFactor = 1.0 / (1 shl CReducShift);
 
 type
@@ -169,7 +169,33 @@ var
   fn: String;
   sc1, sc100, scmP, scmA, scmL: TScanCorrelator;
   sl: TStringList;
+  fltLP: TFilterIIRLPBessel;
+  fltHP: TFilterIIRHPBessel;
+  smps: TSmallIntDynArray;
 begin
+  SetLength(smps, 48000 * 2);
+  fltLP := TFilterIIRLPBessel.Create(nil);
+  fltHP := TFilterIIRHPBessel.Create(nil);
+  try
+    fltLP.SampleRate := 48000;
+    fltLP.FreqCut1 := 1000;
+    fltLP.Order := 4;
+
+    fltHP.SampleRate := 48000;
+    fltHP.FreqCut1 := 1000;
+    fltHP.Order := 4;
+
+    for i := 0 to 48000 - 1 do
+    begin
+      smps[i] := Make16BitSample(fltLP.FilterFilter((i mod 1000) / 1000 * 2.0 - 1.0));
+      smps[i + 48000] := Make16BitSample(fltHP.FilterFilter((i mod 1000) / 1000 * 2.0 - 1.0));
+    end;
+  finally
+    fltLP.Free;
+    fltHP.Free;
+  end;
+  CreateWAV(1, 16, 48000, 'ut.wav', smps);
+
   SetLength(img, 2048, 2048);
 
   img[512, 16 * 2 + 1024] := 1.0;
