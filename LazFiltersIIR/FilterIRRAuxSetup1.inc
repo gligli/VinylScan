@@ -8,4 +8,4 @@
 
   SPlane.NumPoles:= 0; SPlane.NumZeros:= 0;
   ZPlane.NumPoles:= 0; ZPlane.NumZeros:= 0;
-  PoleMask:= not Longword(0);
+  PoleMask:= LongWord(not Longword(0));
