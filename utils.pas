@@ -28,6 +28,7 @@ type
   TConvolutionKernel = array[-1..1, -1..1] of integer;
 
   TPointDDynArray = array of TPointD;
+  TPointDDynArray2 = array of TPointDDynArray;
   TByteDynArray2 = array of TByteDynArray;
   TWordDynArray2 = array of TWordDynArray;
   TSingleDynArray2 = array of TSingleDynArray;
