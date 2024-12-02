@@ -281,45 +281,71 @@ end;
 
 function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource; Mode: TInterpMode): Double; inline;
 
-  function GetSample(AY, AX: Integer): Double; inline;
+  function GetPt(AY, AX: Double): Double; inline;
+  var
+    ix, iy: Integer;
+    y0, y1, y2, y3: Double;
   begin
     Result := 0;
-    case Source of
-      isImage: Result := FImage[AY, AX];
-      isXGradient: Result := Convolve(FImage, CImageDerivationKernels[FImageDerivationOperator, False], AY, AX);
-      isYGradient: Result := Convolve(FImage, CImageDerivationKernels[FImageDerivationOperator, True], AY, AX);
+    ix := trunc(AX);
+    iy := trunc(AY);
+
+    case Mode of
+      imPoint:
+      begin
+        Result := FImage[iy, ix];
+      end;
+      imLinear:
+      begin
+        y1 := lerp(FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], AX - ix);
+        y2 := lerp(FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], AX - ix);
+
+        Result := lerp(y1, y2, AY - iy);
+      end;
+      imHermite:
+      begin
+        y0 := herp(FImage[iy - 1, ix - 1], FImage[iy - 1, ix + 0], FImage[iy - 1, ix + 1], FImage[iy - 1, ix + 2], AX - ix);
+        y1 := herp(FImage[iy + 0, ix - 1], FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], FImage[iy + 0, ix + 2], AX - ix);
+        y2 := herp(FImage[iy + 1, ix - 1], FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], FImage[iy + 1, ix + 2], AX - ix);
+        y3 := herp(FImage[iy + 2, ix - 1], FImage[iy + 2, ix + 0], FImage[iy + 2, ix + 1], FImage[iy + 2, ix + 2], AX - ix);
+
+        Result := herp(y0, y1, y2, y3, AY - iy);
+      end;
     end;
+
     Result *= (1.0 / High(Word));
   end;
 
 var
-  ix, iy: Integer;
-  y0, y1, y2, y3: Double;
+  kernel: ^TConvolutionKernel;
 begin
   Result := 0;
-  ix := trunc(X);
-  iy := trunc(Y);
-
-  case mode of
-    imPoint:
+  case Source of
+    isImage:
     begin
-      Result := GetSample(iy, ix);
+      Result := GetPt(Y, X);
     end;
-    imLinear:
+    isXGradient:
     begin
-      y1 := lerp(GetSample(iy + 0, ix + 0), GetSample(iy + 0, ix + 1), X - ix);
-      y2 := lerp(GetSample(iy + 1, ix + 0), GetSample(iy + 1, ix + 1), X - ix);
+      kernel := @CImageDerivationKernels[FImageDerivationOperator, False];
 
-      Result := lerp(y1, y2, Y - iy);
+      Result := GetPt(Y - 1.0, X - 1.0) * kernel^[-1, -1];
+      Result += GetPt(Y - 1.0, X + 1.0) * kernel^[-1,  1];
+      Result += GetPt(Y + 0.0, X - 1.0) * kernel^[ 0, -1];
+      Result += GetPt(Y + 0.0, X + 1.0) * kernel^[ 0,  1];
+      Result += GetPt(Y + 1.0, X - 1.0) * kernel^[ 1, -1];
+      Result += GetPt(Y + 1.0, X + 1.0) * kernel^[ 1,  1];
     end;
-    imHermite:
+    isYGradient:
     begin
-      y0 := herp(GetSample(iy - 1, ix - 1), GetSample(iy - 1, ix + 0), GetSample(iy - 1, ix + 1), GetSample(iy - 1, ix + 2), X - ix);
-      y1 := herp(GetSample(iy + 0, ix - 1), GetSample(iy + 0, ix + 0), GetSample(iy + 0, ix + 1), GetSample(iy + 0, ix + 2), X - ix);
-      y2 := herp(GetSample(iy + 1, ix - 1), GetSample(iy + 1, ix + 0), GetSample(iy + 1, ix + 1), GetSample(iy + 1, ix + 2), X - ix);
-      y3 := herp(GetSample(iy + 2, ix - 1), GetSample(iy + 2, ix + 0), GetSample(iy + 2, ix + 1), GetSample(iy + 2, ix + 2), X - ix);
+      kernel := @CImageDerivationKernels[FImageDerivationOperator, True];
 
-      Result := herp(y0, y1, y2, y3, Y - iy);
+      Result := GetPt(Y - 1.0, X - 1.0) * kernel^[-1, -1];
+      Result += GetPt(Y - 1.0, X + 0.0) * kernel^[-1,  0];
+      Result += GetPt(Y - 1.0, X + 1.0) * kernel^[-1,  1];
+      Result += GetPt(Y + 1.0, X - 1.0) * kernel^[ 1, -1];
+      Result += GetPt(Y + 1.0, X + 0.0) * kernel^[ 1,  0];
+      Result += GetPt(Y + 1.0, X + 1.0) * kernel^[ 1,  1];
     end;
   end;
 end;
