@@ -101,7 +101,7 @@ implementation
 
 const
   CAreaBegin = 0;
-  CAreaEnd = C45RpmAdapterSize;
+  CAreaEnd = (C45RpmInnerSize + C45RpmAdapterSize) * 0.5;
   CAreaGroovesPerInch = 800;
   CRevolutionPointCount = 360;
 
