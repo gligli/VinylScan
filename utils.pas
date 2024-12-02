@@ -22,7 +22,7 @@ type
     L, T, R, B: Double;
   end;
 
-  TMinimizeMethod = (mmNone, mmPowell, mmASA, mmLBFGS);
+  TMinimizeMethod = (mmNone, mmPowell, mmASA, mmLBFGS, mmAll);
 
   TImageDerivationOperator = (idoPrewitt, idoSobel, idoScharr);
   TConvolutionKernel = array[-1..1, -1..1] of integer;
@@ -124,7 +124,7 @@ function herp(y0, y1, y2, y3, alpha: Double): Double;
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double;
   EpsilonX, EpsilonY: Double; Data: Pointer): Double;
 
-function Convolve(const image:TSingleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double; overload;
+function Convolve(const image:TDoubleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double; overload;
 function Convolve(const image:TWordDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Integer; overload;
 
 function PearsonCorrelation(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
@@ -312,7 +312,7 @@ begin
   end;
 end;
 
-function Convolve(const image:TSingleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double; overload;
+function Convolve(const image: TDoubleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double;
 var
   y, x: Integer;
 begin

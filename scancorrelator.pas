@@ -5,7 +5,7 @@ unit scancorrelator;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, GraphType, IntfGraphics, FPCanvas, FPImage, FPWritePNG, ZStream, MTProcs,
+  Classes, SysUtils, Types, Math, Graphics, GraphType, IntfGraphics, FPCanvas, FPImage, FPWritePNG, ZStream, MTProcs, TypInfo,
   utils, inputscan, powell, minasa, minlbfgs;
 
 type
@@ -18,7 +18,7 @@ type
     FMethod: TMinimizeMethod;
     FOutputPNGFileName: String;
     FOutputDPI: Integer;
-    FCorrelation: Double;
+    FObjective: Double;
 
     FPerSnanCrops: TDoubleDynArray2;
     FPerSnanSkews: array of TPointD;
@@ -39,7 +39,7 @@ type
 
     procedure AngleInit;
     procedure Crop;
-    procedure Analyze;
+    function Analyze(AMethod: TMinimizeMethod): Double;
     procedure Rebuild;
   public
     constructor Create(const AFileNames: TStrings; AOutputDPI: Integer = 2400);
@@ -55,7 +55,7 @@ type
 
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
-    property Correlation: Double read FCorrelation;
+    property Objective: Double read FObjective;
 
     property InputScans: TInputScanDynArray read FInputScans;
     property OutputImage: TSingleDynArray2 read FOutputImage;
@@ -92,7 +92,7 @@ var
   i: Integer;
 begin
   FOutputDPI := AOutputDPI;
-  FCorrelation := NaN;
+  FObjective := NaN;
   FMethod := mmLBFGS;
   SetLength(FInputScans, AFileNames.Count);
   SetLength(FPerSnanSkews, Length(FInputScans));
@@ -412,7 +412,7 @@ begin
     Result := FInputScans[0].ImageDerivationOperator;
 end;
 
-procedure TScanCorrelator.Analyze;
+function TScanCorrelator.Analyze(AMethod: TMinimizeMethod): Double;
 var
   x, bl, bu: TVector;
   i: Integer;
@@ -423,7 +423,9 @@ var
   LBFGSState: MinLBFGSState;
   LBFGSRep: MinLBFGSReport;
 begin
-  WriteLn('Analyze');
+  Result := NaN;
+
+  WriteLn('Analyze ', GetEnumName(TypeInfo(TMinimizeMethod), Ord(AMethod)), ', ', GetEnumName(TypeInfo(TImageDerivationOperator), Ord(GetImageDerivationOperator)));
 
   if Length(FInputScans) <= 1 then
     Exit;
@@ -458,14 +460,14 @@ begin
     bu[High(FInputScans) * 4 + i - 1] := 1.1;
   end;
 
-  case Method of
+  case AMethod of
     mmNone:
     begin
-      FCorrelation := PowellAnalyze(x, Self);
+      Result := PowellAnalyze(x, Self);
     end;
     mmPowell:
     begin
-      FCorrelation := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-9, 0, MaxInt, nil)[0];
+      Result := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-9, 1e-12, MaxInt, nil)[0];
     end;
     mmASA:
     begin
@@ -476,7 +478,7 @@ begin
           GradientsAnalyze(ASAState.X, ASAState.F, ASAState.G, Self);
       MinASAResults(ASAState, x, ASARep);
 
-      FCorrelation := ASAState.F;
+      Result := ASAState.F;
     end;
     mmLBFGS:
     begin
@@ -487,11 +489,11 @@ begin
           GradientsAnalyze(LBFGSState.X, LBFGSState.F, LBFGSState.G, Self);
       MinLBFGSResults(LBFGSState, x, LBFGSRep);
 
-      FCorrelation := LBFGSState.F;
+      Result := LBFGSState.F;
     end;
   end;
 
-  Assert(not IsNan(FCorrelation));
+  Assert(not IsNan(Result));
 
   FPerSnanAngles[0] := 0.0;
 
@@ -717,10 +719,32 @@ begin
 end;
 
 procedure TScanCorrelator.Process;
+var
+  prevObj, obj: Double;
+  iter: Integer;
 begin
   AngleInit;
   Crop;
-  Analyze;
+
+  if FMethod <> mmAll then
+  begin
+    FObjective := Analyze(FMethod);
+  end
+  else
+  begin
+    obj := 1000.0;
+    iter := 1;
+    repeat
+      WriteLn('Iteration: ', iter:3);
+
+      prevObj := obj;
+      Analyze(mmASA);
+      Analyze(mmLBFGS);
+      obj := Analyze(mmPowell);
+      Inc(iter);
+    until SameValue(obj, prevObj, 1e-9);
+  end;
+
   Rebuild;
 end;
 

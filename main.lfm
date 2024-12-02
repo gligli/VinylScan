@@ -213,6 +213,7 @@ object MainForm: TMainForm
         'Powell''s method'
         'MinASA'
         'MinLBFGS'
+        'All methods'
       )
       ParentShowHint = False
       ShowHint = True
