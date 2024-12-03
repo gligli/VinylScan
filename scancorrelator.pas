@@ -707,9 +707,9 @@ begin
     png.Free;
     fpimg.Free;
     fs.Free;
-
-    WriteLn('Done!');
   end;
+
+  WriteLn('Done!');
 end;
 
 procedure TScanCorrelator.Process;

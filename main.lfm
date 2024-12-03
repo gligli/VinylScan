@@ -19,6 +19,7 @@ object MainForm: TMainForm
   ParentDoubleBuffered = False
   LCLVersion = '3.6.0.0'
   Scaled = False
+  WindowState = wsMaximized
   object Image: TImage
     Left = 0
     Height = 480
@@ -61,7 +62,7 @@ object MainForm: TMainForm
       ParentShowHint = False
       ShowHint = True
       TabOrder = 4
-      Text = 'data\sample_correlated.png'
+      Text = 'data\sample_20241203_0001.png'
     end
     object edOutputPNG: TEdit
       Left = 8
@@ -133,7 +134,7 @@ object MainForm: TMainForm
       Top = 8
       Width = 64
       ItemHeight = 15
-      ItemIndex = 0
+      ItemIndex = 2
       Items.Strings = (
         '600'
         '1200'
@@ -143,7 +144,7 @@ object MainForm: TMainForm
       ParentShowHint = False
       ShowHint = True
       TabOrder = 8
-      Text = '600'
+      Text = '2400'
     end
     object btInPNGs: TButton
       Left = 208
@@ -188,7 +189,7 @@ object MainForm: TMainForm
       Top = 8
       Width = 66
       ItemHeight = 15
-      ItemIndex = 0
+      ItemIndex = 2
       Items.Strings = (
         '16000'
         '44100'
@@ -198,7 +199,7 @@ object MainForm: TMainForm
       ParentShowHint = False
       ShowHint = True
       TabOrder = 9
-      Text = '16000'
+      Text = '48000'
     end
     object cbMethod: TComboBox
       Left = 264

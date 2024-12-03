@@ -73,10 +73,11 @@ const
   C45RpmFirstMusicGroove = 6.625;
   C45RpmLastMusicGroove = 4.25;
   C45RpmLeadInGroovesPerInch = 16.0;
-  C45RpmMaxGrooveWidth = 0.003;
+  C45RpmMinGroovesPerInch = 2.0;
+  C45RpmMaxGrooveWidth = 0.0084;
   C45RpmAdapterSize = 1.496;
 
-  CLowCutoffFreq = 20.0;
+  CLowCutoffFreq = 7.0;
 
 {$if 0}
   cRedMul = 2126;
@@ -121,8 +122,7 @@ function ilerp(x, y, alpha, maxAlpha: Integer): Integer; inline;
 function revlerp(x, r, alpha: Double): Double; inline;
 function herp(y0, y1, y2, y3, alpha: Double): Double;
 
-function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double;
-  EpsilonX, EpsilonY: Double; Data: Pointer): Double;
+function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 
 function Convolve(const image:TDoubleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double; overload;
 function Convolve(const image:TWordDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Integer; overload;
@@ -300,7 +300,7 @@ begin
 
   y := Func(x, Data);
 
-  WriteLn('X: ', x:15:6, ' Y: ', y:12:0, ' Mini: ', MinX:15:6, ' Maxi: ', MaxX:15:6);
+  //WriteLn('X: ', x:15:6, ' Y: ', y:12:0, ' Mini: ', MinX:15:6, ' Maxi: ', MaxX:15:6);
 
   case CompareValue(y, ObjectiveY, EpsilonY) of
     LessThanValue:
