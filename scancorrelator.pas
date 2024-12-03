@@ -5,8 +5,8 @@ unit scancorrelator;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, GraphType, IntfGraphics, FPCanvas, FPImage, FPWritePNG, ZStream, MTProcs, TypInfo,
-  utils, inputscan, powell, minasa, minlbfgs;
+  Classes, SysUtils, Types, Math, Graphics, GraphType, IntfGraphics, FPCanvas, FPImage, PNGComn, ZStream, MTProcs, TypInfo,
+  utils, inputscan, powell, minasa, minlbfgs, hackedwritepng;
 
 type
 
@@ -26,9 +26,8 @@ type
 
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
-    FMaxOutputImageValue: Double;
 
-    FOutputImage: TSingleDynArray2;
+    FOutputImage: TWordDynArray2;
 
     function GetImageDerivationOperator: TImageDerivationOperator;
     procedure SetImageDerivationOperator(AValue: TImageDerivationOperator);
@@ -58,23 +57,33 @@ type
     property Objective: Double read FObjective;
 
     property InputScans: TInputScanDynArray read FInputScans;
-    property OutputImage: TSingleDynArray2 read FOutputImage;
+    property OutputImage: TWordDynArray2 read FOutputImage;
+  end;
+
+  { TDPIAwareWriterPNG }
+
+  TDPIAwareWriterPNG = class(THackedWriterPNG)
+  private
+    FDPI: TPoint;
+  protected
+    procedure WritePHYS; virtual;
+    procedure InternalWrite (Str:TStream; Img:TFPCustomImage); override;
+  public
+    constructor Create; override;
+
+    property DPI: TPoint read FDPI write FDPI;
   end;
 
   { TScanImage }
 
   TScanImage = class(TFPCustomImage)
   private
-    FFactor: Single;
     FScanCorrelator: TScanCorrelator;
   protected
     procedure SetInternalPixel(x,y:integer; Value:integer); override;
     function GetInternalPixel(x,y:integer) : integer; override;
   public
-    constructor Create(AWidth,AHeight:integer); override;
-
     property ScanCorrelator: TScanCorrelator read FScanCorrelator write FScanCorrelator;
-    property Factor: Single read FFactor write FFactor;
   end;
 
 implementation
@@ -596,14 +605,12 @@ end;
 procedure TScanCorrelator.Rebuild;
 var
   center, rBeg, rEnd, rLmg, rFmg, rLbl: Double;
-  maxOutVals: TDoubleDynArray;
 
   procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     i, ox, cnt: Integer;
-    r, sn, cs, px, py, t, cx, cy, acc, bt, skx, sky, maxOutVal, ct: Double;
+    r, sn, cs, px, py, t, cx, cy, acc, bt, skx, sky, ct: Double;
   begin
-    maxOutVal := -Infinity;
     for ox := 0 to High(FOutputImage[0]) do
     begin
       r := Sqrt(Sqr(AIndex - center) + Sqr(ox - center));
@@ -640,22 +647,16 @@ var
 
         acc := DivDef(acc, cnt, 1.0);
 
-        FOutputImage[AIndex, ox] := acc;
-        if InRange(r, rLmg, rFmg) and (cnt > 1) then
-          maxOutVal := Max(maxOutVal, acc);
+        FOutputImage[AIndex, ox] := EnsureRange(Round(acc * High(Word)), 0, High(Word));
       end
       else
       begin
-        FOutputImage[AIndex, ox] := IfThen(r >= rLmg, 0.25, 1.0);
+        FOutputImage[AIndex, ox] := IfThen(r >= rLmg, Round(0.25 * High(Word)), Round(1.0 * High(Word)));
       end;
     end;
-
-    maxOutVals[AIndex] := maxOutVal;
   end;
 begin
   WriteLn('Rebuild');
-
-  SetLength(maxOutVals, Length(FOutputImage));
 
   center := Length(FOutputImage) / 2.0;
   rBeg := C45RpmInnerSize * 0.5 * FOutputDPI;
@@ -665,8 +666,6 @@ begin
   rLbl := C45RpmLabelOuterSize * 0.5 * FOutputDPI;
 
   ProcThreadPool.DoParallelLocalProc(@DoY, 0, High(FOutputImage));
-
-  FMaxOutputImageValue := MaxValue(maxOutVals);
 end;
 
 procedure TScanCorrelator.SetImageDerivationOperator(AValue: TImageDerivationOperator);
@@ -680,27 +679,22 @@ end;
 procedure TScanCorrelator.Save;
 var
   i: Integer;
-  png: TFPWriterPNG;
-  factor: Single;
+  png: TDPIAwareWriterPNG;
   fs: TFileStream;
   fpimg: TScanImage;
 begin
   WriteLn('Save ', FOutputPNGFileName);
 
-  factor := High(Word);
-  if not IsZero(FMaxOutputImageValue) then
-    factor /= FMaxOutputImageValue;
-
   fs := TFileStream.Create(FOutputPNGFileName, fmCreate or fmShareDenyNone);
   fpimg := TScanImage.Create(Length(FOutputImage[0]), Length(FOutputImage));
-  png := TFPWriterPNG.Create;
+  png := TDPIAwareWriterPNG.Create;
   try
     fpimg.ScanCorrelator := Self;
-    fpimg.Factor := DivDef(High(Word), FMaxOutputImageValue, 1.0);
     fpimg.UsePalette := True;
     for i := 0 to High(Word) do
       fpimg.Palette.Add(FPColor(i, i, i, High(Word)));
 
+    png.DPI := Point(FOutputDPI, FOutputDPI);
     png.CompressedText := True;
     png.CompressionLevel := clmax;
     png.GrayScale := True;
@@ -748,6 +742,40 @@ begin
   Rebuild;
 end;
 
+{ TDPIAwareWriterPNG }
+
+
+procedure TDPIAwareWriterPNG.WritePHYS;
+begin
+  SetChunkLength(9);
+  SetChunkType(ctpHYs);
+  PDWord(@ChunkDataBuffer^[0])^ := NtoBE(Cardinal(Round(FDPI.X / 0.0254)));
+  PDWord(@ChunkDataBuffer^[4])^ := NtoBE(Cardinal(Round(FDPI.Y / 0.0254)));
+  PByte(@ChunkDataBuffer^[8])^ := 1; // 1 means meter
+  WriteChunk;
+end;
+
+procedure TDPIAwareWriterPNG.InternalWrite(Str: TStream; Img: TFPCustomImage);
+begin
+  WriteIHDR;
+  if Header.colorType = 3 then
+    WritePLTE;
+  if UsetRNS then
+    WritetRNS;
+  if (FDPI.X > 0) and (FDPI.Y > 0) then
+    WritePHYS;
+  WriteIDAT;
+  WriteTexts;
+  WriteIEND;
+end;
+
+constructor TDPIAwareWriterPNG.Create;
+begin
+ inherited Create;
+
+ FDPI := Point(-1, -1);
+end;
+
 { TScanImage }
 
 procedure TScanImage.SetInternalPixel(x, y: integer; Value: integer);
@@ -757,14 +785,7 @@ end;
 
 function TScanImage.GetInternalPixel(x, y: integer): integer;
 begin
-  Result := EnsureRange(Round(FScanCorrelator.FOutputImage[y, x] * FFactor), 0, High(Word));
-end;
-
-constructor TScanImage.Create(AWidth, AHeight: integer);
-begin
-  inherited Create(AWidth, AHeight);
-
-  FFactor := NaN;
+  Result := FScanCorrelator.FOutputImage[y, x];
 end;
 
 end.
