@@ -78,7 +78,7 @@ type
   protected
     procedure HandleChunk; override;
   public
-    constructor create; override;
+    constructor Create; override;
 
     property DPI: TPoint read FDPI;
   end;
@@ -501,7 +501,7 @@ begin
   end;
 end;
 
-constructor TDPIAwareReaderPNG.create;
+constructor TDPIAwareReaderPNG.Create;
 begin
   inherited create;
 
