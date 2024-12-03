@@ -129,7 +129,7 @@ begin
       xx := Self.FSinCosLUT[t].X * r + arg[0];
       yy := Self.FSinCosLUT[t].Y * r + arg[1];
 
-      if (yy <= arg[1] + radiusOuter * 0.6) and Self.InRangePointD(yy, xx) then
+      if (yy <= arg[1] + radiusOuter * 0.75) and Self.InRangePointD(yy, xx) then
       begin
         func -= Self.GetPointD(yy, xx, isImage, imLinear);
         grad[0] -= Self.GetPointD(yy, xx, isXGradient, imLinear);
