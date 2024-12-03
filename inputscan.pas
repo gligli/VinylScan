@@ -127,9 +127,9 @@ begin
     for t := 0 to CRevolutionPointCount - 1  do
     begin
       xx := Self.FSinCosLUT[t].X * r + arg[0];
-      yy := min(Self.FSinCosLUT[t].Y * r, 0.6 * radiusOuter) + arg[1];
+      yy := Self.FSinCosLUT[t].Y * r + arg[1];
 
-      if Self.InRangePointD(yy, xx) then
+      if (yy <= arg[1] + radiusOuter * 0.6) and Self.InRangePointD(yy, xx) then
       begin
         func -= Self.GetPointD(yy, xx, isImage, imLinear);
         grad[0] -= Self.GetPointD(yy, xx, isXGradient, imLinear);
@@ -139,8 +139,6 @@ begin
 
     Inc(pos);
   until r >= radiusOuter;
-
-  //WriteLn(arg[0]:12:3,arg[1]:12:3,func:20:3);
 end;
 
 procedure TInputScan.FindCenter;
