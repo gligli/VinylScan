@@ -467,7 +467,7 @@ begin
     end;
     mmPowell:
     begin
-      Result := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-9, 1e-12, MaxInt, nil)[0];
+      Result := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-9, 1e-9, MaxInt, nil)[0];
     end;
     mmASA:
     begin
