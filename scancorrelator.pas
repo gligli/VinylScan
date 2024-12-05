@@ -476,7 +476,7 @@ var
   inputIdx: PtrInt absolute obj;
   rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy, ri, rri, sn, cs, bt, px, py: Double;
   pos, arrPos: Integer;
-  stdDevArr: TDoubleDynArray;
+  mnArr: TDoubleDynArray;
 begin
   Result := 1000.0;
 
@@ -494,7 +494,7 @@ begin
   cx := FInputScans[inputIdx].Center.X;
   cy := FInputScans[inputIdx].Center.Y;
 
-  SetLength(stdDevArr, Ceil((rEnd - rBeg) / FOutputDPI * CAreaGroovesPerInchCrop) * FPointsPerRevolution);
+  SetLength(mnArr, Ceil((rEnd - rBeg) / FOutputDPI * CAreaGroovesPerInchCrop) * FPointsPerRevolution);
 
   ri := (rEnd - rBeg) / (CAreaGroovesPerInchCrop * (FPointsPerRevolution - 1));
 
@@ -510,19 +510,19 @@ begin
     px := cs * rri + cx;
     py := sn * rri + cy;
 
-    Assert(pos < Length(stdDevArr));
+    Assert(pos < Length(mnArr));
 
     if FInputScans[inputIdx].InRangePointD(py, px) and
         not In02PiExtentsAngle(bt, a0a, a0b) and not In02PiExtentsAngle(bt, a1a, a1b) then
     begin
-      stdDevArr[arrPos] := FInputScans[inputIdx].GetPointD(py, px, isImage, imLinear);
+      mnArr[arrPos] := FInputScans[inputIdx].GetPointD(py, px, isImage, imLinear);
       Inc(arrPos);
     end;
 
     Inc(pos);
   until rri >= rEnd;
 
-  Result := -StdDev(PDouble(@stdDevArr[0]), arrPos);
+  Result := -Mean(PDouble(@mnArr[0]), arrPos);
 
   Write(FInputScans[inputIdx].PNGFileName, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', -Result:12:6, #13);
 end;
