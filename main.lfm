@@ -208,19 +208,18 @@ object MainForm: TMainForm
       Top = 32
       Width = 131
       ItemHeight = 15
-      ItemIndex = 2
+      ItemIndex = 1
       Items.Strings = (
         'No optimization'
+        'Gradient descent'
         'Powell''s method'
-        'MinASA'
-        'MinLBFGS'
         'All methods'
       )
       ParentShowHint = False
       ShowHint = True
       Style = csDropDownList
       TabOrder = 10
-      Text = 'MinASA'
+      Text = 'Gradient descent'
     end
     object cbImgDerv: TComboBox
       Left = 264

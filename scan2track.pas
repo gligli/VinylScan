@@ -19,7 +19,6 @@ type
   TScan2Track = class
   private
     FOutputWAVFileName: String;
-    FMethod: TMinimizeMethod;
 
     FScan: TInputScan;
     FBitsPerSample: Integer;
@@ -39,7 +38,6 @@ type
     procedure Run;
 
     property OutputWAVFileName: String read FOutputWAVFileName write FOutputWAVFileName;
-    property Method: TMinimizeMethod read FMethod write FMethod;
 
     property Scan: TInputScan read FScan;
     property SampleRate: Integer read FSampleRate;
@@ -60,7 +58,6 @@ constructor TScan2Track.Create(ASampleRate: Integer; ABitsPerSample: Integer; AD
 begin
   FSampleRate := ASampleRate;
   FBitsPerSample := ABitsPerSample;
-  FMethod := mmLBFGS;
 
   FPointsPerRevolution := Round(FSampleRate / C45RpmRevolutionsPerSecond);
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;

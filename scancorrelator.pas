@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Graphics, GraphType, IntfGraphics, FPCanvas, FPImage, PNGComn, ZStream, MTProcs, TypInfo,
-  utils, inputscan, powell, minasa, minlbfgs, hackedwritepng;
+  utils, inputscan, powell, hackedwritepng;
 
 type
 
@@ -91,7 +91,7 @@ var
 begin
   FOutputDPI := AOutputDPI;
   FObjective := NaN;
-  FMethod := mmLBFGS;
+  FMethod := mmGradientDescent;
   SetLength(FInputScans, AFileNames.Count);
   SetLength(FPerSnanSkews, Length(FInputScans));
   SetLength(FPerSnanAngles, Length(FInputScans));
@@ -138,7 +138,7 @@ begin
       Assert(FInputScans[i].DPI = FOutputDPI, 'InputScans mixed DPIs!');
   end;
 
-  FPointsPerRevolution := Ceil(Pi * C45RpmOuterSize * FOutputDPI);
+  FPointsPerRevolution := Ceil(Pi * CAreaEnd * FOutputDPI);
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
 
   WriteLn('DPI:', FOutputDPI:6);
@@ -310,7 +310,7 @@ var
             gimgx := FInputScans[AIndex].GetPointD(py, px, isXGradient, imLinear);
             gimgy := FInputScans[AIndex].GetPointD(py, px, isYGradient, imLinear);
 
-            gt := (gimgx * -sn + gimgy * cs) * ri;
+            gt := (gimgx * -sn * skx + gimgy * cs * sky) * ri;
             gcx := gimgx;
             gcy := gimgy;
             gskx := gimgx * cs * ri;
@@ -375,12 +375,7 @@ function TScanCorrelator.Analyze(AMethod: TMinimizeMethod): Double;
 var
   x, bl, bu: TVector;
   i: Integer;
-  radiusOuter: Double;
   p: TPointD;
-  ASAState: MinASAState;
-  ASARep: MinASAReport;
-  LBFGSState: MinLBFGSState;
-  LBFGSRep: MinLBFGSReport;
 begin
   Result := NaN;
 
@@ -395,9 +390,6 @@ begin
   SetLength(x, High(FInputScans) * 5);
   SetLength(bl, Length(x));
   SetLength(bu, Length(x));
-
-  radiusOuter := Round(C45RpmOuterSize * FOutputDPI * 0.5);
-
   for i := 1 to High(FInputScans) do
   begin
     x[High(FInputScans) * 0 + i - 1] := FPerSnanAngles[i];
@@ -407,14 +399,14 @@ begin
     x[High(FInputScans) * 4 + i - 1] := FPerSnanSkews[i].Y;
 
     bl[High(FInputScans) * 0 + i - 1] := FPerSnanAngles[i] - 2.0 * Pi;
-    bl[High(FInputScans) * 1 + i - 1] := radiusOuter;
-    bl[High(FInputScans) * 2 + i - 1] := radiusOuter;
+    bl[High(FInputScans) * 1 + i - 1] := 0;
+    bl[High(FInputScans) * 2 + i - 1] := 0;
     bl[High(FInputScans) * 3 + i - 1] := 0.9;
     bl[High(FInputScans) * 4 + i - 1] := 0.9;
 
     bu[High(FInputScans) * 0 + i - 1] := FPerSnanAngles[i] + 2.0 * Pi;
-    bu[High(FInputScans) * 1 + i - 1] := FInputScans[i].Width - radiusOuter;
-    bu[High(FInputScans) * 2 + i - 1] := FInputScans[i].Height - radiusOuter;
+    bu[High(FInputScans) * 1 + i - 1] := FInputScans[i].Width - 1;
+    bu[High(FInputScans) * 2 + i - 1] := FInputScans[i].Height - 1;
     bu[High(FInputScans) * 3 + i - 1] := 1.1;
     bu[High(FInputScans) * 4 + i - 1] := 1.1;
   end;
@@ -424,31 +416,13 @@ begin
     begin
       Result := PowellAnalyze(x, Self);
     end;
+    mmGradientDescent:
+    begin
+      Result := GradientDescentMinimize(@GradientsAnalyze, x, 10.0);
+    end;
     mmPowell:
     begin
       Result := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-9, 1e-9, MaxInt, nil)[0];
-    end;
-    mmASA:
-    begin
-      MinASACreate(Length(x), x, bl, bu, ASAState);
-      MinASASetCond(ASAState, 0, 1e-12, 0, 0);
-      while MinASAIteration(ASAState) do
-        if ASAState.NeedFG then
-          GradientsAnalyze(ASAState.X, ASAState.F, ASAState.G, Self);
-      MinASAResults(ASAState, x, ASARep);
-
-      Result := ASAState.F;
-    end;
-    mmLBFGS:
-    begin
-      MinLBFGSCreate(Length(x), Length(x), x, LBFGSState);
-      MinLBFGSSetCond(LBFGSState, 0, 1e-12, 0, 0);
-      while MinLBFGSIteration(LBFGSState) do
-        if LBFGSState.NeedFG then
-          GradientsAnalyze(LBFGSState.X, LBFGSState.F, LBFGSState.G, Self);
-      MinLBFGSResults(LBFGSState, x, LBFGSRep);
-
-      Result := LBFGSState.F;
     end;
   end;
 
@@ -554,7 +528,7 @@ end;
 
 procedure TScanCorrelator.Rebuild;
 var
-  center, rBeg, rEnd, rLmg, rFmg, rLbl: Double;
+  center, rBeg, rEnd, rLmg, rLbl: Double;
 
   procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
@@ -611,7 +585,6 @@ begin
   center := Length(FOutputImage) / 2.0;
   rBeg := C45RpmInnerSize * 0.5 * FOutputDPI;
   rEnd := C45RpmOuterSize * 0.5 * FOutputDPI;
-  rFmg := C45RpmFirstMusicGroove * 0.5 * FOutputDPI;
   rLmg := C45RpmLastMusicGroove * 0.5 * FOutputDPI;
   rLbl := C45RpmLabelOuterSize * 0.5 * FOutputDPI;
 
@@ -682,8 +655,7 @@ begin
       WriteLn('Iteration: ', iter:3);
 
       prevObj := obj;
-      Analyze(mmASA);
-      Analyze(mmLBFGS);
+      Analyze(mmGradientDescent);
       obj := Analyze(mmPowell);
       Inc(iter);
     until SameValue(obj, prevObj, 1e-9);

@@ -22,7 +22,7 @@ type
     L, T, R, B: Double;
   end;
 
-  TMinimizeMethod = (mmNone, mmPowell, mmASA, mmLBFGS, mmAll);
+  TMinimizeMethod = (mmNone, mmGradientDescent, mmPowell, mmAll);
 
   TImageDerivationOperator = (idoPrewitt, idoSobel, idoScharr);
   TConvolutionKernel = array[-1..1, -1..1] of integer;
@@ -35,7 +35,8 @@ type
   TDoubleDynArray2 = array of TDoubleDynArray;
   TDoubleDynArray3 = array of TDoubleDynArray2;
 
-  TGRSEvalFunc = function(x: Double; Data: Pointer): Double of object;
+  TGRSEvalFunc = function(arg: Double; obj: Pointer): Double of object;
+  TGradientEvalFunc = procedure(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer) of object;
 
   { format of WAV file header }
   TWavHeader = record         { parameter description }
@@ -123,13 +124,14 @@ function revlerp(x, r, alpha: Double): Double; inline;
 function herp(y0, y1, y2, y3, alpha: Double): Double;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
+function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; Epsilon: Double = 1e-9; Data: Pointer = nil): Double;
 
 function Convolve(const image:TDoubleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double; overload;
 function Convolve(const image:TWordDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Integer; overload;
 
 function PearsonCorrelation(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
-function MSE(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
-function MSEGradient(const x: TDoubleDynArray; const y: TDoubleDynArray; const g: TDoubleDynArray): Double;
+function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
+function MSEGradient(const a: TDoubleDynArray; const b: TDoubleDynArray; const gb: TDoubleDynArray): Double;
 
 function Make16BitSample(smp: Double): SmallInt;
 function AngleTo02Pi(x: Double): Double;
@@ -312,6 +314,28 @@ begin
   end;
 end;
 
+function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double;
+  Epsilon: Double; Data: Pointer): Double;
+var
+  gs: Double;
+  grad: TDoubleDynArray;
+  i: Integer;
+begin
+  SetLength(grad, Length(X));
+
+  repeat
+    Func(X, Result, grad, Data);
+
+    for i := 0 to High(X) do
+      X[i] -= LearningRate * grad[i];
+
+    gs := sqrt(SumOfSquares(grad) / Length(grad));
+
+    //WriteLn(Result:20:9, gs:20:9);
+
+  until gs <= Epsilon;
+end;
+
 function Convolve(const image: TDoubleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double;
 var
   y, x: Integer;
@@ -361,18 +385,18 @@ begin
     Result := num / den;
 end;
 
-function MSE(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
+function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 var
   i, cnt: Integer;
 begin
-  Assert(Length(x) = Length(y));
+  Assert(Length(a) = Length(b));
 
   cnt := 0;
   Result := 0;
-  for i := 0 to High(x) do
-    if not IsNan(x[i]) and not IsNan(y[i]) then
+  for i := 0 to High(a) do
+    if not IsNan(a[i]) and not IsNan(b[i]) then
     begin
-      Result += Sqr(x[i] - y[i]);
+      Result += Sqr(a[i] - b[i]);
       Inc(cnt);
     end;
 
@@ -380,19 +404,19 @@ begin
     Result /= cnt;
 end;
 
-function MSEGradient(const x: TDoubleDynArray; const y: TDoubleDynArray; const g: TDoubleDynArray): Double;
+function MSEGradient(const a: TDoubleDynArray; const b: TDoubleDynArray; const gb: TDoubleDynArray): Double;
 var
   i, cnt: Integer;
 begin
-  Assert(Length(x) = Length(y));
-  Assert(Length(x) = Length(g));
+  Assert(Length(a) = Length(b));
+  Assert(Length(a) = Length(gb));
 
   cnt := 0;
   Result := 0;
-  for i := 0 to High(x) do
-    if not IsNan(x[i]) and not IsNan(y[i]) and not IsNan(g[i]) then
+  for i := 0 to High(a) do
+    if not IsNan(a[i]) and not IsNan(b[i]) and not IsNan(gb[i]) then
     begin
-      Result -= 2.0 *(x[i] - y[i]) * g[i];
+      Result -= 2.0 *(a[i] - b[i]) * gb[i];
       Inc(cnt);
     end;
 

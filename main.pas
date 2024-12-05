@@ -76,7 +76,6 @@ begin
 
   s2t := TScan2Track.Create(StrToIntDef(cbSR.Text, 48000), 16, StrToIntDef(cbDPI.Text, 2400));
   try
-    s2t.Method := TMinimizeMethod(cbMethod.ItemIndex);
     s2t.OutputWAVFileName := edOutputWAV.Text;
     s2t.Scan.PNGFileName := edInputPNG.Text;
     s2t.Scan.ImageDerivationOperator := TImageDerivationOperator(cbImgDerv.ItemIndex);
@@ -166,7 +165,7 @@ var
   img: TWordDynArray2;
   i: Integer;
   fn: String;
-  sc1, sc100, scmP, scmA, scmL: TScanCorrelator;
+  sc1, sc100, scmP, scmG: TScanCorrelator;
   sl: TStringList;
   fltLP: TFilterIIRLPBessel;
   fltHP: TFilterIIRHPBessel;
@@ -218,18 +217,15 @@ begin
   sl.Add('data\think_mock.png');
   sl.Add('data\think_mock2.png');
   sl.Add('data\think_mock3.png');
-  scmL := TScanCorrelator.Create(sl);
-  scmA := TScanCorrelator.Create(sl);
+  scmG := TScanCorrelator.Create(sl);
   scmP := TScanCorrelator.Create(sl);
   try
     sc1.OutputPNGFileName := fn;
     sc100.OutputPNGFileName := fn;
-    scmL.OutputPNGFileName := fn;
-    scmA.OutputPNGFileName := fn;
+    scmG.OutputPNGFileName := fn;
     scmP.OutputPNGFileName := fn;
 
-    scmL.Method := mmLBFGS;
-    scmA.Method := mmASA;
+    scmG.Method := mmGradientDescent;
     scmP.Method := mmPowell;
 
     sc1.LoadPNGs;
@@ -240,15 +236,10 @@ begin
     sc100.Process;
     sc100.Save;
 
-    scmL.LoadPNGs;
-    scmL.Process;
-    DrawImage(scmL.OutputImage);
-    scmL.Save;
-
-    scmA.LoadPNGs;
-    scmA.Process;
-    DrawImage(scmA.OutputImage);
-    scmA.Save;
+    scmG.LoadPNGs;
+    scmG.Process;
+    DrawImage(scmG.OutputImage);
+    scmG.Save;
 
     scmP.LoadPNGs;
     scmP.Process;
@@ -257,8 +248,7 @@ begin
   finally
     sc100.Free;
     sc1.Free;
-    scmL.Free;
-    scmA.Free;
+    scmG.Free;
     scmP.Free;
     sl.Free;
     DeleteFile(fn);
