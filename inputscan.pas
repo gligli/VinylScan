@@ -464,7 +464,7 @@ begin
 
   if not FSilent then WriteLn('Center:', FCenter.X:12:3, ',', FCenter.Y:12:3);
 
-  FFirstGrooveRadius := (C45RpmOuterSize + C45RpmFirstMusicGroove) * 0.5 * Self.FDPI * 0.5;
+  FFirstGrooveRadius := C45RpmFirstMusicGroove * Self.FDPI * 0.5;
 
   if not FSilent then WriteLn('FirstGrooveOffset:', FFirstGrooveRadius:12:3);
 
