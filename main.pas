@@ -8,7 +8,7 @@ uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, Types, scan2track, scancorrelator, utils, math, inputscan, FilterIIRLPBessel, FilterIIRHPBessel;
 
 const
-  CReducShift = 2;
+  CReducShift = 0;
   CReducFactor = 1.0 / (1 shl CReducShift);
 
 type
@@ -48,7 +48,6 @@ type
   private
 
     procedure DrawImage(const Img: TWordDynArray2); overload;
-    procedure DrawImage(const Img: TSingleDynArray2); overload;
   public
 
   end;
@@ -164,7 +163,7 @@ end;
 
 procedure TMainForm.btTestClick(Sender: TObject);
 var
-  img: TSingleDynArray2;
+  img: TWordDynArray2;
   i: Integer;
   fn: String;
   sc1, sc100, scmP, scmA, scmL: TScanCorrelator;
@@ -198,16 +197,16 @@ begin
 
   SetLength(img, 2048, 2048);
 
-  img[512, 16 * 2 + 1024] := 1.0;
-  img[1024, 128 * 2 + 1024] := 1.0;
-  img[1536, 64 * 2 + 1024] := 1.0;
-  img[2047, 256 * 2 + 1024] := 1.0;
+  img[512, 16 * 2 + 1024] := High(Word);
+  img[1024, 128 * 2 + 1024] := High(Word);
+  img[1536, 64 * 2 + 1024] := High(Word);
+  img[2047, 256 * 2 + 1024] := High(Word);
 
   for i := 0 to 511 do
   begin
-    img[i + 512, round(herp(0, 16, 128, 64, i / 512) * 2 + 1024)] := 1.0;
-    img[i + 1024, round(herp(16, 128, 64, 256, i / 512) * 2 + 1024)] := 1.0;
-    img[i + 1536, round(herp(128, 64, 256, 512, i / 512) * 2 + 1024)] := 1.0;
+    img[i + 512, round(herp(0, 16, 128, 64, i / 512) * 2 + 1024)] := High(Word);
+    img[i + 1024, round(herp(16, 128, 64, 256, i / 512) * 2 + 1024)] := High(Word);
+    img[i + 1536, round(herp(128, 64, 256, 512, i / 512) * 2 + 1024)] := High(Word);
   end;
 
   DrawImage(img);
@@ -295,43 +294,6 @@ begin
             acc += Img[(y shl CReducShift) + iy, (x shl CReducShift) + ix];
 
         b := EnsureRange(Round(acc * (High(Byte)  / (High(Word) shl (CReducShift * 2)))), 0, High(Byte));
-
-        sc^ := b;
-
-        Inc(sc);
-      end;
-    end;
-  finally
-    Image.Picture.Bitmap.EndUpdate;
-  end;
-
-  Application.ProcessMessages;
-end;
-
-procedure TMainForm.DrawImage(const Img: TSingleDynArray2);
-var
-  x, y, ix, iy: Integer;
-  sc: PByte;
-  b: Byte;
-  acc: Double;
-begin
-  Image.Picture.Bitmap.PixelFormat := pf8bit;
-  Image.Picture.Bitmap.Width := Length(Img[0]) shr CReducShift;
-  Image.Picture.Bitmap.Height := Length(Img) shr CReducShift;
-
-  Image.Picture.Bitmap.BeginUpdate;
-  try
-    for y := 0 to Image.Picture.Bitmap.Height - 1 do
-    begin
-      sc := Image.Picture.Bitmap.ScanLine[y];
-      for x := 0 to Image.Picture.Bitmap.Width - 1 do
-      begin
-        acc  := 0;
-        for iy := 0 to (1 shl CReducShift) - 1 do
-          for ix := 0 to (1 shl CReducShift) - 1 do
-            acc += Img[(y shl CReducShift) + iy, (x shl CReducShift) + ix];
-
-        b := EnsureRange(Round(acc * (High(Byte)  / (1 shl (CReducShift * 2)))), 0, High(Byte));
 
         sc^ := b;
 
