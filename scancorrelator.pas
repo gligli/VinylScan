@@ -74,18 +74,6 @@ type
     property DPI: TPoint read FDPI write FDPI;
   end;
 
-  { TScanImage }
-
-  TScanImage = class(TFPCustomImage)
-  private
-    FScanCorrelator: TScanCorrelator;
-  protected
-    procedure SetInternalPixel(x,y:integer; Value:integer); override;
-    function GetInternalPixel(x,y:integer) : integer; override;
-  public
-    property ScanCorrelator: TScanCorrelator read FScanCorrelator write FScanCorrelator;
-  end;
-
 implementation
 
 { TScanCorrelator }
@@ -147,7 +135,7 @@ begin
   begin
     FOutputDPI := FInputScans[0].DPI;
     for i := 1 to High(FInputScans) do
-      Assert(FInputScans[i].DPI = FOutputDPI, 'mixed DPIs');
+      Assert(FInputScans[i].DPI = FOutputDPI, 'InputScans mixed DPIs!');
   end;
 
   FPointsPerRevolution := Ceil(Pi * C45RpmOuterSize * FOutputDPI);
@@ -643,18 +631,18 @@ var
   i: Integer;
   png: TDPIAwareWriterPNG;
   fs: TFileStream;
-  fpimg: TScanImage;
+  img: TScanImage;
 begin
   WriteLn('Save ', FOutputPNGFileName);
 
   fs := TFileStream.Create(FOutputPNGFileName, fmCreate or fmShareDenyNone);
-  fpimg := TScanImage.Create(Length(FOutputImage[0]), Length(FOutputImage));
+  img := TScanImage.Create(Length(FOutputImage[0]), Length(FOutputImage));
   png := TDPIAwareWriterPNG.Create;
   try
-    fpimg.ScanCorrelator := Self;
-    fpimg.UsePalette := True;
+    img.Image := OutputImage;
+    img.UsePalette := True;
     for i := 0 to High(Word) do
-      fpimg.Palette.Add(FPColor(i, i, i, High(Word)));
+      img.Palette.Add(FPColor(i, i, i, High(Word)));
 
     png.DPI := Point(FOutputDPI, FOutputDPI);
     png.CompressedText := True;
@@ -664,10 +652,10 @@ begin
     png.Indexed := False;
     png.UseAlpha := False;
 
-    png.ImageWrite(fs, fpimg);
+    png.ImageWrite(fs, img);
   finally
     png.Free;
-    fpimg.Free;
+    img.Free;
     fs.Free;
   end;
 
@@ -736,18 +724,6 @@ begin
  inherited Create;
 
  FDPI := Point(-1, -1);
-end;
-
-{ TScanImage }
-
-procedure TScanImage.SetInternalPixel(x, y: integer; Value: integer);
-begin
-  // nothing (read only)
-end;
-
-function TScanImage.GetInternalPixel(x, y: integer): integer;
-begin
-  Result := FScanCorrelator.FOutputImage[y, x];
 end;
 
 end.

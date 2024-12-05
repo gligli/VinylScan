@@ -62,7 +62,7 @@ object MainForm: TMainForm
       ParentShowHint = False
       ShowHint = True
       TabOrder = 4
-      Text = 'data\sample_20241203_0001.png'
+      Text = 'data\IMG_20241205_0001.png'
     end
     object edOutputPNG: TEdit
       Left = 8

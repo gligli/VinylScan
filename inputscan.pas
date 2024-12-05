@@ -70,6 +70,19 @@ type
 
   TInputScanDynArray = array of TInputScan;
 
+  { TScanImage }
+
+  TScanImage = class(TFPCustomImage)
+  private
+    FImage: TWordDynArray2;
+  protected
+    procedure SetInternalPixel(x,y:integer; Value:integer); override;
+    function GetInternalPixel(x,y:integer) : integer; override;
+    procedure SetInternalColor (x,y:integer; const Value:TFPColor); override;
+  public
+    property Image: TWordDynArray2 read FImage write FImage;
+  end;
+
   { TDPIAwareReaderPNG }
 
   TDPIAwareReaderPNG = class(TFPReaderPNG)
@@ -82,20 +95,6 @@ type
 
     property DPI: TPoint read FDPI;
   end;
-
-
-  { TDPIAawarePortableNetworkGraphic }
-
-  TDPIAawarePortableNetworkGraphic = class(TPortableNetworkGraphic)
-  private
-    FDPI: TPoint;
-  protected
-    class function GetReaderClass: TFPCustomImageReaderClass; override;
-    procedure FinalizeReader(AReader: TFPCustomImageReader); override;
-  public
-    property DPI: TPoint read FDPI;
-  end;
-
 
 implementation
 
@@ -370,86 +369,35 @@ end;
 procedure TInputScan.LoadPNG;
 var
   fs: TBufferedFileStream;
-  png: TDPIAawarePortableNetworkGraphic;
-  x, y: Integer;
-  p: PByte;
+  png: TDPIAwareReaderPNG;
+  img: TScanImage;
+  sz: TPoint;
 begin
   if not FSilent then WriteLn('LoadPNG ', FPNGFileName);
 
   fs := TBufferedFileStream.Create(FPNGFileName, fmOpenRead or fmShareDenyNone);
-  png := TDPIAawarePortableNetworkGraphic.Create;
+  png := TDPIAwareReaderPNG.Create;
   try
-    png.LoadFromStream(fs);
+    sz := png.ImageSize(fs);
 
-    SetLength(FImage, png.Height, png.Width);
+    img := TScanImage.Create(sz.X, sz.Y);
+    try
+      SetLength(FImage, sz.Y, sz.X);
+      img.Image := FImage;
 
-    if not FSilent then WriteLn(png.Width:6, 'x', png.Height:6);
+      if not FSilent then WriteLn(Width:6, 'x', Height:6);
 
-    case png.RawImage.Description.BitsPerPixel of
-      8:
-        for y := 0 to High(FImage) do
-        begin
-          p := png.RawImage.Data;
-          inc(p, y * png.RawImage.Description.BytesPerLine);
-          for x := 0 to High(FImage[0]) do
-          begin
-            FImage[y, x] := Round(p^ * (High(Word) / High(Byte)));
-            Inc(p, 1);
-          end;
-        end;
-      16:
-        for y := 0 to High(FImage) do
-        begin
-          p := png.RawImage.Data;
-          inc(p, y * png.RawImage.Description.BytesPerLine);
-          for x := 0 to High(FImage[0]) do
-          begin
-            FImage[y, x] := PWord(p)^;
-            Inc(p, 2);
-          end;
-        end;
-      24:
-        for y := 0 to High(FImage) do
-        begin
-          p := png.RawImage.Data;
-          inc(p, y * png.RawImage.Description.BytesPerLine);
-          for x := 0 to High(FImage[0]) do
-          begin
-            FImage[y, x] := Round(ToLuma(p[0], p[1], p[2]) * (High(Word) / (cLumaDiv * High(Byte))));
-            Inc(p, 3);
-          end;
-        end;
-      32:
-        for y := 0 to High(FImage) do
-        begin
-          p := png.RawImage.Data;
-          inc(p, y * png.RawImage.Description.BytesPerLine);
-          for x := 0 to High(FImage[0]) do
-          begin
-            FImage[y, x] := Round(ToLuma(p[0], p[1], p[2]) * (High(Word) / (cLumaDiv * High(Byte))));
-            Inc(p, 4);
-          end;
-        end;
-      48:
-        for y := 0 to High(FImage) do
-        begin
-          p := png.RawImage.Data;
-          inc(p, y * png.RawImage.Description.BytesPerLine);
-          for x := 0 to High(FImage[0]) do
-          begin
-            FImage[y, x] := Round(ToLuma(PWord(p)[0], PWord(p)[1], PWord(p)[2]) * (1 / cLumaDiv));
-            Inc(p, 6);
-          end;
-        end;
-      else
-        Assert(False);
+      png.ImageRead(fs, img);
+
+      if (png.DPI.X > 0) and (png.DPI.X = png.DPI.Y) then
+      begin
+        FDPI := png.DPI.X;
+        if not FSilent then   WriteLn('DPI:', FDPI:6);
+      end;
+    finally
+      img.Free;
     end;
 
-    if (png.DPI.X > 0) and (png.DPI.X = png.DPI.Y) then
-    begin
-      FDPI := png.DPI.X;
-      if not FSilent then   WriteLn('DPI:', FDPI:6);
-    end;
   finally
     png.Free;
     fs.Free;
@@ -488,6 +436,23 @@ begin
   Result := InRange(Y, 2, Height - 3) and InRange(X, 2, Width - 3);
 end;
 
+{ TScanImage }
+
+procedure TScanImage.SetInternalPixel(x, y: integer; Value: integer);
+begin
+  // not needed
+end;
+
+function TScanImage.GetInternalPixel(x, y: integer): integer;
+begin
+  Result := FImage[y, x];
+end;
+
+procedure TScanImage.SetInternalColor(x, y: integer; const Value: TFPColor);
+begin
+  FImage[y, x] := ToLuma(Value.Red, Value.Green, Value.Blue) div cLumaDiv;
+end;
+
 { TDPIAwareReaderPNG }
 
 procedure TDPIAwareReaderPNG.HandleChunk;
@@ -506,19 +471,6 @@ begin
   inherited create;
 
   FDPI := Point(-1, -1);
-end;
-
-{ TDPIAawarePortableNetworkGraphic }
-
-class function TDPIAawarePortableNetworkGraphic.GetReaderClass: TFPCustomImageReaderClass;
-begin
-  Result := TDPIAwareReaderPNG;
-end;
-
-procedure TDPIAawarePortableNetworkGraphic.FinalizeReader(AReader: TFPCustomImageReader);
-begin
-  FDPI := TDPIAwareReaderPNG(AReader).DPI;
-  inherited FinalizeReader(AReader);
 end;
 
 end.
