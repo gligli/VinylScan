@@ -20,7 +20,6 @@ type
   private
     FOutputWAVFileName: String;
     FMethod: TMinimizeMethod;
-    FSinCosLUT: TPointDDynArray;
 
     FScan: TInputScan;
     FBitsPerSample: Integer;
@@ -142,7 +141,7 @@ var
   end;
 
 var
-  angle, radius, sn, cs, px, py, radiusInc, fsmp, ffSmp: Double;
+  angle, radius, sn, cs, px, py, gradient, feedback, fsmp, ffSmp: Double;
   i, pos: Integer;
   pbuf: specialize TFPGList<TPoint>;
   t, pt: QWord;
@@ -162,7 +161,6 @@ begin
 
     angle := Scan.GrooveStartAngle;
     radius := Scan.FirstGrooveRadius;
-    radiusInc := -(Scan.DPI / C45RpmLeadInGroovesPerInch) / FPointsPerRevolution;
 
     repeat
       fsmp := DecodeSample(radius, angle);
@@ -174,9 +172,12 @@ begin
       py := sn * radius + Self.Scan.Center.Y;
       pbuf.Add(Point(round(px * CReducFactor), round(py * CReducFactor)));
 
-      radiusInc := Scan.GetPointD(py, px, isXGradient, imLinear) * -sn + Scan.GetPointD(py, px, isYGradient, imLinear) * cs;
-      radius += radiusInc * 0.4;
+      feedback := fsmp * C45RpmMaxGrooveWidth * Scan.DPI * 0.2;
+      gradient := (Scan.GetPointD(py, px, isXGradient, imLinear) * cs + Scan.GetPointD(py, px, isYGradient, imLinear) * sn) * -0.3;
+      radius += (feedback + gradient) * 0.5;
       angle := Scan.GrooveStartAngle - FRadiansPerRevolutionPoint * pos;
+
+      WriteLn(feedback:9:6, gradient:9:6);
 
       Inc(pos);
 
