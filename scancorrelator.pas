@@ -250,10 +250,9 @@ procedure TScanCorrelator.GradientsAnalyze(const arg: TVector; var func: Double;
 var
   gradData: TDoubleDynArray2;
   imgData: TDoubleDynArray2;
-  gradResults: TPointDDynArray2;
   imgResults: TDoubleDynArray;
-  mseCoords: array of TPoint;
   rLbl: Double;
+  paramCount: Integer;
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
@@ -347,68 +346,30 @@ var
 
   procedure DoMSE(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
-    iArg, iX, iY: Integer;
+    iArg: Integer;
   begin
-    if not InRange(AIndex, 0, High(mseCoords)) then
+    if not InRange(AIndex, 0, High(FInputScans) - 1) then
       Exit;
 
-    iX := mseCoords[AIndex].X;
-    iY := mseCoords[AIndex].Y;
+    imgResults[AIndex] := MSE(imgData[0], imgData[AIndex + 1]);
 
-    imgResults[AIndex] := MSE(imgData[iX], imgData[iY]);
-
-    for iArg := 0 to Length(grad) div High(FInputScans) - 1 do
-    begin
-      if iX > 0 then
-        gradResults[AIndex, High(FInputScans) * iArg + iX - 1].X := MSEGradient(imgData[iY], imgData[iX], gradData[High(FInputScans) * iArg + iX - 1]);
-      if iY > 0 then
-        gradResults[AIndex, High(FInputScans) * iArg + iY - 1].Y := MSEGradient(imgData[iX], imgData[iY], gradData[High(FInputScans) * iArg + iY - 1]);
-    end;
+    for iArg := 0 to paramCount - 1 do
+      grad[High(FInputScans) * iArg + AIndex + 1 - 1] := MSEGradient(imgData[0], imgData[AIndex + 1], gradData[High(FInputScans) * iArg + AIndex + 1 - 1]);
   end;
 
 var
-  iX, iY, iArg, cnt: Integer;
+  cnt: Integer;
 begin
   rLbl := C45RpmLabelOuterSize * 0.5 * FOutputDPI;
+  paramCount := Length(grad) div High(FInputScans);
 
   cnt := Ceil(CAreaWidth * CAreaGroovesPerInchAnalyze * FPointsPerRevolution);
+  SetLength(imgResults, High(FInputScans));
   SetLength(imgData, Length(FInputScans), cnt);
   SetLength(gradData, Length(grad), cnt);
 
   ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FInputScans));
-
-  SetLength(mseCoords, Length(FInputScans) * High(FInputScans) div 2);
-  SetLength(imgResults, Length(mseCoords));
-  SetLength(gradResults, Length(mseCoords), Length(grad));
-
-  for iX := 0 to High(grad) do
-    grad[iX] := 0.0;
-
-  cnt := 0;
-  for iX := 0 to High(FInputScans) do
-    for iY := iX + 1 to High(FInputScans) do
-    begin
-      mseCoords[cnt].X := iX;
-      mseCoords[cnt].Y := iY;
-      Inc(cnt);
-    end;
-  Assert(cnt = Length(mseCoords));
-
-  ProcThreadPool.DoParallelLocalProc(@DoMSE, 0, High(mseCoords));
-
-  cnt := 0;
-  for iX := 0 to High(FInputScans) do
-    for iY := iX + 1 to High(FInputScans) do
-    begin
-      for iArg := 0 to Length(grad) div High(FInputScans) - 1 do
-      begin
-        if iX > 0 then
-          grad[High(FInputScans) * iArg + iX - 1] += gradResults[cnt, High(FInputScans) * iArg + iX - 1].X;
-        if iY > 0 then
-          grad[High(FInputScans) * iArg + iY - 1] += gradResults[cnt, High(FInputScans) * iArg + iY - 1].Y;
-      end;
-      Inc(cnt);
-    end;
+  ProcThreadPool.DoParallelLocalProc(@DoMSE, 0, High(FInputScans) - 1);
 
   func := Sum(imgResults);
 
