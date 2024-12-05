@@ -94,7 +94,8 @@ const
   CAreaBegin = C45RpmInnerSize;
   CAreaEnd = C45RpmFirstMusicGroove;
   CAreaWidth = (CAreaEnd - CAreaBegin) * 0.5;
-  CAreaGroovesPerInch = 60;
+  CAreaGroovesPerInchAnalyze = 60;
+  CAreaGroovesPerInchCrop = 16;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
@@ -283,7 +284,7 @@ var
 
     BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
 
-    ri := FOutputDPI / (CAreaGroovesPerInch * (FPointsPerRevolution - 1));
+    ri := FOutputDPI / (CAreaGroovesPerInchAnalyze * (FPointsPerRevolution - 1));
 
     r := CAreaBegin * 0.5 * FOutputDPI;
     pos := 0;
@@ -370,7 +371,7 @@ var
 begin
   rLbl := C45RpmLabelOuterSize * 0.5 * FOutputDPI;
 
-  cnt := Ceil(CAreaWidth * CAreaGroovesPerInch * FPointsPerRevolution);
+  cnt := Ceil(CAreaWidth * CAreaGroovesPerInchAnalyze * FPointsPerRevolution);
   SetLength(imgData, Length(FInputScans), cnt);
   SetLength(gradData, Length(grad), cnt);
 
@@ -544,9 +545,9 @@ begin
   cx := FInputScans[inputIdx].Center.X;
   cy := FInputScans[inputIdx].Center.Y;
 
-  SetLength(stdDevArr, Ceil((rEnd - rBeg) / FOutputDPI * CAreaGroovesPerInch) * FPointsPerRevolution);
+  SetLength(stdDevArr, Ceil((rEnd - rBeg) / FOutputDPI * CAreaGroovesPerInchCrop) * FPointsPerRevolution);
 
-  ri := (rEnd - rBeg) / (CAreaGroovesPerInch * (FPointsPerRevolution - 1));
+  ri := (rEnd - rBeg) / (CAreaGroovesPerInchCrop * (FPointsPerRevolution - 1));
 
   pos := 0;
   arrPos := 0;
