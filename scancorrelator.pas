@@ -80,7 +80,7 @@ implementation
 
 const
   CAreaBegin = C45RpmInnerSize;
-  CAreaEnd = C45RpmFirstMusicGroove;
+  CAreaEnd = C45RpmLastMusicGroove;
   CAreaWidth = (CAreaEnd - CAreaBegin) * 0.5;
   CAreaGroovesPerInchAnalyze = 60;
   CAreaGroovesPerInchCrop = 16;
@@ -142,7 +142,7 @@ begin
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
 
   WriteLn('DPI:', FOutputDPI:6);
-  WriteLn('PointsPerRevolution:', FPointsPerRevolution:8, ', outer raw sample rate: ', Round(FPointsPerRevolution * C45RpmRevolutionsPerSecond), ' Hz');
+  WriteLn('PointsPerRevolution:', FPointsPerRevolution:8, ', inner raw sample rate: ', Round(FPointsPerRevolution * C45RpmRevolutionsPerSecond), ' Hz');
 
   SetLength(FOutputImage, Ceil(C45RpmOuterSize * FOutputDPI), Ceil(C45RpmOuterSize * FOutputDPI));
 end;
@@ -245,7 +245,7 @@ var
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     i, pos: Integer;
-    ct, ri, t, r, px, py, cx, cy, rri, skx, sky, sn, cs, p, gimgx, gimgy, gt, gcx, gcy, gskx, gsky: Double;
+    ct, ri, t, r, px, py, cx, cy, rri, skx, sky, sn, cs, p, gimgx, gimgy, gr, gt, gcx, gcy, gskx, gsky, invLen: Double;
     cropped: Boolean;
     sinCosLUT: TPointDDynArray;
   begin
@@ -272,6 +272,7 @@ var
     BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
 
     ri := FOutputDPI / (CAreaGroovesPerInchAnalyze * (FPointsPerRevolution - 1));
+    invLen := 1.0 / Length(imgData[0]);
 
     r := CAreaBegin * 0.5 * FOutputDPI;
     pos := 0;
@@ -310,11 +311,13 @@ var
             gimgx := FInputScans[AIndex].GetPointD(py, px, isXGradient, imLinear);
             gimgy := FInputScans[AIndex].GetPointD(py, px, isYGradient, imLinear);
 
-            gt := (gimgx * -sn * skx + gimgy * cs * sky) * ri;
+            gr := rri * invLen;
+
+            gt := (gimgx * -sn * skx + gimgy * cs * sky) * gr;
             gcx := gimgx;
             gcy := gimgy;
-            gskx := gimgx * cs * ri;
-            gsky := gimgy * sn * ri;
+            gskx := gimgx * cs * gr;
+            gsky := gimgy * sn * gr;
           end;
 
           gradData[High(FInputScans) * 0 + AIndex - 1, i] := gt;
@@ -418,7 +421,7 @@ begin
     end;
     mmGradientDescent:
     begin
-      Result := GradientDescentMinimize(@GradientsAnalyze, x, 10.0);
+      Result := GradientDescentMinimize(@GradientsAnalyze, x, 1.0);
     end;
     mmPowell:
     begin
