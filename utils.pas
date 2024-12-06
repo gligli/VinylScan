@@ -8,7 +8,7 @@ unit utils;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Windows, MTProcs;
+  Classes, SysUtils, Types, Windows, MTProcs, Math;
 
 type
   TSpinlock = LongInt;
@@ -317,7 +317,7 @@ end;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double;
   Epsilon: Double; Data: Pointer): Double;
 var
-  gs: Double;
+  gm: Double;
   grad: TDoubleDynArray;
   i: Integer;
 begin
@@ -326,14 +326,15 @@ begin
   repeat
     Func(X, Result, grad, Data);
 
+    gm := 0.0;
     for i := 0 to High(X) do
+    begin
       X[i] -= LearningRate * grad[i];
+      gm := max(gm, grad[i]);
+    end;
 
-    gs := sqrt(SumOfSquares(grad) / Length(grad));
-
-    //WriteLn(Result:20:9, gs:20:9);
-
-  until gs <= Epsilon;
+    //WriteLn(Result:20:9, gm:20:9);
+  until gm <= Epsilon;
 end;
 
 function Convolve(const image: TDoubleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double;
