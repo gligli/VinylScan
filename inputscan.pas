@@ -5,7 +5,7 @@ unit inputscan;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, FPReadPNG, FPImage, PNGComn, bufstream,
+  Classes, SysUtils, Types, Math, Graphics, FPReadPNG, FPImage, PNGComn,
   utils, powell;
 
 type
@@ -376,14 +376,14 @@ end;
 
 procedure TInputScan.LoadPNG;
 var
-  fs: TBufferedFileStream;
+  fs: TFileStream;
   png: TDPIAwareReaderPNG;
   img: TScanImage;
   sz: TPoint;
 begin
   if not FSilent then WriteLn('LoadPNG ', FPNGFileName);
 
-  fs := TBufferedFileStream.Create(FPNGFileName, fmOpenRead or fmShareDenyNone);
+  fs := TFileStream.Create(FPNGFileName, fmOpenRead or fmShareDenyNone);
   png := TDPIAwareReaderPNG.Create;
   try
     sz := png.ImageSize(fs);
@@ -393,7 +393,7 @@ begin
       SetLength(FImage, sz.Y, sz.X);
       img.Image := FImage;
 
-      if not FSilent then WriteLn(Width:6, 'x', Height:6);
+      if not FSilent then WriteLn('Size:', Width:6, 'x', Height:6);
 
       png.ImageRead(fs, img);
 
