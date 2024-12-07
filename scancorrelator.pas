@@ -376,7 +376,7 @@ end;
 
 function TScanCorrelator.Analyze(AMethod: TMinimizeMethod): Double;
 var
-  x, bl, bu: TVector;
+  x: TVector;
   i: Integer;
   p: TPointD;
 begin
@@ -391,8 +391,6 @@ begin
     WriteLn(FInputScans[i].PNGFileName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (before)');
 
   SetLength(x, High(FInputScans) * 5);
-  SetLength(bl, Length(x));
-  SetLength(bu, Length(x));
   for i := 1 to High(FInputScans) do
   begin
     x[High(FInputScans) * 0 + i - 1] := FPerSnanAngles[i];
@@ -400,18 +398,6 @@ begin
     x[High(FInputScans) * 2 + i - 1] := FInputScans[i].Center.Y;
     x[High(FInputScans) * 3 + i - 1] := FPerSnanSkews[i].X;
     x[High(FInputScans) * 4 + i - 1] := FPerSnanSkews[i].Y;
-
-    bl[High(FInputScans) * 0 + i - 1] := FPerSnanAngles[i] - 2.0 * Pi;
-    bl[High(FInputScans) * 1 + i - 1] := 0;
-    bl[High(FInputScans) * 2 + i - 1] := 0;
-    bl[High(FInputScans) * 3 + i - 1] := 0.9;
-    bl[High(FInputScans) * 4 + i - 1] := 0.9;
-
-    bu[High(FInputScans) * 0 + i - 1] := FPerSnanAngles[i] + 2.0 * Pi;
-    bu[High(FInputScans) * 1 + i - 1] := FInputScans[i].Width - 1;
-    bu[High(FInputScans) * 2 + i - 1] := FInputScans[i].Height - 1;
-    bu[High(FInputScans) * 3 + i - 1] := 1.1;
-    bu[High(FInputScans) * 4 + i - 1] := 1.1;
   end;
 
   case AMethod of
