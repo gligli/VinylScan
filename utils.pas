@@ -388,41 +388,37 @@ end;
 
 function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 var
-  i, cnt: Integer;
+  i: Integer;
 begin
   Assert(Length(a) = Length(b));
 
-  cnt := 0;
   Result := 0;
-  for i := 0 to High(a) do
-    if not IsNan(a[i]) and not IsNan(b[i]) then
-    begin
-      Result += Sqr(a[i] - b[i]);
-      Inc(cnt);
-    end;
 
-  if cnt > 1 then
-    Result /= cnt;
+  if not Assigned(a) then
+    Exit;
+
+  for i := 0 to High(a) do
+    Result += Sqr(a[i] - b[i]);
+
+  Result /= Length(a);
 end;
 
 function MSEGradient(const a: TDoubleDynArray; const b: TDoubleDynArray; const gb: TDoubleDynArray): Double;
 var
-  i, cnt: Integer;
+  i: Integer;
 begin
   Assert(Length(a) = Length(b));
   Assert(Length(a) = Length(gb));
 
-  cnt := 0;
   Result := 0;
-  for i := 0 to High(a) do
-    if not IsNan(a[i]) and not IsNan(b[i]) and not IsNan(gb[i]) then
-    begin
-      Result -= 2.0 *(a[i] - b[i]) * gb[i];
-      Inc(cnt);
-    end;
 
-  if cnt > 1 then
-    Result /= cnt;
+  if not Assigned(a) then
+    Exit;
+
+  for i := 0 to High(a) do
+    Result -= 2.0 *(a[i] - b[i]) * gb[i];
+
+  Result /= Length(a);
 end;
 
 function Make16BitSample(smp: Double): SmallInt;

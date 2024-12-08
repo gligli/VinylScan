@@ -37,8 +37,8 @@ type
     function PowellCrop(const x: TVector; obj: Pointer): TScalar;
 
     procedure AngleInit;
-    procedure Crop;
     function Analyze(AMethod: TMinimizeMethod): Double;
+    procedure Crop;
     procedure Rebuild;
   public
     constructor Create(const AFileNames: TStrings; AOutputDPI: Integer = 2400);
@@ -82,7 +82,7 @@ const
   CAreaBegin = C45RpmInnerSize;
   CAreaEnd = C45RpmLastMusicGroove;
   CAreaWidth = (CAreaEnd - CAreaBegin) * 0.5;
-  CAreaGroovesPerInchAnalyze = 60;
+  CAreaGroovesPerInchAnalyze = 16;
   CAreaGroovesPerInchCrop = 16;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
@@ -239,14 +239,12 @@ var
   gradData: TDoubleDynArray2;
   imgData: TDoubleDynArray2;
   imgResults: TDoubleDynArray;
-  rLbl: Double;
   paramCount: Integer;
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     i, pos: Integer;
-    ct, ri, t, r, px, py, cx, cy, rri, skx, sky, sn, cs, p, gimgx, gimgy, gr, gt, gcx, gcy, gskx, gsky, invLen: Double;
-    cropped: Boolean;
+    ri, t, r, px, py, cx, cy, rri, skx, sky, sn, cs, p, gimgx, gimgy, gr, gt, gcx, gcy, gskx, gsky, invLen: Double;
     sinCosLUT: TPointDDynArray;
   begin
     if not InRange(AIndex, 0, High(FInputScans)) then
@@ -288,37 +286,22 @@ var
 
       if FInputScans[AIndex].InRangePointD(py, px) then
       begin
-        ct := AngleTo02Pi(t + pos * FRadiansPerRevolutionPoint);
-        cropped := (In02PiExtentsAngle(ct, FPerSnanCrops[AIndex, 0], FPerSnanCrops[AIndex, 1]) or
-                   In02PiExtentsAngle(ct, FPerSnanCrops[AIndex, 2], FPerSnanCrops[AIndex, 3])) and
-                   (rri >= rLbl);
-
-        p := NaN;
-        if not cropped then
-          p := FInputScans[AIndex].GetPointD(py, px, isImage, imLinear);
+        p := FInputScans[AIndex].GetPointD(py, px, isImage, imLinear);
 
         imgData[AIndex, i] := p;
 
         if (AIndex > 0) and Assigned(grad) then
         begin
-          gt := NaN;
-          gcx := NaN;
-          gcy := NaN;
-          gskx := NaN;
-          gsky := NaN;
-          if not cropped then
-          begin
-            gimgx := FInputScans[AIndex].GetPointD(py, px, isXGradient, imLinear);
-            gimgy := FInputScans[AIndex].GetPointD(py, px, isYGradient, imLinear);
+          gimgx := FInputScans[AIndex].GetPointD(py, px, isXGradient, imLinear);
+          gimgy := FInputScans[AIndex].GetPointD(py, px, isYGradient, imLinear);
 
-            gr := rri * invLen;
+          gr := rri * invLen;
 
-            gt := (gimgx * -sn * skx + gimgy * cs * sky) * gr;
-            gcx := gimgx;
-            gcy := gimgy;
-            gskx := gimgx * cs * gr;
-            gsky := gimgy * sn * gr;
-          end;
+          gt := (gimgx * -sn * skx + gimgy * cs * sky) * gr;
+          gcx := gimgx;
+          gcy := gimgy;
+          gskx := gimgx * cs * gr;
+          gsky := gimgy * sn * gr;
 
           gradData[High(FInputScans) * 0 + AIndex - 1, i] := gt;
           gradData[High(FInputScans) * 1 + AIndex - 1, i] := gcx;
@@ -351,7 +334,6 @@ var
 var
   cnt: Integer;
 begin
-  rLbl := C45RpmLabelOuterSize * 0.5 * FOutputDPI;
   paramCount := Length(grad) div High(FInputScans);
 
   cnt := Ceil(CAreaWidth * CAreaGroovesPerInchAnalyze * FPointsPerRevolution);
@@ -630,7 +612,6 @@ var
   iter: Integer;
 begin
   AngleInit;
-  Crop;
 
   if FMethod <> mmAll then
   begin
@@ -650,6 +631,7 @@ begin
     until SameValue(obj, prevObj, 1e-9);
   end;
 
+  Crop;
   Rebuild;
 end;
 

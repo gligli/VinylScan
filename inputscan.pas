@@ -366,7 +366,7 @@ begin
   FPointsPerRevolution := APointsPerRevolution;
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
   FSilent := ASilent;
-  FImageDerivationOperator := idoSobel;
+  FImageDerivationOperator := idoPrewitt;
 end;
 
 destructor TInputScan.Destroy;

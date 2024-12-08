@@ -129,7 +129,7 @@ object MainForm: TMainForm
     object cbDPI: TComboBox
       Left = 264
       Height = 23
-      Hint = 'Dots per inch'
+      Hint = 'Default dots per inch'
       Top = 8
       Width = 64
       ItemHeight = 15
