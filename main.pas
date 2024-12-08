@@ -8,7 +8,7 @@ uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, Types, scan2track, scancorrelator, utils, math, inputscan, FilterIIRLPBessel, FilterIIRHPBessel;
 
 const
-  CReducShift = 2;
+  CReducShift = 0;
   CReducFactor = 1.0 / (1 shl CReducShift);
 
 type
@@ -165,11 +165,13 @@ var
   img: TWordDynArray2;
   i: Integer;
   fn: String;
-  sc1, sc100, scmP, scmG: TScanCorrelator;
+  sc1, sc100, scm: TScanCorrelator;
   sl: TStringList;
   fltLP: TFilterIIRLPBessel;
   fltHP: TFilterIIRHPBessel;
   smps: TSmallIntDynArray;
+  mm: TMinimizeMethod;
+  ido: TImageDerivationOperator;
 begin
   SetLength(smps, 48000 * 2);
   fltLP := TFilterIIRLPBessel.Create(nil);
@@ -206,50 +208,61 @@ begin
     img[i + 512, round(herp(0, 16, 128, 64, i / 512) * 2 + 1024)] := High(Word);
     img[i + 1024, round(herp(16, 128, 64, 256, i / 512) * 2 + 1024)] := High(Word);
     img[i + 1536, round(herp(128, 64, 256, 512, i / 512) * 2 + 1024)] := High(Word);
+
+    img[i + 512, round(lerp(16, 128, i / 512) * 2 + 1024)] := High(Word);
+    img[i + 1024, round(lerp(128, 64, i / 512) * 2 + 1024)] := High(Word);
+    img[i + 1536, round(lerp(64, 256, i / 512) * 2 + 1024)] := High(Word);
   end;
 
   DrawImage(img);
 
   fn := GetTempFileName;
   sl := TStringList.Create;
-  sc1 := TScanCorrelator.Create(sl, 1);
-  sc100 := TScanCorrelator.Create(sl, 100);
-  sl.Add('data\think_mock.png');
-  sl.Add('data\think_mock2.png');
-  sl.Add('data\think_mock3.png');
-  scmG := TScanCorrelator.Create(sl);
-  scmP := TScanCorrelator.Create(sl);
   try
-    sc1.OutputPNGFileName := fn;
-    sc100.OutputPNGFileName := fn;
-    scmG.OutputPNGFileName := fn;
-    scmP.OutputPNGFileName := fn;
+    sc1 := TScanCorrelator.Create(sl, 1);
+    sc100 := TScanCorrelator.Create(sl, 100);
+    try
+      sc1.OutputPNGFileName := fn;
+      sc100.OutputPNGFileName := fn;
 
-    scmG.Method := mmGradientDescent;
-    scmP.Method := mmPowell;
+      sc1.LoadPNGs;
+      sc1.Process;
+      sc1.Save;
 
-    sc1.LoadPNGs;
-    sc1.Process;
-    sc1.Save;
+      sc100.LoadPNGs;
+      sc100.Process;
+      sc100.Save;
+    finally
+      sc100.Free;
+      sc1.Free;
+    end;
 
-    sc100.LoadPNGs;
-    sc100.Process;
-    sc100.Save;
+    sl.Add('data\think_mock.png');
+    sl.Add('data\think_mock2.png');
+    sl.Add('data\think_mock3.png');
 
-    scmG.LoadPNGs;
-    scmG.Process;
-    DrawImage(scmG.OutputImage);
-    scmG.Save;
+    for mm := Succ(mmNone) to High(TMinimizeMethod) do
+      for ido := Low(TImageDerivationOperator) to High(TImageDerivationOperator) do
+      begin
+        if (ido <> Low(TImageDerivationOperator)) and (mm = mmPowell) then
+          Continue;
 
-    scmP.LoadPNGs;
-    scmP.Process;
-    DrawImage(scmP.OutputImage);
-    scmP.Save;
+        scm := TScanCorrelator.Create(sl);
+        try
+          scm.OutputPNGFileName := fn;
+          scm.Method := mm;
+          scm.ImageDerivationOperator := ido;
+
+          scm.LoadPNGs;
+          scm.Process;
+          DrawImage(scm.OutputImage);
+          scm.Save;
+        finally
+          scm.Free;
+        end;
+      end;
+
   finally
-    sc100.Free;
-    sc1.Free;
-    scmG.Free;
-    scmP.Free;
     sl.Free;
     DeleteFile(fn);
   end;

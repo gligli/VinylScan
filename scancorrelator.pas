@@ -351,10 +351,22 @@ begin
 end;
 
 function TScanCorrelator.GetImageDerivationOperator: TImageDerivationOperator;
+var
+  dummy: TInputScan;
 begin
-  Result := idoSobel;
   if Length(FInputScans) > 0 then
+  begin
     Result := FInputScans[0].ImageDerivationOperator;
+  end
+  else
+  begin
+    dummy := TInputScan.Create;
+    try
+      Result := dummy.ImageDerivationOperator;
+    finally
+      dummy.Free;
+    end;
+  end;
 end;
 
 function TScanCorrelator.Analyze(AMethod: TMinimizeMethod): Double;
@@ -390,7 +402,7 @@ begin
     end;
     mmGradientDescent:
     begin
-      Result := GradientDescentMinimize(@GradientsAnalyze, x, 10.0);
+      Result := GradientDescentMinimize(@GradientsAnalyze, x, 2.0);
     end;
     mmPowell:
     begin
