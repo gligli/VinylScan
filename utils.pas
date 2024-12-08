@@ -129,7 +129,8 @@ function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray
 function Convolve(const image:TDoubleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double; overload;
 function Convolve(const image:TWordDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Integer; overload;
 
-function PearsonCorrelation(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
+function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
+function PearsonCorrelationGradient(const a: TDoubleDynArray; const b: TDoubleDynArray; const gb: TDoubleDynArray): Double;
 function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 function MSEGradient(const a: TDoubleDynArray; const b: TDoubleDynArray; const gb: TDoubleDynArray): Double;
 
@@ -330,7 +331,7 @@ begin
     for i := 0 to High(X) do
     begin
       X[i] -= LearningRate * grad[i];
-      gm := max(gm, grad[i]);
+      gm := max(gm, Abs(grad[i]));
     end;
 
     //WriteLn(Result:20:9, gm:20:9);
@@ -357,33 +358,73 @@ begin
       Result += image[y + row, x + col] * kernel[y, x];
 end;
 
-function PearsonCorrelation(const x: TDoubleDynArray; const y: TDoubleDynArray): Double;
+function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 var
-  mx, my, num, den, denx, deny: Double;
+  ma, mb, num, den, dena, denb: Double;
   i: Integer;
 begin
-  Assert(Length(x) = Length(y));
-
-  mx := mean(x);
-  my := mean(y);
-
-  num := 0.0;
-  denx := 0.0;
-  deny := 0.0;
-  for i := 0 to High(x) do
-  begin
-    num += (x[i] - mx) * (y[i] - my);
-    denx += sqr(x[i] - mx);
-    deny += sqr(y[i] - my);
-  end;
-
-  denx := sqrt(denx);
-  deny := sqrt(deny);
-  den := denx * deny;
+  Assert(Length(a) = Length(b));
 
   Result := 1.0;
+  if not Assigned(a) then
+    Exit;
+
+  ma := mean(a);
+  mb := mean(b);
+
+  num := 0.0;
+  dena := 0.0;
+  denb := 0.0;
+  for i := 0 to High(a) do
+  begin
+    num += (a[i] - ma) * (b[i] - mb);
+    dena += sqr(a[i] - ma);
+    denb += sqr(b[i] - mb);
+  end;
+
+  den := sqrt(dena * denb);
+
   if den <> 0.0 then
     Result := num / den;
+end;
+
+function PearsonCorrelationGradient(const a: TDoubleDynArray; const b: TDoubleDynArray; const gb: TDoubleDynArray): Double;
+var
+  ma, mb, mgb, num, den, dena, denb: Double;
+  i: Integer;
+begin
+  Assert(Length(a) = Length(b));
+  Assert(Length(a) = Length(gb));
+
+  Result := 0.0;
+  if not Assigned(a) then
+    Exit;
+
+  ma := mean(a);
+  mb := mean(b);
+
+  num := 0.0;
+  dena := 0.0;
+  denb := 0.0;
+  for i := 0 to High(a) do
+  begin
+    num += (a[i] - ma) * (b[i] - mb);
+    dena += sqr(a[i] - ma);
+    denb += sqr(b[i] - mb);
+  end;
+
+  den := sqrt(dena * denb);
+
+  mgb := mean(gb);
+
+  if den <> 0.0 then
+  begin
+    if denb <> 0.0 then
+      for i := 0 to High(a) do
+        Result += ((a[i] - ma) - num / denb * (b[i] - mb)) * gb[i];
+
+    Result /= den;
+  end;
 end;
 
 function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
@@ -392,8 +433,7 @@ var
 begin
   Assert(Length(a) = Length(b));
 
-  Result := 0;
-
+  Result := 0.0;
   if not Assigned(a) then
     Exit;
 
@@ -410,8 +450,7 @@ begin
   Assert(Length(a) = Length(b));
   Assert(Length(a) = Length(gb));
 
-  Result := 0;
-
+  Result := 0.0;
   if not Assigned(a) then
     Exit;
 
