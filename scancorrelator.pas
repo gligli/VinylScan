@@ -80,7 +80,7 @@ implementation
 
 const
   CAreaBegin = C45RpmInnerSize;
-  CAreaEnd = C45RpmFirstMusicGroove;
+  CAreaEnd = C45RpmLastMusicGroove;
   CAreaWidth = (CAreaEnd - CAreaBegin) * 0.5;
   CAreaGroovesPerInchAnalyze = 16;
   CAreaGroovesPerInchCrop = 16;
@@ -143,7 +143,7 @@ begin
 
   WriteLn('DPI:', FOutputDPI:6);
   WriteLn('PointsPerRevolution:', FPointsPerRevolution:8);
-  Writeln('Outer raw sample rate: ', Round(FPointsPerRevolution * C45RpmRevolutionsPerSecond), ' Hz');
+  Writeln('Inner raw sample rate: ', Round(FPointsPerRevolution * C45RpmRevolutionsPerSecond), ' Hz');
 
   SetLength(FOutputImage, Ceil(C45RpmOuterSize * FOutputDPI), Ceil(C45RpmOuterSize * FOutputDPI));
 end;
