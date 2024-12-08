@@ -80,7 +80,7 @@ implementation
 
 const
   CAreaBegin = C45RpmInnerSize;
-  CAreaEnd = C45RpmLastMusicGroove;
+  CAreaEnd = C45RpmFirstMusicGroove;
   CAreaWidth = (CAreaEnd - CAreaBegin) * 0.5;
   CAreaGroovesPerInchAnalyze = 16;
   CAreaGroovesPerInchCrop = 16;
@@ -142,7 +142,8 @@ begin
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
 
   WriteLn('DPI:', FOutputDPI:6);
-  WriteLn('PointsPerRevolution:', FPointsPerRevolution:8, ', inner raw sample rate: ', Round(FPointsPerRevolution * C45RpmRevolutionsPerSecond), ' Hz');
+  WriteLn('PointsPerRevolution:', FPointsPerRevolution:8);
+  Writeln('Outer raw sample rate: ', Round(FPointsPerRevolution * C45RpmRevolutionsPerSecond), ' Hz');
 
   SetLength(FOutputImage, Ceil(C45RpmOuterSize * FOutputDPI), Ceil(C45RpmOuterSize * FOutputDPI));
 end;
@@ -325,10 +326,10 @@ var
     if not InRange(AIndex, 0, High(FInputScans) - 1) then
       Exit;
 
-    imgResults[AIndex] := MSE(imgData[0], imgData[AIndex + 1]);
+    imgResults[AIndex] := -PearsonCorrelation(imgData[0], imgData[AIndex + 1]);
 
     for iArg := 0 to paramCount - 1 do
-      grad[High(FInputScans) * iArg + AIndex + 1 - 1] := MSEGradient(imgData[0], imgData[AIndex + 1], gradData[High(FInputScans) * iArg + AIndex + 1 - 1]);
+      grad[High(FInputScans) * iArg + AIndex + 1 - 1] := -PearsonCorrelationGradient(imgData[0], imgData[AIndex + 1], gradData[High(FInputScans) * iArg + AIndex + 1 - 1]);
   end;
 
 var
@@ -346,7 +347,7 @@ begin
 
   func := Sum(imgResults);
 
-  Write('RMSE: ', Sqrt(Mean(imgResults)):12:9,#13);
+  Write('Correlation: ', -Mean(imgResults):12:9,#13);
 end;
 
 function TScanCorrelator.GetImageDerivationOperator: TImageDerivationOperator;
@@ -389,7 +390,7 @@ begin
     end;
     mmGradientDescent:
     begin
-      Result := GradientDescentMinimize(@GradientsAnalyze, x, 50.0);
+      Result := GradientDescentMinimize(@GradientsAnalyze, x, 10.0);
     end;
     mmPowell:
     begin
