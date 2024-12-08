@@ -644,8 +644,8 @@ begin
       WriteLn('Iteration: ', iter:3);
 
       prevObj := obj;
-      Analyze(mmGradientDescent);
-      obj := Analyze(mmPowell);
+      Analyze(mmPowell);
+      obj := Analyze(mmGradientDescent);
       Inc(iter);
     until SameValue(obj, prevObj, 1e-9);
   end;
