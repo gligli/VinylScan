@@ -407,7 +407,7 @@ begin
     end;
     mmGradientDescent:
     begin
-      Result := GradientDescentMinimize(@GradientsAnalyze, x, 1.0);
+      Result := GradientDescentMinimize(@GradientsAnalyze, x, 50.0);
     end;
     mmPowell:
     begin

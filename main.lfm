@@ -82,14 +82,13 @@ object MainForm: TMainForm
       Top = 8
       Width = 200
       Lines.Strings = (
-        'data\sample_0.png'
-        'data\sample_1.png'
-        'data\sample_2.png'
-        'data\sample_3.png'
-        'data\sample_4.png'
-        'data\sample_5.png'
-        'data\sample_6.png'
-        'data\sample_7.png'
+        'data\sample_3200_0.png'
+        'data\sample_3200_1.png'
+        'data\sample_3200_2.png'
+        'data\sample_3200_3.png'
+        'data\sample_3200_4.png'
+        'data\sample_3200_5.png'
+        'data\sample_3200_6.png'
       )
       ParentShowHint = False
       ScrollBars = ssBoth
