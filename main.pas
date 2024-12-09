@@ -8,7 +8,7 @@ uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, Types, scan2track, scancorrelator, utils, math, inputscan, FilterIIRLPBessel, FilterIIRHPBessel;
 
 const
-  CReducShift = 0;
+  CReducShift = 1;
   CReducFactor = 1.0 / (1 shl CReducShift);
 
 type
@@ -65,12 +65,11 @@ procedure TMainForm.btScan2TrackClick(Sender: TObject);
 var
   s2t: TScan2Track;
   C: TCanvas;
-  cx, cy, sx, sy, offf, offc: Integer;
+  cx, cy, sx, sy, rfx, rfy, rcx, rcy, rax, ray: Integer;
 begin
   C := Image.Picture.Bitmap.Canvas;
 
   C.Brush.Style := bsClear;
-  C.Pen.Color := clRed;
   C.Pen.Color := clRed;
   C.Pen.Style := psSolid;
 
@@ -90,8 +89,12 @@ begin
     cy := Round(s2t.Scan.Center.Y * CReducFactor);
     sx := Round(s2t.Scan.GrooveStartPoint.X * CReducFactor);
     sy := Round(s2t.Scan.GrooveStartPoint.Y * CReducFactor);
-    offf := Round(s2t.Scan.FirstGrooveRadius) shr CReducShift;
-    offc := Round(s2t.Scan.ConcentricGrooveRadius) shr CReducShift;
+    rfx := Round(s2t.Scan.FirstGrooveRadius * s2t.Scan.Skew.X) shr CReducShift;
+    rfy := Round(s2t.Scan.FirstGrooveRadius * s2t.Scan.Skew.Y) shr CReducShift;
+    rcx := Round(s2t.Scan.ConcentricGrooveRadius * s2t.Scan.Skew.X) shr CReducShift;
+    rcy := Round(s2t.Scan.ConcentricGrooveRadius * s2t.Scan.Skew.Y) shr CReducShift;
+    rax := Round(C45RpmAdapterSize * 0.5 * s2t.Scan.DPI * s2t.Scan.Skew.X) shr CReducShift;
+    ray := Round(C45RpmAdapterSize * 0.5 * s2t.Scan.DPI * s2t.Scan.Skew.Y) shr CReducShift;
 
     C.Line(cx - 8, cy, cx + 9, cy);
     C.Line(cx, cy - 8, cx, cy + 9);
@@ -99,14 +102,15 @@ begin
     C.Line(sx - 8, sy, sx + 9, sy);
     C.Line(sx, sy - 8, sx, sy + 9);
 
-    C.EllipseC(cx, cy, offf, offf);
-    C.EllipseC(cx, cy, offc, offc);
+    C.EllipseC(cx, cy, rfx, rfy);
+    C.EllipseC(cx, cy, rcx, rcy);
+    C.EllipseC(cx, cy, rax, ray);
 
-    HorzScrollBar.Position := sx - Width div 2;
-    VertScrollBar.Position := sy - Height div 2;
+    HorzScrollBar.Position := cx - Width div 2;
+    VertScrollBar.Position := cy - Height div 2;
     Application.ProcessMessages;
 
-    s2t.EvalTrack;
+    //s2t.EvalTrack;
 
   finally
     s2t.Free;

@@ -21,7 +21,6 @@ type
     FObjective: Double;
 
     FPerSnanCrops: TDoubleDynArray2;
-    FPerSnanSkews: array of TPointD;
     FPerSnanAngles: array of Double;
 
     FPointsPerRevolution: Integer;
@@ -93,7 +92,6 @@ begin
   FObjective := NaN;
   FMethod := mmGradientDescent;
   SetLength(FInputScans, AFileNames.Count);
-  SetLength(FPerSnanSkews, Length(FInputScans));
   SetLength(FPerSnanAngles, Length(FInputScans));
   SetLength(FPerSnanCrops, Length(FInputScans), 4);
 
@@ -101,9 +99,6 @@ begin
   begin
     FInputScans[i] := TInputScan.Create(Ceil(Pi * C45RpmOuterSize * FOutputDPI), AOutputDPI, True);
     FInputScans[i].PNGFileName := AFileNames[i];
-
-    FPerSnanSkews[i].X := 1.0;
-    FPerSnanSkews[i].Y := 1.0;
   end;
 end;
 
@@ -272,8 +267,8 @@ var
       t   := FPerSnanAngles[AIndex];
       cx  := FInputScans[AIndex].Center.X;
       cy  := FInputScans[AIndex].Center.Y;
-      skx := FPerSnanSkews[AIndex].X;
-      sky := FPerSnanSkews[AIndex].Y;
+      skx := FInputScans[AIndex].Skew.X;
+      sky := FInputScans[AIndex].Skew.Y;
     end;
 
     BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
@@ -391,7 +386,7 @@ begin
     Exit;
 
   for i := 0 to High(FInputScans) do
-    WriteLn(FInputScans[i].PNGFileName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (before)');
+    WriteLn(FInputScans[i].PNGFileName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', SkewX: ', FInputScans[i].Skew.X:9:6, ', SkewY: ', FInputScans[i].Skew.Y:9:6, ' (before)');
 
   SetLength(x, High(FInputScans) * 5);
   for i := 1 to High(FInputScans) do
@@ -399,8 +394,8 @@ begin
     x[High(FInputScans) * 0 + i - 1] := FPerSnanAngles[i];
     x[High(FInputScans) * 1 + i - 1] := FInputScans[i].Center.X;
     x[High(FInputScans) * 2 + i - 1] := FInputScans[i].Center.Y;
-    x[High(FInputScans) * 3 + i - 1] := FPerSnanSkews[i].X;
-    x[High(FInputScans) * 4 + i - 1] := FPerSnanSkews[i].Y;
+    x[High(FInputScans) * 3 + i - 1] := FInputScans[i].Skew.X;
+    x[High(FInputScans) * 4 + i - 1] := FInputScans[i].Skew.Y;
   end;
 
   case AMethod of
@@ -431,14 +426,15 @@ begin
     FPerSnanAngles[i] := x[High(FInputScans) * 0 + i - 1];
     p.X := x[High(FInputScans) * 1 + i - 1];
     p.Y := x[High(FInputScans) * 2 + i - 1];
-    FPerSnanSkews[i].X := x[High(FInputScans) * 3 + i - 1];
-    FPerSnanSkews[i].Y := x[High(FInputScans) * 4 + i - 1];
     FInputScans[i].Center := p;
+    p.X := x[High(FInputScans) * 3 + i - 1];
+    p.Y := x[High(FInputScans) * 4 + i - 1];
+    FInputScans[i].Skew := p;
   end;
 
   WriteLn;
   for i := 0 to High(FInputScans) do
-    WriteLn(FInputScans[i].PNGFileName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', SkewX: ', FPerSnanSkews[i].X:9:6, ', SkewY: ', FPerSnanSkews[i].Y:9:6);
+    WriteLn(FInputScans[i].PNGFileName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', SkewX: ', FInputScans[i].Skew.X:9:6, ', SkewY: ', FInputScans[i].Skew.Y:9:6);
 end;
 
 function TScanCorrelator.PowellCrop(const x: TVector; obj: Pointer): TScalar;
@@ -546,8 +542,8 @@ var
           t  := FPerSnanAngles[i];
           cx := FInputScans[i].Center.X;
           cy := FInputScans[i].Center.Y;
-          skx := FPerSnanSkews[i].X;
-          sky := FPerSnanSkews[i].Y;
+          skx := FInputScans[i].Skew.X;
+          sky := FInputScans[i].Skew.Y;
 
           ct := AngleTo02Pi(t + bt);
 
@@ -579,7 +575,7 @@ begin
   WriteLn('Rebuild');
 
   center := Length(FOutputImage) / 2.0;
-  rBeg := C45RpmInnerSize * 0.5 * FOutputDPI;
+  rBeg := C45RpmAdapterSize * 0.5 * FOutputDPI;
   rEnd := C45RpmOuterSize * 0.5 * FOutputDPI;
   rLmg := C45RpmLastMusicGroove * 0.5 * FOutputDPI;
   rLbl := C45RpmLabelOuterSize * 0.5 * FOutputDPI;

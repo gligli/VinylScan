@@ -8,7 +8,7 @@ unit utils;
 interface
 
 uses
-  Classes, SysUtils, Types, Windows, MTProcs, Math, minlbfgs;
+  Classes, SysUtils, Types, Windows, MTProcs, Math, minlbfgs, minasa;
 
 type
   TSpinlock = LongInt;
@@ -126,6 +126,7 @@ function herp(y0, y1, y2, y3, alpha: Double): Double;
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; Epsilon: Double = 1e-9; Data: Pointer = nil): Double;
 function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
+function ASAMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 
 function Convolve(const image:TDoubleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double; overload;
 function Convolve(const image:TWordDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Integer; overload;
@@ -350,6 +351,30 @@ begin
     if state.NeedFG then
       Func(state.X, state.F, state.G, data);
   MinLBFGSResults(state, X, rep);
+  Result := state.F;
+end;
+
+function ASAMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double; Data: Pointer): Double;
+var
+  state: MinASAState;
+  rep: MinASAReport;
+  lb, ub: TDoubleDynArray;
+  i: Integer;
+begin
+  SetLength(lb, Length(X));
+  SetLength(ub, Length(X));
+  for i := 0 to High(X) do
+  begin
+    lb[i] := LowBound[i];
+    ub[i] := UpBound[i];
+  end;
+
+  MinASACreate(Length(X), X, lb, ub, state);
+  MinASASetCond(state, Epsilon, 0.0, 0.0, 0);
+  while MinASAIteration(state) do
+    if state.NeedFG then
+      Func(state.X, state.F, state.G, data);
+  MinASAResults(state, X, rep);
   Result := state.F;
 end;
 
