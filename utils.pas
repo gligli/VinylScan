@@ -8,7 +8,7 @@ unit utils;
 interface
 
 uses
-  Classes, SysUtils, Types, Windows, MTProcs, Math;
+  Classes, SysUtils, Types, Windows, MTProcs, Math, minlbfgs;
 
 type
   TSpinlock = LongInt;
@@ -22,7 +22,7 @@ type
     L, T, R, B: Double;
   end;
 
-  TMinimizeMethod = (mmNone, mmGradientDescent, mmPowell, mmAll);
+  TMinimizeMethod = (mmNone, mmBFGS, mmGradientDescent, mmPowell, mmAll);
 
   TImageDerivationOperator = (idoPrewitt, idoSobel, idoScharr);
   TConvolutionKernel = array[-1..1, -1..1] of integer;
@@ -125,6 +125,7 @@ function herp(y0, y1, y2, y3, alpha: Double): Double;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; Epsilon: Double = 1e-9; Data: Pointer = nil): Double;
+function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 
 function Convolve(const image:TDoubleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double; overload;
 function Convolve(const image:TWordDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Integer; overload;
@@ -336,6 +337,20 @@ begin
 
     //WriteLn(Result:20:9, gm:20:9);
   until gm <= Epsilon;
+end;
+
+function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double; Data: Pointer): Double;
+var
+  state: MinLBFGSState;
+  rep: MinLBFGSReport;
+begin
+  MinLBFGSCreate(Length(X), Min(5, Length(X)), X, state);
+  MinLBFGSSetCond(state, Epsilon, 0.0, 0.0, 0);
+  while MinLBFGSIteration(state) do
+    if state.NeedFG then
+      Func(state.X, state.F, state.G, data);
+  MinLBFGSResults(state, X, rep);
+  Result := state.F;
 end;
 
 function Convolve(const image: TDoubleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double;

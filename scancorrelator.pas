@@ -143,7 +143,7 @@ begin
 
   WriteLn('DPI:', FOutputDPI:6);
   WriteLn('PointsPerRevolution:', FPointsPerRevolution:8);
-  Writeln('Inner raw sample rate: ', Round(FPointsPerRevolution * C45RpmRevolutionsPerSecond), ' Hz');
+  Writeln('Inner raw sample rate: ', Round(Pi * C45RpmLastMusicGroove * FOutputDPI * C45RpmRevolutionsPerSecond), ' Hz');
 
   SetLength(FOutputImage, Ceil(C45RpmOuterSize * FOutputDPI), Ceil(C45RpmOuterSize * FOutputDPI));
 end;
@@ -158,7 +158,7 @@ var
    function DoAngle(iScan: Integer; a: Double; var arr: TDoubleDynArray): Integer;
    var
      iRadius, iAngle: Integer;
-     sn, cs, cy, cx: Double;
+     sn, cs, cy, cx, px, py: Double;
      scn: TInputScan;
    begin
      Result := 0;
@@ -171,8 +171,16 @@ var
        SinCos(a + DegToRad(iAngle * (180 / CAngleCount)), sn, cs);
        for iRadius:= rBeg to rEnd do
        begin
-         arr[Result + 0] := scn.GetPointD(cy + sn * iRadius, cx + cs * iRadius, isImage, imLinear);
-         arr[Result + 1] := scn.GetPointD(cy - sn * iRadius, cx - cs * iRadius, isImage, imLinear);
+         px := cx + cs * iRadius;
+         py := cy + sn * iRadius;
+         if scn.InRangePointD(py, px) then
+           arr[Result + 0] := scn.GetPointD(py, px, isImage, imLinear);
+
+         px := cx - cs * iRadius;
+         py := cy - sn * iRadius;
+         if scn.InRangePointD(py, px) then
+           arr[Result + 1] := scn.GetPointD(py, px, isImage, imLinear);
+
          Inc(Result, 2);
        end;
      end;
@@ -399,6 +407,10 @@ begin
     mmNone:
     begin
       Result := PowellAnalyze(x, Self);
+    end;
+    mmBFGS:
+    begin
+      Result := BFGSMinimize(@GradientsAnalyze, x);
     end;
     mmGradientDescent:
     begin
@@ -638,8 +650,9 @@ begin
       WriteLn('Iteration: ', iter:3);
 
       prevObj := obj;
-      Analyze(mmPowell);
-      obj := Analyze(mmGradientDescent);
+      Analyze(mmBFGS);
+      Analyze(mmGradientDescent);
+      obj := Analyze(mmPowell);
       Inc(iter);
     until SameValue(obj, prevObj, 1e-9);
   end;

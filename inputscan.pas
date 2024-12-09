@@ -155,7 +155,7 @@ begin
   x[0] := FCenter.X;
   x[1] := FCenter.Y;
 
-  GradientDescentMinimize(@GradientEvalCenter, x, 0.0005);
+  BFGSMinimize(@GradientEvalCenter, x);
 
   FCenter.X := x[0];
   FCenter.Y := x[1];
@@ -233,7 +233,7 @@ begin
 
   x[0] := bestr;
 
-  GradientDescentMinimize(@GradientEvalConcentricGroove, x, 0.00025);
+  BFGSMinimize(@GradientEvalConcentricGroove, x);
 
   FConcentricGrooveRadius := x[0];
   FCenter.X := x[1];
