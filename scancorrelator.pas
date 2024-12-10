@@ -81,7 +81,7 @@ const
   CAreaBegin = C45RpmInnerSize;
   CAreaEnd = C45RpmLastMusicGroove;
   CAreaWidth = (CAreaEnd - CAreaBegin) * 0.5;
-  CAreaGroovesPerInchAnalyze = 16;
+  CAreaGroovesPerInchAnalyze = 60;
   CAreaGroovesPerInchCrop = 16;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
