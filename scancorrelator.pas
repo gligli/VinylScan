@@ -97,7 +97,7 @@ begin
 
   for i := 0 to AFileNames.Count - 1 do
   begin
-    FInputScans[i] := TInputScan.Create(Ceil(Pi * C45RpmOuterSize * FOutputDPI), AOutputDPI, True);
+    FInputScans[i] := TInputScan.Create(Ceil(Pi * C45RpmLastMusicGroove * FOutputDPI), AOutputDPI, True);
     FInputScans[i].PNGFileName := AFileNames[i];
   end;
 end;
@@ -386,7 +386,7 @@ begin
     Exit;
 
   for i := 0 to High(FInputScans) do
-    WriteLn(FInputScans[i].PNGFileName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', SkewX: ', FInputScans[i].Skew.X:9:6, ', SkewY: ', FInputScans[i].Skew.Y:9:6, ' (before)');
+    WriteLn(FInputScans[i].PNGShortName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', SkewX: ', FInputScans[i].Skew.X:9:6, ', SkewY: ', FInputScans[i].Skew.Y:9:6, ' (before)');
 
   SetLength(x, High(FInputScans) * 5);
   for i := 1 to High(FInputScans) do
@@ -434,25 +434,25 @@ begin
 
   WriteLn;
   for i := 0 to High(FInputScans) do
-    WriteLn(FInputScans[i].PNGFileName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', SkewX: ', FInputScans[i].Skew.X:9:6, ', SkewY: ', FInputScans[i].Skew.Y:9:6);
+    WriteLn(FInputScans[i].PNGShortName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', SkewX: ', FInputScans[i].Skew.X:9:6, ', SkewY: ', FInputScans[i].Skew.Y:9:6, ' (after)');
 end;
 
 function TScanCorrelator.PowellCrop(const x: TVector; obj: Pointer): TScalar;
 var
   inputIdx: PtrInt absolute obj;
-  rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy, ri, rri, sn, cs, bt, px, py: Double;
+  rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy, ri, rri, sn, cs, bt, px, py, p: Double;
   pos, arrPos: Integer;
   mnArr: TDoubleDynArray;
 begin
   Result := 1000.0;
 
-  if AngleTo02Pi(x[1] - x[0]) >= DegToRad(120.0) then
+  if not InRange(AngleTo02Pi(x[1] - x[0]), DegToRad(30.0), DegToRad(135.0)) then
     Exit;
 
-  a0a := AngleTo02Pi(x[0]);
-  a0b := AngleTo02Pi(x[1]);
-  a1a := AngleTo02Pi(x[0] + Pi);
-  a1b := AngleTo02Pi(x[1] + Pi);
+  a0a := AngleTo02Pi(x[0] - x[1]);
+  a0b := AngleTo02Pi(x[0] + x[1]);
+  a1a := AngleTo02Pi(x[0] - x[1] + Pi);
+  a1b := AngleTo02Pi(x[0] + x[1] + Pi);
 
   rBeg := C45RpmLastMusicGroove * 0.5 * FOutputDPI;
   rEnd := C45RpmFirstMusicGroove * 0.5 * FOutputDPI;
@@ -479,18 +479,20 @@ begin
     Assert(pos < Length(mnArr));
 
     if FInputScans[inputIdx].InRangePointD(py, px) and
-        not In02PiExtentsAngle(bt, a0a, a0b) and not In02PiExtentsAngle(bt, a1a, a1b) then
+        (In02PiExtentsAngle(bt, a0a, a0b) or In02PiExtentsAngle(bt, a1a, a1b)) then
     begin
-      mnArr[arrPos] := FInputScans[inputIdx].GetPointD(py, px, isImage, imLinear);
+      p := FInputScans[inputIdx].GetPointD(py, px, isImage, imLinear);
+      mnArr[arrPos] := p;
       Inc(arrPos);
     end;
 
     Inc(pos);
   until rri >= rEnd;
 
-  Result := -Mean(PDouble(@mnArr[0]), arrPos);
+  if arrPos > 0 then
+    Result := Mean(PDouble(@mnArr[0]), arrPos);
 
-  Write(FInputScans[inputIdx].PNGFileName, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', -Result:12:6, #13);
+  Write(FInputScans[inputIdx].PNGShortName, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', -Result:12:6, #13);
 end;
 
 procedure TScanCorrelator.Crop;
@@ -504,15 +506,15 @@ begin
 
   for i := 0 to High(FInputScans) do
   begin
-    x[0] := AngleTo02Pi(DegToRad(-30.0));
-    x[1] := AngleTo02Pi(DegToRad(30.0));
+    x[0] := AngleTo02Pi(DegToRad(0.0));
+    x[1] := AngleTo02Pi(DegToRad(45.0));
 
     PowellMinimize(@PowellCrop, x, 1.0 / 360.0, 1e-6, 1e-6, MaxInt, Pointer(i));
 
-    FPerSnanCrops[i, 0] := AngleTo02Pi(x[0]);
-    FPerSnanCrops[i, 1] := AngleTo02Pi(x[1]);
-    FPerSnanCrops[i, 2] := AngleTo02Pi(x[0] + Pi);
-    FPerSnanCrops[i, 3] := AngleTo02Pi(x[1] + Pi);
+    FPerSnanCrops[i, 0] := AngleTo02Pi(x[0] - x[1]);
+    FPerSnanCrops[i, 1] := AngleTo02Pi(x[0] + x[1]);
+    FPerSnanCrops[i, 2] := AngleTo02Pi(x[0] - x[1] + Pi);
+    FPerSnanCrops[i, 3] := AngleTo02Pi(x[0] + x[1] + Pi);
 
     WriteLn;
   end;
