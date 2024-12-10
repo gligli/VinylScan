@@ -110,7 +110,7 @@ begin
     VertScrollBar.Position := cy - Height div 2;
     Application.ProcessMessages;
 
-    //s2t.EvalTrack;
+    s2t.EvalTrack;
 
   finally
     s2t.Free;

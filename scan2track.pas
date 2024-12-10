@@ -89,7 +89,7 @@ var
   fltSamples: TFilterIIRHPBessel;
   samples: TSmallIntDynArray;
 
-  function DecodeSample(radius, angle: Double): Double;
+  function DecodeSample(radius, angle: Double; out feedback: Double): Double;
   var
     ismp, aboveCnt, aboveAcc: Integer;
     r, px, py, middleSmp, cxa, sn, cs: Double;
@@ -112,7 +112,6 @@ var
     end;
 
     middleSmp := (MinValue(smpBuf) + MaxValue(smpBuf)) * 0.5;
-    //middleSmp := GoldenRatioSearch(@EvalTrackGR, MaxValue(smpBuf), MinValue(smpBuf), Length(smpBuf) div 2, 0.0, 0.5, @smpBuf[0]);
 
     aboveAcc := 0;
     aboveCnt := 0;
@@ -124,6 +123,8 @@ var
       end;
 
     Result := DivDef(aboveAcc, CSampleDecoderMax * aboveCnt, 0.0);
+
+    feedback := Result * C45RpmMaxGrooveWidth * Scan.DPI;
   end;
 
   procedure StoreSample(fsmp: Double; pos: Integer);
@@ -138,7 +139,7 @@ var
   end;
 
 var
-  angle, radius, sn, cs, px, py, gradient, feedback, fsmp, ffSmp: Double;
+  angle, radius, sn, cs, px, py, feedback, fbRatio, fsmp, ffSmp: Double;
   i, pos: Integer;
   pbuf: specialize TFPGList<TPoint>;
   t, pt: QWord;
@@ -158,23 +159,21 @@ begin
 
     angle := Scan.GrooveStartAngle;
     radius := Scan.FirstGrooveRadius;
+    fbRatio := (CLowCutoffFreq / FSampleRate) / sqrt(0.1024 + sqr(CLowCutoffFreq / FSampleRate));
 
     repeat
-      fsmp := DecodeSample(radius, angle);
+      fsmp := DecodeSample(radius, angle, feedback);
       ffSmp := fltSamples.FilterFilter(fsmp);
       StoreSample(ffSmp, pos);
 
+      radius += feedback * fbRatio;
+      angle := Scan.GrooveStartAngle - FRadiansPerRevolutionPoint * pos;
+
+      //WriteLn(feedback:9:6);
       SinCos(angle, sn, cs);
       px := cs * radius + Self.Scan.Center.X;
       py := sn * radius + Self.Scan.Center.Y;
       pbuf.Add(Point(round(px * CReducFactor), round(py * CReducFactor)));
-
-      feedback := fsmp * C45RpmMaxGrooveWidth * Scan.DPI * 0.2;
-      gradient := (Scan.GetPointD(py, px, isXGradient, imLinear) * cs + Scan.GetPointD(py, px, isYGradient, imLinear) * sn) * -0.3;
-      radius += (feedback + gradient) * 0.5;
-      angle := Scan.GrooveStartAngle - FRadiansPerRevolutionPoint * pos;
-
-      WriteLn(feedback:9:6, gradient:9:6);
 
       Inc(pos);
 

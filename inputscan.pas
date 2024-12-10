@@ -117,7 +117,7 @@ const
 procedure TInputScan.GradientEvalCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 var
   t, pos: Integer;
-  r, x, y, ri, radiusInner, radiusOuter: Double;
+  r, x, y, radiusInner, radiusOuter: Double;
 begin
   func := 0;
   grad[0] := 0;
@@ -144,11 +144,14 @@ begin
 
     Inc(pos);
   until r >= radiusOuter;
+
+  //WriteLn(arg[0]:12:3,arg[1]:12:3,func:12:3);
 end;
 
 procedure TInputScan.FindCenter;
 var
   x: TVector;
+  rOut: Double;
 begin
   BuildSinCosLUT(FPointsPerRevolution, FSinCosLUT);
 
@@ -156,7 +159,10 @@ begin
   x[0] := FCenter.X;
   x[1] := FCenter.Y;
 
-  BFGSMinimize(@GradientEvalCenter, x);
+  rOut := C45RpmOuterSize * FDPI * 0.5;
+
+  if (x[0] <> rOut) and (x[1] <> rOut) then
+    BFGSMinimize(@GradientEvalCenter, x);
 
   FCenter.X := x[0];
   FCenter.Y := x[1];
