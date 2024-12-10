@@ -133,10 +133,10 @@ begin
 
     for t := 0 to CRevolutionPointCount - 1  do
     begin
-      x := FSinCosLUT[t].X * r * FSkew.X + arg[0];
-      y := FSinCosLUT[t].Y * r * FSkew.Y + arg[1];
+      x := FSinCosLUT[t].X * IfThen(FSinCosLUT[t].X <= 0, 0.96, 1.0) * r * FSkew.X + arg[0];
+      y := FSinCosLUT[t].Y * IfThen(FSinCosLUT[t].Y >= 0, 0.94, 1.0) * r * FSkew.Y + arg[1];
 
-      if (y <= arg[1] + radiusOuter * 0.8) and InRangePointD(y, x) then
+      if InRangePointD(y, x) then
       begin
         func -= GetPointD(y, x, isImage, imLinear);
         grad[0] -= GetPointD(y, x, isXGradient, imLinear);
@@ -166,7 +166,7 @@ end;
 
 procedure TInputScan.GradientEvalConcentricGrooveRadiusCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 var
-  i: Integer;
+  t: Integer;
   sn, cs, x, y, gimgx, gimgy: Double;
   vs: TValueSign;
 begin
@@ -178,9 +178,10 @@ begin
     grad[2] := 0.0;
   end;
 
-  for i := 0 to CRevolutionPointCount - 1  do
+  for t := 0 to CRevolutionPointCount - 1  do
   begin
-    SinCos(i * CRadiansPerPoint, sn, cs);
+    cs := FSinCosLUT[t].X;
+    sn := FSinCosLUT[t].Y;
 
     for vs := Low(TValueSign) to High(TValueSign) do
     begin
@@ -209,7 +210,7 @@ end;
 
 procedure TInputScan.GradientEvalConcentricGrooveSkew(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 var
-  i: Integer;
+  t: Integer;
   sn, cs, x, y, gimgx, gimgy: Double;
   vs: TValueSign;
 begin
@@ -220,9 +221,10 @@ begin
     grad[1] := 0.0;
   end;
 
-  for i := 0 to CRevolutionPointCount - 1  do
+  for t := 0 to CRevolutionPointCount - 1  do
   begin
-    SinCos(i * CRadiansPerPoint, sn, cs);
+    cs := FSinCosLUT[t].X;
+    sn := FSinCosLUT[t].Y;
 
     for vs := Low(TValueSign) to High(TValueSign) do
     begin
@@ -254,6 +256,8 @@ var
   f, prevf, best, bestr: Double;
   xrc, xs: TVector;
 begin
+  BuildSinCosLUT(CRevolutionPointCount, FSinCosLUT);
+
   SetLength(xrc, 3);
   SetLength(xs, 2);
 
