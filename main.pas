@@ -71,7 +71,7 @@ begin
 
   C.Brush.Style := bsClear;
   C.Pen.Color := clRed;
-  C.Pen.Style := psSolid;
+  C.Pen.Style := psDot;
 
   s2t := TScan2Track.Create(StrToIntDef(cbSR.Text, 48000), 16, StrToIntDef(cbDPI.Text, 2400));
   try
