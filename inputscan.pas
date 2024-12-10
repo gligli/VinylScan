@@ -33,6 +33,7 @@ type
 
     FImage: TWordDynArray2;
 
+    function GetPNGShortName: String;
     procedure GradientEvalConcentricGrooveRadiusCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
     procedure GradientEvalConcentricGrooveSkew(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
     procedure GradientEvalCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
@@ -56,6 +57,7 @@ type
     function GetPointD(Y, X: Double; Source: TInterpSource; Mode: TInterpMode): Double; inline;
 
     property PNGFileName: String read FPNGFileName write FPNGFileName;
+    property PNGShortName: String read GetPNGShortName;
     property ImageDerivationOperator: TImageDerivationOperator read FImageDerivationOperator write FImageDerivationOperator;
 
     property DPI: Integer read FDPI;
@@ -107,9 +109,6 @@ implementation
 const
   CAreaBegin = 0;
   CAreaEnd = (C45RpmInnerSize + C45RpmAdapterSize) * 0.5;
-  CAreaGroovesPerInch = 300;
-  CRevolutionPointCount = 3600;
-  CRadiansPerPoint = Pi * 2.0 / CRevolutionPointCount;
   CRadiusXOffsets: array[TValueSign] of Double = (-C45RpmMaxGrooveWidth * 2, 0, C45RpmMaxGrooveWidth * 2);
   CRadiusYFactors: array[TValueSign] of Double = (1, -2, 1);
 
@@ -126,12 +125,11 @@ begin
 
   radiusInner := CAreaBegin * FDPI * 0.5;
   radiusOuter := CAreaEnd * FDPI * 0.5;
-  ri := FDPI / CAreaGroovesPerInch;
   pos := 0;
   repeat
-    r := radiusInner + ri * pos;
+    r := radiusInner + pos;
 
-    for t := 0 to CRevolutionPointCount - 1  do
+    for t := 0 to FPointsPerRevolution - 1  do
     begin
       x := FSinCosLUT[t].X * IfThen(FSinCosLUT[t].X <= 0, 0.96, 1.0) * r * FSkew.X + arg[0];
       y := FSinCosLUT[t].Y * IfThen(FSinCosLUT[t].Y >= 0, 0.94, 1.0) * r * FSkew.Y + arg[1];
@@ -152,7 +150,7 @@ procedure TInputScan.FindCenter;
 var
   x: TVector;
 begin
-  BuildSinCosLUT(CRevolutionPointCount, FSinCosLUT);
+  BuildSinCosLUT(FPointsPerRevolution, FSinCosLUT);
 
   SetLength(x, 2);
   x[0] := FCenter.X;
@@ -178,7 +176,7 @@ begin
     grad[2] := 0.0;
   end;
 
-  for t := 0 to CRevolutionPointCount - 1  do
+  for t := 0 to FPointsPerRevolution - 1  do
   begin
     cs := FSinCosLUT[t].X;
     sn := FSinCosLUT[t].Y;
@@ -208,6 +206,11 @@ begin
   //WriteLn(arg[0]:12:3,arg[1]:12:3,arg[2]:12:3);
 end;
 
+function TInputScan.GetPNGShortName: String;
+begin
+  Result := ChangeFileExt(ExtractFileName(FPNGFileName), '');
+end;
+
 procedure TInputScan.GradientEvalConcentricGrooveSkew(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 var
   t: Integer;
@@ -221,7 +224,7 @@ begin
     grad[1] := 0.0;
   end;
 
-  for t := 0 to CRevolutionPointCount - 1  do
+  for t := 0 to FPointsPerRevolution - 1  do
   begin
     cs := FSinCosLUT[t].X;
     sn := FSinCosLUT[t].Y;
@@ -256,7 +259,7 @@ var
   f, prevf, best, bestr: Double;
   xrc, xs: TVector;
 begin
-  BuildSinCosLUT(CRevolutionPointCount, FSinCosLUT);
+  BuildSinCosLUT(FPointsPerRevolution, FSinCosLUT);
 
   SetLength(xrc, 3);
   SetLength(xs, 2);
