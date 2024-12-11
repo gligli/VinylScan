@@ -102,8 +102,8 @@ var
     begin
       r := radius + ismp * cxa;
 
-      px := cs * r + Self.Scan.Center.X;
-      py := sn * r + Self.Scan.Center.Y;
+      px := cs * r * Scan.Skew.X + Scan.Center.X;
+      py := sn * r * Scan.Skew.Y + Scan.Center.Y;
 
       if Scan.InRangePointD(py, px) then
         smpBuf[ismp] := Scan.GetPointD(py, px, isImage, imHermite)
@@ -171,8 +171,8 @@ begin
 
       //WriteLn(feedback:9:6);
       SinCos(angle, sn, cs);
-      px := cs * radius + Self.Scan.Center.X;
-      py := sn * radius + Self.Scan.Center.Y;
+      px := cs * radius * Scan.Skew.X + Scan.Center.X;
+      py := sn * radius * Scan.Skew.Y + Scan.Center.Y;
       pbuf.Add(Point(round(px * CReducFactor), round(py * CReducFactor)));
 
       Inc(pos);
