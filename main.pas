@@ -8,7 +8,7 @@ uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, Types, scan2track, scancorrelator, utils, math, inputscan, FilterIIRLPBessel, FilterIIRHPBessel;
 
 const
-  CReducShift = 1;
+  CReducShift = 0;
   CReducFactor = 1.0 / (1 shl CReducShift);
 
 type
@@ -47,9 +47,9 @@ type
     procedure FormCreate(Sender: TObject);
   private
 
-    procedure DrawImage(const Img: TWordDynArray2); overload;
   public
 
+    procedure DrawImage(const Img: TWordDynArray2); overload;
   end;
 
 var

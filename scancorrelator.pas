@@ -150,35 +150,35 @@ var
   rBeg, rEnd: Integer;
   base: TDoubleDynArray;
 
-   function DoAngle(iScan: Integer; a: Double; var arr: TDoubleDynArray): Integer;
-   var
-     iRadius, iAngle: Integer;
-     sn, cs, cy, cx, px, py: Double;
-     scn: TInputScan;
-   begin
-     Result := 0;
-     scn := FInputScans[iScan];
-     cx := scn.Center.X;
-     cy := scn.Center.Y;
+  function DoAngle(iScan: Integer; a: Double; var arr: TDoubleDynArray): Integer;
+  var
+    iRadius, iAngle: Integer;
+    sn, cs, cy, cx, px, py: Double;
+    scn: TInputScan;
+  begin
+    Result := 0;
+    scn := FInputScans[iScan];
+    cx := scn.Center.X;
+    cy := scn.Center.Y;
 
-     for iAngle := 0 to CAngleCount - 1 do
-     begin
-       SinCos(a + DegToRad(iAngle * (180 / CAngleCount)), sn, cs);
-       for iRadius:= rBeg to rEnd do
-       begin
-         px := cx + cs * iRadius;
-         py := cy + sn * iRadius;
-         if scn.InRangePointD(py, px) then
-           arr[Result + 0] := scn.GetPointD(py, px, isImage, imLinear);
+    for iAngle := 0 to CAngleCount - 1 do
+    begin
+      SinCos(a + DegToRad(iAngle * (180 / CAngleCount)), sn, cs);
+      for iRadius:= rBeg to rEnd do
+      begin
+        px := cx + cs * iRadius;
+        py := cy + sn * iRadius;
+        if scn.InRangePointD(py, px) then
+          arr[Result + 0] := scn.GetPointD(py, px, isImage, imLinear);
 
-         px := cx - cs * iRadius;
-         py := cy - sn * iRadius;
-         if scn.InRangePointD(py, px) then
-           arr[Result + 1] := scn.GetPointD(py, px, isImage, imLinear);
+        px := cx - cs * iRadius;
+        py := cy - sn * iRadius;
+        if scn.InRangePointD(py, px) then
+          arr[Result + 1] := scn.GetPointD(py, px, isImage, imLinear);
 
-         Inc(Result, 2);
-       end;
-     end;
+        Inc(Result, 2);
+      end;
+    end;
   end;
 
   procedure DoScan(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
@@ -338,7 +338,7 @@ var
 var
   cnt: Integer;
 begin
-  paramCount := Length(grad) div High(FInputScans);
+  paramCount := iDiv0(Length(grad), High(FInputScans));
 
   cnt := Ceil(CAreaWidth * CAreaGroovesPerInchAnalyze * FPointsPerRevolution);
   SetLength(imgResults, High(FInputScans));
@@ -350,7 +350,7 @@ begin
 
   func := Sum(imgResults);
 
-  Write('Correlation: ', -Mean(imgResults):12:9,#13);
+  Write('Correlation: ', -DivDef(func, Length(imgResults), 1.0):12:9,#13);
 end;
 
 function TScanCorrelator.GetImageDerivationOperator: TImageDerivationOperator;
@@ -382,8 +382,11 @@ begin
 
   WriteLn('Analyze ', GetEnumName(TypeInfo(TMinimizeMethod), Ord(AMethod)), ', ', GetEnumName(TypeInfo(TImageDerivationOperator), Ord(GetImageDerivationOperator)));
 
-  if Length(FInputScans) <= 1 then
+  if Length(FInputScans) <= 0 then
     Exit;
+
+  if Length(FInputScans) <= 1 then
+    AMethod := mmNone;
 
   for i := 0 to High(FInputScans) do
     WriteLn(FInputScans[i].PNGShortName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', SkewX: ', FInputScans[i].Skew.X:9:6, ', SkewY: ', FInputScans[i].Skew.Y:9:6, ' (before)');
@@ -409,7 +412,7 @@ begin
     end;
     mmGradientDescent:
     begin
-      Result := GradientDescentMinimize(@GradientsAnalyze, x, 2.0);
+      Result := GradientDescentMinimize(@GradientsAnalyze, x, 1.0);
     end;
     mmPowell:
     begin
@@ -440,7 +443,7 @@ end;
 function TScanCorrelator.PowellCrop(const x: TVector; obj: Pointer): TScalar;
 var
   inputIdx: PtrInt absolute obj;
-  rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy, ri, rri, sn, cs, bt, px, py, p: Double;
+  rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy, t, ri, rri, sn, cs, bt, px, py, p: Double;
   pos, arrPos: Integer;
   mnArr: TDoubleDynArray;
 begin
@@ -457,6 +460,7 @@ begin
   rBeg := C45RpmLastMusicGroove * 0.5 * FOutputDPI;
   rEnd := C45RpmFirstMusicGroove * 0.5 * FOutputDPI;
 
+  t := FPerSnanAngles[inputIdx];
   cx := FInputScans[inputIdx].Center.X;
   cy := FInputScans[inputIdx].Center.Y;
 
@@ -467,7 +471,7 @@ begin
   pos := 0;
   arrPos := 0;
   repeat
-    bt := AngleTo02Pi(FRadiansPerRevolutionPoint * pos);
+    bt := AngleTo02Pi(FRadiansPerRevolutionPoint * pos + t);
 
     SinCos(bt, sn, cs);
 
@@ -492,7 +496,7 @@ begin
   if arrPos > 0 then
     Result := Mean(PDouble(@mnArr[0]), arrPos);
 
-  Write(FInputScans[inputIdx].PNGShortName, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', -Result:12:6, #13);
+  Write(FInputScans[inputIdx].PNGShortName, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', Result:12:6, #13);
 end;
 
 procedure TScanCorrelator.Crop;
@@ -547,7 +551,7 @@ var
           skx := FInputScans[i].Skew.X;
           sky := FInputScans[i].Skew.Y;
 
-          ct := AngleTo02Pi(t + bt);
+          ct := AngleTo02Pi(bt + t);
 
           SinCos(ct, sn, cs);
           px := cs * r * skx + cx;
