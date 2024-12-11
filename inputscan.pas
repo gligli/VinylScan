@@ -116,8 +116,8 @@ const
 
 procedure TInputScan.GradientEvalCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 var
-  t, pos: Integer;
-  r, x, y, radiusInner, radiusOuter: Double;
+  t, pos, cnt: Integer;
+  r, x, y, radiusInner, radiusOuter, sn, cs: Double;
 begin
   func := 0;
   grad[0] := 0;
@@ -125,44 +125,62 @@ begin
 
   radiusInner := CAreaBegin * FDPI * 0.5;
   radiusOuter := CAreaEnd * FDPI * 0.5;
-  pos := 0;
-  repeat
-    r := radiusInner + pos;
 
-    for t := 0 to FPointsPerRevolution - 1  do
-    begin
-      x := FSinCosLUT[t].X * IfThen(FSinCosLUT[t].X <= 0, 0.96, 1.0) * r * FSkew.X + arg[0];
-      y := FSinCosLUT[t].Y * IfThen(FSinCosLUT[t].Y >= 0, 0.94, 1.0) * r * FSkew.Y + arg[1];
+  cnt := 0;
+  for t := 0 to High(FSinCosLUT)  do
+  begin
+    sn := FSinCosLUT[t].X;
+    cs := FSinCosLUT[t].Y;
+
+    if sn <= 0 then sn *= 0.96;
+    if cs >= 0 then cs *= 0.94;
+
+    pos := 0;
+    repeat
+      r := radiusInner + pos;
+
+      x := sn * r + arg[0];
+      y := cs * r + arg[1];
 
       if InRangePointD(y, x) then
       begin
         func -= GetPointD(y, x, isImage, imLinear);
         grad[0] -= GetPointD(y, x, isXGradient, imLinear);
         grad[1] -= GetPointD(y, x, isYGradient, imLinear);
+        Inc(cnt);
       end;
-    end;
+      Inc(pos);
 
-    Inc(pos);
-  until r >= radiusOuter;
+    until r >= radiusOuter;
+  end;
 
-  //WriteLn(arg[0]:12:3,arg[1]:12:3,func:12:3);
+  if cnt > 1 then
+  begin
+    func /= cnt;
+    grad[0] /= cnt;
+    grad[1] /= cnt;
+  end;
+
+  //WriteLn(arg[0]:20:9,arg[1]:20:9,func:20:9);
 end;
 
 procedure TInputScan.FindCenter;
 var
   x: TVector;
+  ppr: Integer;
   rOut: Double;
 begin
-  BuildSinCosLUT(FPointsPerRevolution, FSinCosLUT);
+  rOut := C45RpmOuterSize * FDPI * 0.5;
+  ppr := round(CAreaEnd * FDPI * Pi);
+
+  BuildSinCosLUT(ppr, FSinCosLUT);
 
   SetLength(x, 2);
   x[0] := FCenter.X;
   x[1] := FCenter.Y;
 
-  rOut := C45RpmOuterSize * FDPI * 0.5;
-
   if (x[0] <> rOut) and (x[1] <> rOut) then
-    BFGSMinimize(@GradientEvalCenter, x);
+    BFGSMinimize(@GradientEvalCenter, x, 1e-6);
 
   FCenter.X := x[0];
   FCenter.Y := x[1];
@@ -209,7 +227,7 @@ begin
     end;
   end;
 
-  //WriteLn(arg[0]:12:3,arg[1]:12:3,arg[2]:12:3);
+  //WriteLn(arg[0]:12:3,arg[1]:12:3,arg[2]:12:3,func:12:3);
 end;
 
 function TInputScan.GetPNGShortName: String;
@@ -256,7 +274,7 @@ begin
     end;
   end;
 
-  //WriteLn(arg[0]:12:3,arg[1]:12:3,arg[2]:12:3);
+  //WriteLn(arg[0]:12:3,arg[1]:12:3,func:12:3);
 end;
 
 procedure TInputScan.FindConcentricGroove;
@@ -306,7 +324,7 @@ begin
     xs[0] := FSkew.X;
     xs[1] := FSkew.Y;
     prevf := f;
-    f := ASAMinimize(@GradientEvalConcentricGrooveSkew, xs, [0.95, 0.95], [1.05, 1.05]);
+    f := BFGSMinimize(@GradientEvalConcentricGrooveSkew, xs, 1e-9);
     FSkew.X := xs[0];
     FSkew.Y := xs[1];
 
