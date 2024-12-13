@@ -412,7 +412,7 @@ begin
     end;
     mmGradientDescent:
     begin
-      Result := GradientDescentMinimize(@GradientsAnalyze, x, 1.0);
+      Result := GradientDescentMinimize(@GradientsAnalyze, x, 1.0, 1e-7);
     end;
     mmPowell:
     begin
@@ -445,17 +445,17 @@ var
   inputIdx: PtrInt absolute obj;
   rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy, t, ri, rri, sn, cs, bt, px, py, p: Double;
   pos, arrPos: Integer;
-  mnArr: TDoubleDynArray;
+  stdDevArr: TDoubleDynArray;
 begin
   Result := 1000.0;
 
-  if not InRange(AngleTo02Pi(x[1] - x[0]), DegToRad(30.0), DegToRad(135.0)) then
+  if not InRange(AngleTo02Pi(x[1] - x[0]), DegToRad(0.0), DegToRad(120.0)) then
     Exit;
 
-  a0a := AngleTo02Pi(x[0] - x[1]);
-  a0b := AngleTo02Pi(x[0] + x[1]);
-  a1a := AngleTo02Pi(x[0] - x[1] + Pi);
-  a1b := AngleTo02Pi(x[0] + x[1] + Pi);
+  a0a := AngleTo02Pi(x[0]);
+  a0b := AngleTo02Pi(x[1]);
+  a1a := AngleTo02Pi(x[0] + Pi);
+  a1b := AngleTo02Pi(x[1] + Pi);
 
   rBeg := C45RpmLastMusicGroove * 0.5 * FOutputDPI;
   rEnd := C45RpmFirstMusicGroove * 0.5 * FOutputDPI;
@@ -464,7 +464,7 @@ begin
   cx := FInputScans[inputIdx].Center.X;
   cy := FInputScans[inputIdx].Center.Y;
 
-  SetLength(mnArr, Ceil((rEnd - rBeg) / FOutputDPI * CAreaGroovesPerInchCrop) * FPointsPerRevolution);
+  SetLength(stdDevArr, Ceil((rEnd - rBeg) / FOutputDPI * CAreaGroovesPerInchCrop) * FPointsPerRevolution);
 
   ri := (rEnd - rBeg) / (CAreaGroovesPerInchCrop * (FPointsPerRevolution - 1));
 
@@ -480,13 +480,13 @@ begin
     px := cs * rri + cx;
     py := sn * rri + cy;
 
-    Assert(pos < Length(mnArr));
+    Assert(pos < Length(stdDevArr));
 
     if FInputScans[inputIdx].InRangePointD(py, px) and
-        (In02PiExtentsAngle(bt, a0a, a0b) or In02PiExtentsAngle(bt, a1a, a1b)) then
+        not In02PiExtentsAngle(bt, a0a, a0b) and not In02PiExtentsAngle(bt, a1a, a1b) then
     begin
       p := FInputScans[inputIdx].GetPointD(py, px, isImage, imLinear);
-      mnArr[arrPos] := p;
+      stdDevArr[arrPos] := p;
       Inc(arrPos);
     end;
 
@@ -494,9 +494,9 @@ begin
   until rri >= rEnd;
 
   if arrPos > 0 then
-    Result := Mean(PDouble(@mnArr[0]), arrPos);
+    Result := -StdDev(PDouble(@stdDevArr[0]), arrPos);
 
-  Write(FInputScans[inputIdx].PNGShortName, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', Result:12:6, #13);
+  Write(FInputScans[inputIdx].PNGShortName, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', -Result:12:6, #13);
 end;
 
 procedure TScanCorrelator.Crop;
@@ -510,15 +510,15 @@ begin
 
   for i := 0 to High(FInputScans) do
   begin
-    x[0] := AngleTo02Pi(DegToRad(0.0));
-    x[1] := AngleTo02Pi(DegToRad(45.0));
+    x[0] := AngleTo02Pi(DegToRad(-30.0));
+    x[1] := AngleTo02Pi(DegToRad(30.0));
 
     PowellMinimize(@PowellCrop, x, 1.0 / 360.0, 1e-6, 1e-6, MaxInt, Pointer(i));
 
-    FPerSnanCrops[i, 0] := AngleTo02Pi(x[0] - x[1]);
-    FPerSnanCrops[i, 1] := AngleTo02Pi(x[0] + x[1]);
-    FPerSnanCrops[i, 2] := AngleTo02Pi(x[0] - x[1] + Pi);
-    FPerSnanCrops[i, 3] := AngleTo02Pi(x[0] + x[1] + Pi);
+    FPerSnanCrops[i, 0] := AngleTo02Pi(x[0]);
+    FPerSnanCrops[i, 1] := AngleTo02Pi(x[1]);
+    FPerSnanCrops[i, 2] := AngleTo02Pi(x[0] + Pi);
+    FPerSnanCrops[i, 3] := AngleTo02Pi(x[1] + Pi);
 
     WriteLn;
   end;
