@@ -1,0 +1,131 @@
+object Form1: TForm1
+  Left = 569
+  Height = 499
+  Top = 92
+  Width = 762
+  Caption = 'Curve fit'
+  ClientHeight = 479
+  ClientWidth = 762
+  Color = clNavy
+  Font.Color = clWindowText
+  Font.Height = -11
+  Font.Name = 'MS Sans Serif'
+  Menu = MainMenu1
+  LCLVersion = '1.8.0.6'
+  object Image1: TImage
+    Left = 0
+    Height = 453
+    Top = 0
+    Width = 762
+    Align = alClient
+    Visible = False
+  end
+  object Memo1: TMemo
+    Left = 0
+    Height = 453
+    Top = 0
+    Width = 762
+    Align = alClient
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -13
+    Font.Name = 'Courier New'
+    Lines.Strings = (
+      ''
+    )
+    ParentFont = False
+    ScrollBars = ssVertical
+    TabOrder = 0
+    Visible = False
+  end
+  object Panel1: TPanel
+    Left = 0
+    Height = 26
+    Top = 453
+    Width = 762
+    Align = alBottom
+    ClientHeight = 26
+    ClientWidth = 762
+    TabOrder = 1
+    object Label1: TLabel
+      Left = 6
+      Height = 13
+      Top = 6
+      Width = 52
+      Caption = 'Processing'
+      Font.Color = clBlue
+      Font.Height = -11
+      Font.Name = 'MS Sans Serif'
+      ParentColor = False
+      ParentFont = False
+      Visible = False
+    end
+  end
+  object OpenDialog1: TOpenDialog
+    DefaultExt = '.dat'
+    Filter = 'Data files|*.dat'
+    Options = [ofHideReadOnly, ofPathMustExist, ofFileMustExist, ofEnableSizing]
+    left = 216
+    top = 24
+  end
+  object MainMenu1: TMainMenu
+    left = 112
+    top = 16
+    object File1: TMenuItem
+      Caption = '&File'
+      object Open1: TMenuItem
+        Caption = '&Open'
+        ShortCut = 114
+        OnClick = Open1Click
+      end
+      object Quit1: TMenuItem
+        Caption = '&Quit'
+        OnClick = Quit1Click
+      end
+    end
+    object Compute1: TMenuItem
+      Caption = '&Compute'
+      object Selectmodel1: TMenuItem
+        Caption = '&Select Model'
+        ShortCut = 116
+        OnClick = SelectModel1Click
+      end
+      object SelectAlgorithm1: TMenuItem
+        Caption = 'Select &Algorithm'
+        ShortCut = 16500
+        OnClick = SelectAlgorithm1Click
+      end
+      object FitModel1: TMenuItem
+        Caption = 'Fit &Model'
+        ShortCut = 117
+        OnClick = FitModel1Click
+      end
+      object ViewResults1: TMenuItem
+        Caption = '&View Results'
+        OnClick = ViewResults1Click
+      end
+    end
+    object Graph1: TMenuItem
+      Caption = '&Graph'
+      object Options1: TMenuItem
+        Caption = '&Options'
+        ShortCut = 118
+        OnClick = Options1Click
+      end
+      object AxesandCurves1: TMenuItem
+        Caption = '&Axes and Curves'
+        ShortCut = 8310
+        OnClick = AxesandCurves1Click
+      end
+      object PlotGraph1: TMenuItem
+        Caption = '&Plot Graph'
+        ShortCut = 119
+        OnClick = PlotGraph1Click
+      end
+      object PrintGraph1: TMenuItem
+        Caption = 'P&rint Graph'
+        OnClick = PrintGraph1Click
+      end
+    end
+  end
+end

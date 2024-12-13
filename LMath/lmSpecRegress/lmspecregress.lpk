@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <Package Version="4">
+    <PathDelim Value="\"/>
+    <Name Value="lmspecregress"/>
+    <Type Value="RunAndDesignTime"/>
+    <CompilerOptions>
+      <Version Value="11"/>
+      <PathDelim Value="\"/>
+      <SearchPaths>
+        <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
+      </SearchPaths>
+      <CodeGeneration>
+        <SmartLinkUnit Value="True"/>
+        <RelocatableUnit Value="True"/>
+        <Optimizations>
+          <OptimizationLevel Value="2"/>
+        </Optimizations>
+      </CodeGeneration>
+      <Linking>
+        <Debugging>
+          <GenerateDebugInfo Value="False"/>
+        </Debugging>
+      </Linking>
+    </CompilerOptions>
+    <Version Minor="6" Release="1"/>
+    <Files Count="10">
+      <Item1>
+        <Filename Value="ugoldman.pas"/>
+        <UnitName Value="ugoldman"/>
+      </Item1>
+      <Item2>
+        <Filename Value="umodels.pas"/>
+        <UnitName Value="umodels"/>
+      </Item2>
+      <Item3>
+        <Filename Value="udistribs.pas"/>
+        <UnitName Value="udistribs"/>
+      </Item3>
+      <Item4>
+        <Filename Value="ugauss.pas"/>
+        <UnitName Value="ugauss"/>
+      </Item4>
+      <Item5>
+        <Filename Value="ugaussf.pas"/>
+        <UnitName Value="ugaussf"/>
+      </Item5>
+      <Item6>
+        <Filename Value="usigmatable.pas"/>
+        <UnitName Value="usigmatable"/>
+      </Item6>
+      <Item7>
+        <Filename Value="uhillfit.pas"/>
+        <UnitName Value="uhillfit"/>
+      </Item7>
+      <Item8>
+        <Filename Value="umichfit.pas"/>
+        <UnitName Value="umichfit"/>
+      </Item8>
+      <Item9>
+        <Filename Value="umintfit.pas"/>
+        <UnitName Value="umintfit"/>
+      </Item9>
+      <Item10>
+        <Filename Value="upkfit.pas"/>
+        <UnitName Value="upkfit"/>
+      </Item10>
+    </Files>
+    <RequiredPkgs Count="2">
+      <Item1>
+        <PackageName Value="lmRegression"/>
+      </Item1>
+      <Item2>
+        <PackageName Value="FCL"/>
+      </Item2>
+    </RequiredPkgs>
+    <UsageOptions>
+      <UnitPath Value="$(PkgOutDir)"/>
+    </UsageOptions>
+    <PublishOptions>
+      <Version Value="2"/>
+    </PublishOptions>
+  </Package>
+</CONFIG>

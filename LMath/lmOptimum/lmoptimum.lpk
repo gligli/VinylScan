@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <Package Version="4">
+    <PathDelim Value="\"/>
+    <Name Value="lmoptimum"/>
+    <Type Value="RunAndDesignTime"/>
+    <CompilerOptions>
+      <Version Value="11"/>
+      <PathDelim Value="\"/>
+      <SearchPaths>
+        <OtherUnitFiles Value="units"/>
+        <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
+      </SearchPaths>
+      <CodeGeneration>
+        <SmartLinkUnit Value="True"/>
+        <RelocatableUnit Value="True"/>
+        <Checks>
+          <RangeChecks Value="True"/>
+          <OverflowChecks Value="True"/>
+          <StackChecks Value="True"/>
+        </Checks>
+        <Optimizations>
+          <OptimizationLevel Value="2"/>
+        </Optimizations>
+        <SmallerCode Value="True"/>
+      </CodeGeneration>
+      <Linking>
+        <Debugging>
+          <GenerateDebugInfo Value="False"/>
+        </Debugging>
+      </Linking>
+    </CompilerOptions>
+    <Version Minor="6" Release="1"/>
+    <Files Count="15">
+      <Item1>
+        <Filename Value="ubfgs.pas"/>
+        <UnitName Value="ubfgs"/>
+      </Item1>
+      <Item2>
+        <Filename Value="ugenalg.pas"/>
+        <UnitName Value="ugenalg"/>
+      </Item2>
+      <Item3>
+        <Filename Value="ugoldsrc.pas"/>
+        <UnitName Value="ugoldsrc"/>
+      </Item3>
+      <Item4>
+        <Filename Value="ulinmin.pas"/>
+        <UnitName Value="ulinmin"/>
+      </Item4>
+      <Item5>
+        <Filename Value="ulinminq.pas"/>
+        <UnitName Value="ulinminq"/>
+      </Item5>
+      <Item6>
+        <Filename Value="umarq.pas"/>
+        <UnitName Value="umarq"/>
+      </Item6>
+      <Item7>
+        <Filename Value="umcmc.pas"/>
+        <UnitName Value="umcmc"/>
+      </Item7>
+      <Item8>
+        <Filename Value="uminbrak.pas"/>
+        <UnitName Value="uminbrak"/>
+      </Item8>
+      <Item9>
+        <Filename Value="unewton.pas"/>
+        <UnitName Value="unewton"/>
+      </Item9>
+      <Item10>
+        <Filename Value="usimann.pas"/>
+        <UnitName Value="usimann"/>
+      </Item10>
+      <Item11>
+        <Filename Value="usimplex.pas"/>
+        <UnitName Value="usimplex"/>
+      </Item11>
+      <Item12>
+        <Filename Value="uCobyla.pas"/>
+        <UnitName Value="uCobyla"/>
+      </Item12>
+      <Item13>
+        <Filename Value="utrstlp.pas"/>
+        <UnitName Value="uTrsTlp"/>
+      </Item13>
+      <Item14>
+        <Filename Value="ueval.pas"/>
+        <UnitName Value="ueval"/>
+      </Item14>
+      <Item15>
+        <Filename Value="uLinSimplex.pas"/>
+        <UnitName Value="uLinSimplex"/>
+      </Item15>
+    </Files>
+    <RequiredPkgs Count="5">
+      <Item1>
+        <PackageName Value="lmlinearalgebra"/>
+      </Item1>
+      <Item2>
+        <PackageName Value="lmrandoms"/>
+      </Item2>
+      <Item3>
+        <PackageName Value="lmmathstat"/>
+      </Item3>
+      <Item4>
+        <PackageName Value="lmMathUtil"/>
+      </Item4>
+      <Item5>
+        <PackageName Value="FCL"/>
+      </Item5>
+    </RequiredPkgs>
+    <UsageOptions>
+      <UnitPath Value="$(PkgOutDir)"/>
+    </UsageOptions>
+    <PublishOptions>
+      <Version Value="2"/>
+    </PublishOptions>
+  </Package>
+</CONFIG>

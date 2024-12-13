@@ -120,8 +120,11 @@ var
   r, x, y, radiusInner, radiusOuter, sn, cs: Double;
 begin
   func := 0;
-  grad[0] := 0;
-  grad[1] := 0;
+  if Assigned(grad) then
+  begin
+    grad[0] := 0;
+    grad[1] := 0;
+  end;
 
   radiusInner := CAreaBegin * FDPI * 0.5;
   radiusOuter := CAreaEnd * FDPI * 0.5;
@@ -145,8 +148,11 @@ begin
       if InRangePointD(y, x) then
       begin
         func -= GetPointD(y, x, isImage, imLinear);
-        grad[0] -= GetPointD(y, x, isXGradient, imLinear);
-        grad[1] -= GetPointD(y, x, isYGradient, imLinear);
+        if Assigned(grad) then
+        begin
+          grad[0] -= GetPointD(y, x, isXGradient, imLinear);
+          grad[1] -= GetPointD(y, x, isYGradient, imLinear);
+        end;
         Inc(cnt);
       end;
       Inc(pos);
@@ -157,8 +163,11 @@ begin
   if cnt > 1 then
   begin
     func /= cnt;
-    grad[0] /= cnt;
-    grad[1] /= cnt;
+    if Assigned(grad) then
+    begin
+      grad[0] /= cnt;
+      grad[1] /= cnt;
+    end;
   end;
 
   //WriteLn(arg[0]:20:9,arg[1]:20:9,func:20:9);

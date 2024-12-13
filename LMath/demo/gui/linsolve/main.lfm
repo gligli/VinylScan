@@ -1,0 +1,318 @@
+object Form1: TForm1
+  Left = 278
+  Height = 735
+  Top = 77
+  Width = 564
+  Caption = 'Linear System Solver'
+  ClientHeight = 735
+  ClientWidth = 564
+  Color = clNavy
+  Font.Color = clWindowText
+  Font.Height = -11
+  Font.Name = 'MS Sans Serif'
+  OnActivate = FormActivate
+  LCLVersion = '2.0.2.0'
+  object Label1: TLabel
+    Left = 8
+    Height = 20
+    Top = 8
+    Width = 257
+    AutoSize = False
+    Caption = 'Solve linear system : A * X = B'
+    Font.Color = clAqua
+    Font.Height = -16
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    ParentColor = False
+    ParentFont = False
+  end
+  object Label3: TLabel
+    Left = 10
+    Height = 16
+    Top = 112
+    Width = 121
+    Caption = 'System matrix (A)'
+    Font.Color = clLime
+    Font.Height = -13
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    ParentColor = False
+    ParentFont = False
+  end
+  object Label2: TLabel
+    Left = 8
+    Height = 16
+    Top = 56
+    Width = 110
+    Caption = 'Order of system'
+    Font.Color = clLime
+    Font.Height = -13
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    ParentColor = False
+    ParentFont = False
+  end
+  object Label4: TLabel
+    Left = 418
+    Height = 25
+    Top = 112
+    Width = 119
+    AutoSize = False
+    Caption = 'Constants (B)'
+    Font.Color = clLime
+    Font.Height = -13
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    ParentColor = False
+    ParentFont = False
+    WordWrap = True
+  end
+  object Label5: TLabel
+    Left = 274
+    Height = 25
+    Top = 416
+    Width = 119
+    AutoSize = False
+    Caption = 'Solution (X)'
+    Font.Color = clLime
+    Font.Height = -13
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    ParentColor = False
+    ParentFont = False
+    WordWrap = True
+  end
+  object Label6: TLabel
+    Left = 418
+    Height = 25
+    Top = 416
+    Width = 119
+    AutoSize = False
+    Caption = 'Check (A * X = B)'
+    Font.Color = clLime
+    Font.Height = -13
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    ParentColor = False
+    ParentFont = False
+    WordWrap = True
+  end
+  object SpinEdit1: TSpinEdit
+    Left = 128
+    Height = 24
+    Top = 55
+    Width = 69
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clRed
+    Font.Height = -16
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    MaxValue = 20
+    MinValue = 2
+    OnChange = SpinEdit1Change
+    ParentFont = False
+    TabOrder = 0
+    Value = 3
+  end
+  object Button3: TButton
+    Left = 16
+    Height = 33
+    Top = 656
+    Width = 233
+    Caption = 'S&olve system'
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    OnClick = Button3Click
+    ParentFont = False
+    TabOrder = 7
+  end
+  object Button5: TButton
+    Left = 16
+    Height = 33
+    Top = 608
+    Width = 233
+    Caption = '&Numeric format'
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    OnClick = Button5Click
+    ParentFont = False
+    TabOrder = 6
+  end
+  object Button6: TButton
+    Left = 424
+    Height = 33
+    Top = 656
+    Width = 121
+    Caption = '&Quit'
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    OnClick = Button6Click
+    ParentFont = False
+    TabOrder = 9
+  end
+  object StringGrid1: TStringGrid
+    Left = 8
+    Height = 201
+    Top = 136
+    Width = 388
+    ColCount = 3
+    DefaultColWidth = 125
+    FixedCols = 0
+    FixedRows = 0
+    Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goColSizing, goEditing]
+    RowCount = 3
+    TabOrder = 1
+    TitleFont.Color = clWindowText
+    TitleFont.Height = -11
+    TitleFont.Name = 'MS Sans Serif'
+  end
+  object StringGrid2: TStringGrid
+    Left = 418
+    Height = 201
+    Top = 136
+    Width = 129
+    ColCount = 1
+    DefaultColWidth = 125
+    FixedCols = 0
+    FixedRows = 0
+    Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goEditing]
+    RowCount = 3
+    TabOrder = 2
+    TitleFont.Color = clWindowText
+    TitleFont.Height = -11
+    TitleFont.Name = 'MS Sans Serif'
+  end
+  object Button1: TButton
+    Left = 8
+    Height = 33
+    Top = 352
+    Width = 265
+    Caption = '&Load system'
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    OnClick = Button1Click
+    ParentFont = False
+    TabOrder = 3
+  end
+  object Button2: TButton
+    Left = 288
+    Height = 33
+    Top = 352
+    Width = 265
+    Caption = '&Save system'
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    OnClick = Button2Click
+    ParentFont = False
+    TabOrder = 4
+  end
+  object Button4: TButton
+    Left = 280
+    Height = 33
+    Top = 656
+    Width = 121
+    Caption = 'S&ave solution'
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    OnClick = Button4Click
+    ParentFont = False
+    TabOrder = 8
+  end
+  object StringGrid3: TStringGrid
+    Left = 274
+    Height = 201
+    Top = 440
+    Width = 129
+    ColCount = 1
+    DefaultColWidth = 125
+    FixedCols = 0
+    FixedRows = 0
+    RowCount = 3
+    TabOrder = 10
+    TitleFont.Color = clWindowText
+    TitleFont.Height = -11
+    TitleFont.Name = 'MS Sans Serif'
+  end
+  object RadioGroup1: TRadioGroup
+    Left = 16
+    Height = 145
+    Top = 432
+    Width = 233
+    AutoFill = True
+    Caption = 'Algorithm'
+    ChildSizing.LeftRightSpacing = 6
+    ChildSizing.EnlargeHorizontal = crsHomogenousChildResize
+    ChildSizing.EnlargeVertical = crsHomogenousChildResize
+    ChildSizing.ShrinkHorizontal = crsScaleChilds
+    ChildSizing.ShrinkVertical = crsScaleChilds
+    ChildSizing.Layout = cclLeftToRightThenTopToBottom
+    ChildSizing.ControlsPerLine = 1
+    ClientHeight = 124
+    ClientWidth = 229
+    Font.Color = clLime
+    Font.Height = -13
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    ItemIndex = 0
+    Items.Strings = (
+      'Gauss-Jordan'
+      'LU'
+      'QR'
+      'SVD'
+    )
+    ParentFont = False
+    TabOrder = 5
+  end
+  object StringGrid4: TStringGrid
+    Left = 418
+    Height = 201
+    Top = 440
+    Width = 129
+    ColCount = 1
+    DefaultColWidth = 125
+    FixedCols = 0
+    FixedRows = 0
+    RowCount = 3
+    TabOrder = 11
+    TitleFont.Color = clWindowText
+    TitleFont.Height = -11
+    TitleFont.Name = 'MS Sans Serif'
+  end
+  object OpenDialog1: TOpenDialog
+    DefaultExt = '.dat'
+    Filter = 'Data files|*.dat|All files|*.*'
+    Options = [ofHideReadOnly, ofPathMustExist, ofFileMustExist, ofEnableSizing]
+    Left = 296
+    Top = 8
+  end
+  object SaveDialog1: TSaveDialog
+    Filter = 'Data files|*.dat|All files|*.*'
+    Options = [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing]
+    Left = 336
+    Top = 8
+  end
+  object SaveDialog2: TSaveDialog
+    Filter = 'Data files|*.dat|All files|*.*'
+    Options = [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing]
+    Left = 376
+    Top = 8
+  end
+end

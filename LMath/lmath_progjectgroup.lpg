@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectGroup FileVersion="1">
+    <Targets Count="1">
+      <Target0 FileName="lmath.lpk"/>
+    </Targets>
+  </ProjectGroup>
+</CONFIG>

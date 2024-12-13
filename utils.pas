@@ -8,7 +8,7 @@ unit utils;
 interface
 
 uses
-  Classes, SysUtils, Types, Windows, MTProcs, Math, minlbfgs, minasa;
+  Classes, SysUtils, Types, Windows, MTProcs, Math;
 
 type
   TSpinlock = LongInt;
@@ -146,6 +146,8 @@ procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string;
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TDoubleDynArray); overload;
 
 implementation
+
+uses utypes, ubfgs, minasa;
 
 procedure SpinEnter(Lock: PSpinLock); assembler;
 label spin_lock;
@@ -336,22 +338,43 @@ begin
       gm := max(gm, Abs(grad[i]));
     end;
 
-    //WriteLn(Result:20:9, gm:20:9);
+    WriteLn(Result:20:9, gm:20:9);
   until gm <= Epsilon;
 end;
 
+threadvar
+  GBFGSData: Pointer;
+  GBFGSFunc: TGradientEvalFunc;
+
+  function BFGSX(X : TVector) : Float;
+  begin
+    GBFGSFunc(X, Result, nil, GBFGSData);
+  end;
+
+  procedure BFGSG(X, G : TVector);
+  var
+    dummy: Double;
+  begin
+    dummy := NaN;
+    GBFGSFunc(X, dummy, G, GBFGSData);
+  end;
+
 function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double; Data: Pointer): Double;
 var
-  state: MinLBFGSState;
-  rep: MinLBFGSReport;
+  G: TVector;
+  H: TMatrix;
 begin
-  MinLBFGSCreate(Length(X), Min(5, Length(X)), X, state);
-  MinLBFGSSetCond(state, Epsilon, 0.0, 0.0, 0);
-  while MinLBFGSIteration(state) do
-    if state.NeedFG then
-      Func(state.X, state.F, state.G, data);
-  MinLBFGSResults(state, X, rep);
-  Result := state.F;
+  SetLength(G, Length(X));
+  SetLength(H, Length(X), Length(X));
+
+  GBFGSData := Data;
+  GBFGSFunc := Func;
+  try
+    BFGS(@BFGSX, @BFGSG, X, 0, High(X), MaxInt, Epsilon, Result, G, H);
+  finally
+    GBFGSData := nil;
+    GBFGSFunc := nil;
+  end;
 end;
 
 function ASAMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double; Data: Pointer): Double;

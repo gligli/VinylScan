@@ -1,0 +1,256 @@
+object Form1: TForm1
+  Left = 198
+  Height = 561
+  Top = 114
+  Width = 916
+  Caption = 'Quadratic Iterator: x'' = a.x.(1 - x) - FFT diagram'
+  ClientHeight = 561
+  ClientWidth = 916
+  Color = clNavy
+  Font.Color = clWindowText
+  Font.Height = -11
+  Font.Name = 'MS Sans Serif'
+  OnActivate = FormActivate
+  LCLVersion = '1.8.0.6'
+  object Image1: TImage
+    Left = 168
+    Height = 500
+    Top = 16
+    Width = 732
+  end
+  object Button2: TButton
+    Left = 8
+    Height = 33
+    Top = 56
+    Width = 137
+    Caption = '&Graph options'
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    OnClick = Button2Click
+    ParentFont = False
+    TabOrder = 1
+  end
+  object Button1: TButton
+    Left = 8
+    Height = 33
+    Top = 16
+    Width = 137
+    Caption = '&FFT'
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    OnClick = Button1Click
+    ParentFont = False
+    TabOrder = 0
+  end
+  object Button4: TButton
+    Left = 8
+    Height = 33
+    Top = 136
+    Width = 137
+    Caption = '&Quit'
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    OnClick = Button4Click
+    ParentFont = False
+    TabOrder = 3
+  end
+  object Button3: TButton
+    Left = 8
+    Height = 33
+    Top = 96
+    Width = 137
+    Caption = '&Save'
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    OnClick = Button3Click
+    ParentFont = False
+    TabOrder = 2
+  end
+  object GroupBox1: TGroupBox
+    Left = 8
+    Height = 129
+    Top = 184
+    Width = 137
+    Caption = 'Parameters'
+    ClientHeight = 108
+    ClientWidth = 133
+    Font.Color = clWhite
+    Font.Height = -13
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    ParentFont = False
+    TabOrder = 4
+    object Label1: TLabel
+      Left = 6
+      Height = 16
+      Top = 14
+      Width = 52
+      Caption = 'a  [1..4]'
+      Font.Color = clLime
+      Font.Height = -13
+      Font.Name = 'MS Sans Serif'
+      Font.Style = [fsBold]
+      ParentColor = False
+      ParentFont = False
+    end
+    object Label2: TLabel
+      Left = 6
+      Height = 16
+      Top = 54
+      Width = 58
+      Caption = 'x0  (0..1)'
+      Font.Color = clLime
+      Font.Height = -13
+      Font.Name = 'MS Sans Serif'
+      Font.Style = [fsBold]
+      ParentColor = False
+      ParentFont = False
+    end
+    object Edit1: TEdit
+      Left = 70
+      Height = 24
+      Top = 10
+      Width = 57
+      Font.Color = clRed
+      Font.Height = -13
+      Font.Name = 'MS Sans Serif'
+      Font.Style = [fsBold]
+      ParentFont = False
+      TabOrder = 0
+      Text = '3.5'
+    end
+    object Edit2: TEdit
+      Left = 70
+      Height = 24
+      Top = 50
+      Width = 57
+      Font.Color = clRed
+      Font.Height = -13
+      Font.Name = 'MS Sans Serif'
+      Font.Style = [fsBold]
+      ParentFont = False
+      TabOrder = 1
+      Text = '0.5'
+    end
+    object CheckBox1: TCheckBox
+      Left = 70
+      Height = 20
+      Top = 82
+      Width = 48
+      Caption = 'Rnd'
+      Font.Color = clLime
+      Font.Height = -13
+      Font.Name = 'MS Sans Serif'
+      Font.Style = [fsBold]
+      OnClick = CheckBox1Click
+      ParentFont = False
+      TabOrder = 2
+    end
+  end
+  object GroupBox2: TGroupBox
+    Left = 8
+    Height = 65
+    Top = 328
+    Width = 137
+    Caption = 'Hide first points'
+    ClientHeight = 44
+    ClientWidth = 133
+    Font.Color = clWhite
+    Font.Height = -13
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    ParentFont = False
+    TabOrder = 5
+    object Label3: TLabel
+      Left = 6
+      Height = 16
+      Top = 14
+      Width = 54
+      Caption = 'Nb. pts.'
+      Font.Color = clLime
+      Font.Height = -13
+      Font.Name = 'MS Sans Serif'
+      Font.Style = [fsBold]
+      ParentColor = False
+      ParentFont = False
+    end
+    object SpinEdit1: TSpinEdit
+      Left = 70
+      Height = 24
+      Top = 10
+      Width = 57
+      Font.Color = clRed
+      Font.Height = -13
+      Font.Name = 'MS Sans Serif'
+      Font.Style = [fsBold]
+      Increment = 100
+      MaxValue = 1000
+      ParentFont = False
+      TabOrder = 0
+      Value = 100
+    end
+  end
+  object GroupBox3: TGroupBox
+    Left = 8
+    Height = 65
+    Top = 408
+    Width = 137
+    Caption = 'Points for FFT'
+    ClientHeight = 44
+    ClientWidth = 133
+    Font.Color = clWhite
+    Font.Height = -13
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    ParentFont = False
+    TabOrder = 6
+    object Label4: TLabel
+      Left = 46
+      Height = 16
+      Top = 14
+      Width = 17
+      Caption = '2^'
+      Font.Color = clLime
+      Font.Height = -13
+      Font.Name = 'MS Sans Serif'
+      Font.Style = [fsBold]
+      ParentColor = False
+      ParentFont = False
+    end
+    object SpinEdit2: TSpinEdit
+      Left = 70
+      Height = 24
+      Top = 10
+      Width = 57
+      Font.Color = clRed
+      Font.Height = -13
+      Font.Name = 'MS Sans Serif'
+      Font.Style = [fsBold]
+      MaxValue = 10
+      MinValue = 5
+      ParentFont = False
+      TabOrder = 0
+      Value = 6
+    end
+  end
+  object SaveDialog1: TSaveDialog
+    DefaultExt = '.BMP'
+    FileName = '*.BMP'
+    Filter = 'Bitmap|BMP'
+    Options = [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing]
+    left = 200
+    top = 40
+  end
+end
