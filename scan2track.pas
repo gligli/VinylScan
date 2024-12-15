@@ -49,8 +49,7 @@ type
   end;
 
 implementation
-
-uses main, forms;
+uses main;
 
 { TScan2Track }
 
@@ -102,11 +101,11 @@ var
     begin
       r := radius + ismp * cxa;
 
-      px := cs * r * Scan.Skew.X + Scan.Center.X;
-      py := sn * r * Scan.Skew.Y + Scan.Center.Y;
+      px := cs * r + Scan.Center.X;
+      py := sn * r + Scan.Center.Y;
 
       if Scan.InRangePointD(py, px) then
-        smpBuf[ismp] := Scan.GetPointD(py, px, isImage, imHermite)
+        smpBuf[ismp] := Scan.GetPointD(py, px, isImage)
       else
         smpBuf[ismp] := 0.0;
     end;
@@ -140,15 +139,15 @@ var
 
 var
   angle, radius, sn, cs, px, py, feedback, fbRatio, fsmp, ffSmp: Double;
-  i, pos: Integer;
-  pbuf: specialize TFPGList<TPoint>;
+  pos: Integer;
+  pbuf: TPointFList;
   t, pt: QWord;
 begin
   WriteLn('EvalTrack');
 
   SetLength(samples, FSampleRate);
   fltSamples := TFilterIIRHPBessel.Create(nil);
-  pbuf := specialize TFPGList<TPoint>.Create;
+  pbuf := TPointFList.Create;
   try
     fltSamples.FreqCut1 := CLowCutoffFreq;
     fltSamples.SampleRate := FSampleRate;
@@ -171,29 +170,22 @@ begin
 
       //WriteLn(feedback:9:6);
       SinCos(angle, sn, cs);
-      px := cs * radius * Scan.Skew.X + Scan.Center.X;
-      py := sn * radius * Scan.Skew.Y + Scan.Center.Y;
-      pbuf.Add(Point(round(px * CReducFactor), round(py * CReducFactor)));
+      px := cs * radius + Scan.Center.X;
+      py := sn * radius + Scan.Center.Y;
+      pbuf.Add(TPointF.Create(px, py));
 
       Inc(pos);
 
 ////////////////////////
       t := GetTickCount64;
-      if t - pt >= 1000 then
+      if t - pt >= 4000 then
       begin
-
-        for i := 0 to pbuf.Count - 1 do
-          main.MainForm.Image.Picture.Bitmap.Canvas.Pixels[pbuf[i].X, pbuf[i].Y] := clLime;
-
-        main.MainForm.HorzScrollBar.Position := pbuf.Last.X - main.MainForm.Width div 2;
-        main.MainForm.VertScrollBar.Position := pbuf.Last.Y - main.MainForm.Height div 2;
-
-        pbuf.Clear;
-
-        Application.ProcessMessages;
+        main.MainForm.DrawPoints(pbuf, clLime);
 
         SetLength(samples, pos);
         CreateWAV(1, FBitsPerSample, FSampleRate, FOutputWAVFileName, samples);
+
+        pbuf.Clear;
 
         pt := GetTickCount64;
       end;

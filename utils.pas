@@ -8,7 +8,7 @@ unit utils;
 interface
 
 uses
-  Classes, SysUtils, Types, Windows, MTProcs, Math;
+  Classes, SysUtils, Types, Windows, MTProcs, Math, fgl;
 
 type
   TSpinlock = LongInt;
@@ -24,9 +24,6 @@ type
 
   TMinimizeMethod = (mmNone, mmBFGS, mmGradientDescent, mmPowell, mmAll);
 
-  TImageDerivationOperator = (idoPrewitt, idoSobel, idoScharr);
-  TConvolutionKernel = array[-1..1, -1..1] of integer;
-
   TPointDDynArray = array of TPointD;
   TPointDDynArray2 = array of TPointDDynArray;
   TByteDynArray2 = array of TByteDynArray;
@@ -34,6 +31,8 @@ type
   TSingleDynArray2 = array of TSingleDynArray;
   TDoubleDynArray2 = array of TDoubleDynArray;
   TDoubleDynArray3 = array of TDoubleDynArray2;
+
+  TPointFList = specialize TFPGList<TPointF>;
 
   TGRSEvalFunc = function(arg: Double; obj: Pointer): Double of object;
   TGradientEvalFunc = procedure(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer) of object;
@@ -95,12 +94,6 @@ const
   cPhi = (1 + sqrt(5)) / 2;
   cInvPhi = 1 / cPhi;
 
-  CImageDerivationKernels: array[TImageDerivationOperator, Boolean {Y?}] of TConvolutionKernel = (
-    (((-1, 0, 1), (-1, 0, 1), (-1, 0, 1)),   ((-1, -1, -1), (0, 0, 0), (1, 1, 1))),  // ckoPrewitt
-    (((-1, 0, 1), (-2, 0, 2), (-1, 0, 1)),   ((-1, -2, -1), (0, 0, 0), (1, 2, 1))),  // ckoSobel
-    (((-3, 0, 3), (-10, 0, 10), (-3, 0, 3)), ((-3, -10, -3), (0, 0, 0), (3, 10, 3))) // ckoScharr
-  );
-
 procedure SpinEnter(Lock: PSpinLock); assembler;
 procedure SpinLeave(Lock: PSpinLock); assembler;
 function NumberOfProcessors: Integer;
@@ -127,9 +120,6 @@ function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: D
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; Epsilon: Double = 1e-9; Data: Pointer = nil): Double;
 function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 function ASAMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
-
-function Convolve(const image:TDoubleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double; overload;
-function Convolve(const image:TWordDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Integer; overload;
 
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 function PearsonCorrelationGradient(const a: TDoubleDynArray; const b: TDoubleDynArray; const gb: TDoubleDynArray): Double;
@@ -338,7 +328,7 @@ begin
       gm := max(gm, Abs(grad[i]));
     end;
 
-    WriteLn(Result:20:9, gm:20:9);
+    //WriteLn(Result:20:9, gm:20:9);
   until gm <= Epsilon;
 end;
 
@@ -399,26 +389,6 @@ begin
       Func(state.X, state.F, state.G, data);
   MinASAResults(state, X, rep);
   Result := state.F;
-end;
-
-function Convolve(const image: TDoubleDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Double;
-var
-  y, x: Integer;
-begin
-  Result := 0;
-  for y := -1 to 1 do
-    for x := -1 to 1 do
-      Result += image[y + row, x + col] * kernel[y, x];
-end;
-
-function Convolve(const image:TWordDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Integer; overload;
-var
-  y, x: Integer;
-begin
-  Result := 0;
-  for y := -1 to 1 do
-    for x := -1 to 1 do
-      Result += image[y + row, x + col] * kernel[y, x];
 end;
 
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;

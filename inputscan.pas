@@ -9,14 +9,12 @@ uses
   utils, powell;
 
 type
-  TInterpMode = (imPoint, imLinear, imHermite);
   TInterpSource = (isImage, isXGradient, isYGradient);
 
   { TInputScan }
 
   TInputScan = class
   private
-    FImageDerivationOperator: TImageDerivationOperator;
     FPNGFileName: String;
     FDPI: Integer;
     FPointsPerRevolution: Integer;
@@ -25,7 +23,6 @@ type
     FSinCosLUT: TPointDDynArray;
 
     FCenter: TPointD;
-    FSkew: TPointD;
     FConcentricGrooveRadius: Double;
     FFirstGrooveRadius: Double;
     FGrooveStartAngle: Double;
@@ -34,8 +31,7 @@ type
     FImage: TWordDynArray2;
 
     function GetPNGShortName: String;
-    procedure GradientEvalConcentricGrooveRadiusCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
-    procedure GradientEvalConcentricGrooveSkew(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+    procedure GradientEvalConcentricGroove(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
     procedure GradientEvalCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 
     function GetHeight: Integer;
@@ -54,18 +50,16 @@ type
     procedure Run;
 
     function InRangePointD(Y, X: Double): Boolean;
-    function GetPointD(Y, X: Double; Source: TInterpSource; Mode: TInterpMode): Double; inline;
+    function GetPointD(Y, X: Double; Source: TInterpSource): Double;
 
     property PNGFileName: String read FPNGFileName write FPNGFileName;
     property PNGShortName: String read GetPNGShortName;
-    property ImageDerivationOperator: TImageDerivationOperator read FImageDerivationOperator write FImageDerivationOperator;
 
     property DPI: Integer read FDPI;
     property Width: Integer read GetWidth;
     property Height: Integer read GetHeight;
 
     property Center: TPointD read FCenter write FCenter;
-    property Skew: TPointD read FSkew write FSkew;
     property ConcentricGrooveRadius: Double read FConcentricGrooveRadius;
     property FirstGrooveRadius: Double read FFirstGrooveRadius;
     property GrooveStartAngle: Double read FGrooveStartAngle;
@@ -135,7 +129,7 @@ begin
     sn := FSinCosLUT[t].X;
     cs := FSinCosLUT[t].Y;
 
-    if sn <= 0 then sn *= 0.96;
+    if sn <= 0 then sn *= 0.99;
     if cs >= 0 then cs *= 0.94;
 
     pos := 0;
@@ -147,11 +141,11 @@ begin
 
       if InRangePointD(y, x) then
       begin
-        func -= GetPointD(y, x, isImage, imLinear);
+        func -= GetPointD(y, x, isImage);
         if Assigned(grad) then
         begin
-          grad[0] -= GetPointD(y, x, isXGradient, imLinear);
-          grad[1] -= GetPointD(y, x, isYGradient, imLinear);
+          grad[0] -= GetPointD(y, x, isXGradient);
+          grad[1] -= GetPointD(y, x, isYGradient);
         end;
         Inc(cnt);
       end;
@@ -195,7 +189,7 @@ begin
   FCenter.Y := x[1];
 end;
 
-procedure TInputScan.GradientEvalConcentricGrooveRadiusCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+procedure TInputScan.GradientEvalConcentricGroove(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 var
   t: Integer;
   sn, cs, x, y, gimgx, gimgy: Double;
@@ -216,19 +210,19 @@ begin
 
     for vs := Low(TValueSign) to High(TValueSign) do
     begin
-      x := cs * (arg[0] + CRadiusXOffsets[vs] * FDPI) * FSkew.X + arg[1];
-      y := sn * (arg[0] + CRadiusXOffsets[vs] * FDPI) * FSkew.Y + arg[2];
+      x := cs * (arg[0] + CRadiusXOffsets[vs] * FDPI) + arg[1];
+      y := sn * (arg[0] + CRadiusXOffsets[vs] * FDPI) + arg[2];
 
       if InRangePointD(y, x) then
       begin
-        func += GetPointD(y, x, isImage, imLinear) * CRadiusYFactors[vs];
+        func += GetPointD(y, x, isImage) * CRadiusYFactors[vs];
 
         if Assigned(grad) then
         begin
-          gimgx := GetPointD(y, x, isXGradient, imLinear);
-          gimgy := GetPointD(y, x, isYGradient, imLinear);
+          gimgx := GetPointD(y, x, isXGradient);
+          gimgy := GetPointD(y, x, isYGradient);
 
-          grad[0] += (gimgx * -sn * FSkew.X + gimgy * cs * FSkew.Y) * CRadiusYFactors[vs];
+          grad[0] += (gimgx * -sn + gimgy * cs) * CRadiusYFactors[vs];
           grad[1] += gimgx * CRadiusYFactors[vs];
           grad[2] += gimgy * CRadiusYFactors[vs];
         end;
@@ -244,58 +238,15 @@ begin
   Result := ChangeFileExt(ExtractFileName(FPNGFileName), '');
 end;
 
-procedure TInputScan.GradientEvalConcentricGrooveSkew(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
-var
-  t: Integer;
-  sn, cs, x, y, gimgx, gimgy: Double;
-  vs: TValueSign;
-begin
-  func := 0.0;
-  if Assigned(grad) then
-  begin
-    grad[0] := 0.0;
-    grad[1] := 0.0;
-  end;
-
-  for t := 0 to FPointsPerRevolution - 1  do
-  begin
-    cs := FSinCosLUT[t].X;
-    sn := FSinCosLUT[t].Y;
-
-    for vs := Low(TValueSign) to High(TValueSign) do
-    begin
-      x := cs * (FConcentricGrooveRadius + CRadiusXOffsets[vs] * FDPI) * arg[0] + FCenter.X;
-      y := sn * (FConcentricGrooveRadius + CRadiusXOffsets[vs] * FDPI) * arg[1] + FCenter.Y;
-
-      if InRangePointD(y, x) then
-      begin
-        func += GetPointD(y, x, isImage, imLinear) * CRadiusYFactors[vs];
-
-        if Assigned(grad) then
-        begin
-          gimgx := GetPointD(y, x, isXGradient, imLinear);
-          gimgy := GetPointD(y, x, isYGradient, imLinear);
-
-          grad[0] += gimgx * cs * CRadiusYFactors[vs];
-          grad[1] += gimgy * sn * CRadiusYFactors[vs];
-        end;
-      end;
-    end;
-  end;
-
-  //WriteLn(arg[0]:12:3,arg[1]:12:3,func:12:3);
-end;
-
 procedure TInputScan.FindConcentricGroove;
 var
   r, radiusInner, radiusOuter, radiusLimit: Integer;
-  f, prevf, best, bestr: Double;
-  xrc, xs: TVector;
+  f, best, bestr: Double;
+  xrc: TVector;
 begin
   BuildSinCosLUT(FPointsPerRevolution, FSinCosLUT);
 
   SetLength(xrc, 3);
-  SetLength(xs, 2);
 
   radiusLimit := Round(C45RpmFirstMusicGroove * 0.5 * FDPI);
   radiusInner := Round((C45RpmConcentricGroove + C45RpmLabelOuterSize) * 0.5 * FDPI * 0.5);
@@ -309,7 +260,7 @@ begin
   for r := radiusInner to radiusOuter do
   begin
     xrc[0] := r;
-    GradientEvalConcentricGrooveRadiusCenter(xrc, f, nil, nil);
+    GradientEvalConcentricGroove(xrc, f, nil, nil);
 
     if f < best then
     begin
@@ -318,27 +269,11 @@ begin
     end;
   end;
 
-  FConcentricGrooveRadius := bestr;
-
-  f := Infinity;
-  repeat
-    xrc[0] := FConcentricGrooveRadius;
-    xrc[1] := FCenter.X;
-    xrc[2] := FCenter.Y;
-    ASAMinimize(@GradientEvalConcentricGrooveRadiusCenter, xrc, [radiusInner, radiusLimit, radiusLimit], [radiusOuter, Width - radiusLimit, Height - radiusLimit]);
-    FConcentricGrooveRadius := xrc[0];
-    FCenter.X := xrc[1];
-    FCenter.Y := xrc[2];
-
-    xs[0] := FSkew.X;
-    xs[1] := FSkew.Y;
-    prevf := f;
-    f := BFGSMinimize(@GradientEvalConcentricGrooveSkew, xs, 1e-9);
-    FSkew.X := xs[0];
-    FSkew.Y := xs[1];
-
-    //WriteLn(f:12:6);
-  until SameValue(prevf, f, 1e-9);
+  xrc[0] := bestr;
+  ASAMinimize(@GradientEvalConcentricGroove, xrc, [radiusInner, radiusLimit, radiusLimit], [radiusOuter, Width - radiusLimit, Height - radiusLimit]);
+  FConcentricGrooveRadius := xrc[0];
+  //FCenter.X := xrc[1];
+  //FCenter.Y := xrc[2];
 end;
 
 procedure TInputScan.FindGrooveStart;
@@ -356,12 +291,12 @@ begin
   begin
     SinCos(i * FRadiansPerRevolutionPoint, sn, cs);
 
-    x := cs * FFirstGrooveRadius * FSkew.X + FCenter.X;
-    y := sn * FFirstGrooveRadius * FSkew.X + FCenter.Y;
+    x := cs * FFirstGrooveRadius + FCenter.X;
+    y := sn * FFirstGrooveRadius + FCenter.Y;
 
     if InRangePointD(y, x) then
     begin
-      v := v * 0.99 + GetPointD(y, x, isImage, imHermite) * 0.01;
+      v := v * 0.99 + GetPointD(y, x, isImage) * 0.01;
 
       if v > best then
       begin
@@ -385,45 +320,28 @@ begin
   Result := Length(FImage);
 end;
 
-function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource; Mode: TInterpMode): Double; inline;
+function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource): Double; inline;
 
   function GetPt(AY, AX: Double): Double; inline;
   var
     ix, iy: Integer;
     y0, y1, y2, y3: Double;
   begin
-    Result := 0;
     ix := trunc(AX);
     iy := trunc(AY);
 
-    case Mode of
-      imPoint:
-      begin
-        Result := FImage[iy, ix];
-      end;
-      imLinear:
-      begin
-        y1 := lerp(FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], AX - ix);
-        y2 := lerp(FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], AX - ix);
+    y0 := herp(FImage[iy - 1, ix - 1], FImage[iy - 1, ix + 0], FImage[iy - 1, ix + 1], FImage[iy - 1, ix + 2], AX - ix);
+    y1 := herp(FImage[iy + 0, ix - 1], FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], FImage[iy + 0, ix + 2], AX - ix);
+    y2 := herp(FImage[iy + 1, ix - 1], FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], FImage[iy + 1, ix + 2], AX - ix);
+    y3 := herp(FImage[iy + 2, ix - 1], FImage[iy + 2, ix + 0], FImage[iy + 2, ix + 1], FImage[iy + 2, ix + 2], AX - ix);
 
-        Result := lerp(y1, y2, AY - iy);
-      end;
-      imHermite:
-      begin
-        y0 := herp(FImage[iy - 1, ix - 1], FImage[iy - 1, ix + 0], FImage[iy - 1, ix + 1], FImage[iy - 1, ix + 2], AX - ix);
-        y1 := herp(FImage[iy + 0, ix - 1], FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], FImage[iy + 0, ix + 2], AX - ix);
-        y2 := herp(FImage[iy + 1, ix - 1], FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], FImage[iy + 1, ix + 2], AX - ix);
-        y3 := herp(FImage[iy + 2, ix - 1], FImage[iy + 2, ix + 0], FImage[iy + 2, ix + 1], FImage[iy + 2, ix + 2], AX - ix);
-
-        Result := herp(y0, y1, y2, y3, AY - iy);
-      end;
-    end;
+    Result := herp(y0, y1, y2, y3, AY - iy);
 
     Result *= (1.0 / High(Word));
   end;
 
-var
-  kernel: ^TConvolutionKernel;
+const
+  CH = 0.001;
 begin
   Result := 0;
   case Source of
@@ -433,25 +351,21 @@ begin
     end;
     isXGradient:
     begin
-      kernel := @CImageDerivationKernels[FImageDerivationOperator, False];
-
-      Result := GetPt(Y - 1.0, X - 1.0) * kernel^[-1, -1];
-      Result += GetPt(Y - 1.0, X + 1.0) * kernel^[-1,  1];
-      Result += GetPt(Y + 0.0, X - 1.0) * kernel^[ 0, -1];
-      Result += GetPt(Y + 0.0, X + 1.0) * kernel^[ 0,  1];
-      Result += GetPt(Y + 1.0, X - 1.0) * kernel^[ 1, -1];
-      Result += GetPt(Y + 1.0, X + 1.0) * kernel^[ 1,  1];
+      Result := GetPt(Y, X - 3.0 * CH) * (1 / CH) * (-1/60);
+      Result += GetPt(Y, X - 2.0 * CH) * (1 / CH) * (3/20);
+      Result += GetPt(Y, X - 1.0 * CH) * (1 / CH) * (-3/4);
+      Result += GetPt(Y, X + 1.0 * CH) * (1 / CH) * (3/4);
+      Result += GetPt(Y, X + 2.0 * CH) * (1 / CH) * (-3/20);
+      Result += GetPt(Y, X + 3.0 * CH) * (1 / CH) * (1/60);
     end;
     isYGradient:
     begin
-      kernel := @CImageDerivationKernels[FImageDerivationOperator, True];
-
-      Result := GetPt(Y - 1.0, X - 1.0) * kernel^[-1, -1];
-      Result += GetPt(Y - 1.0, X + 0.0) * kernel^[-1,  0];
-      Result += GetPt(Y - 1.0, X + 1.0) * kernel^[-1,  1];
-      Result += GetPt(Y + 1.0, X - 1.0) * kernel^[ 1, -1];
-      Result += GetPt(Y + 1.0, X + 0.0) * kernel^[ 1,  0];
-      Result += GetPt(Y + 1.0, X + 1.0) * kernel^[ 1,  1];
+      Result := GetPt(Y - 3.0 * CH, X) * (1 / CH) * (-1/60);
+      Result += GetPt(Y - 2.0 * CH, X) * (1 / CH) * (3/20);
+      Result += GetPt(Y - 1.0 * CH, X) * (1 / CH) * (-3/4);
+      Result += GetPt(Y + 1.0 * CH, X) * (1 / CH) * (3/4);
+      Result += GetPt(Y + 2.0 * CH, X) * (1 / CH) * (-3/20);
+      Result += GetPt(Y + 3.0 * CH, X) * (1 / CH) * (1/60);
     end;
   end;
 end;
@@ -467,9 +381,6 @@ begin
   FPointsPerRevolution := APointsPerRevolution;
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
   FSilent := ASilent;
-  FSkew.X := 1.0;
-  FSkew.Y := 1.0;
-  FImageDerivationOperator := idoPrewitt;
 end;
 
 destructor TInputScan.Destroy;
@@ -531,7 +442,6 @@ begin
   if not FSilent then
   begin
     WriteLn('Center:', FCenter.X:12:3, ',', FCenter.Y:12:3);
-    WriteLn('Skew:', FSkew.X:12:6, ',', FSkew.Y:12:6);
     WriteLn('FirstGrooveRadius:', FFirstGrooveRadius:12:3);
     WriteLn('ConcentricGrooveRadius:', FConcentricGrooveRadius:12:3);
     WriteLn('GrooveStartPoint:', FGrooveStartPoint.X:12:3, ',', FGrooveStartPoint.Y:12:3);

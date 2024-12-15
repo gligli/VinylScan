@@ -24,7 +24,6 @@ type
     btScansCorrelator: TButton;
     btTest: TButton;
     cbDPI: TComboBox;
-    cbImgDerv: TComboBox;
     cbSR: TComboBox;
     cbMethod: TComboBox;
     edInputPNG: TEdit;
@@ -48,8 +47,9 @@ type
   private
 
   public
-
-    procedure DrawImage(const Img: TWordDynArray2); overload;
+    procedure DrawExtents(AScan: TInputScan);
+    procedure DrawImage(const Img: TWordDynArray2);
+    procedure DrawPoints(const APoints: TPointFList; AColor: TColor);
   end;
 
 var
@@ -64,20 +64,11 @@ implementation
 procedure TMainForm.btScan2TrackClick(Sender: TObject);
 var
   s2t: TScan2Track;
-  C: TCanvas;
-  cx, cy, sx, sy, rfx, rfy, rcx, rcy, rax, ray: Integer;
 begin
-  C := Image.Picture.Bitmap.Canvas;
-
-  C.Brush.Style := bsClear;
-  C.Pen.Color := clRed;
-  C.Pen.Style := psDot;
-
   s2t := TScan2Track.Create(StrToIntDef(cbSR.Text, 48000), 16, StrToIntDef(cbDPI.Text, 2400));
   try
     s2t.OutputWAVFileName := edOutputWAV.Text;
     s2t.Scan.PNGFileName := edInputPNG.Text;
-    s2t.Scan.ImageDerivationOperator := TImageDerivationOperator(cbImgDerv.ItemIndex);
 
     s2t.Scan.LoadPNG;
 
@@ -85,30 +76,7 @@ begin
 
     s2t.Scan.FindTrack;
 
-    cx := Round(s2t.Scan.Center.X * CReducFactor);
-    cy := Round(s2t.Scan.Center.Y * CReducFactor);
-    sx := Round(s2t.Scan.GrooveStartPoint.X * CReducFactor);
-    sy := Round(s2t.Scan.GrooveStartPoint.Y * CReducFactor);
-    rfx := Round(s2t.Scan.FirstGrooveRadius * s2t.Scan.Skew.X) shr CReducShift;
-    rfy := Round(s2t.Scan.FirstGrooveRadius * s2t.Scan.Skew.Y) shr CReducShift;
-    rcx := Round(s2t.Scan.ConcentricGrooveRadius * s2t.Scan.Skew.X) shr CReducShift;
-    rcy := Round(s2t.Scan.ConcentricGrooveRadius * s2t.Scan.Skew.Y) shr CReducShift;
-    rax := Round(C45RpmAdapterSize * 0.5 * s2t.Scan.DPI * s2t.Scan.Skew.X) shr CReducShift;
-    ray := Round(C45RpmAdapterSize * 0.5 * s2t.Scan.DPI * s2t.Scan.Skew.Y) shr CReducShift;
-
-    C.Line(cx - 8, cy, cx + 9, cy);
-    C.Line(cx, cy - 8, cx, cy + 9);
-
-    C.Line(sx - 8, sy, sx + 9, sy);
-    C.Line(sx, sy - 8, sx, sy + 9);
-
-    C.EllipseC(cx, cy, rfx, rfy);
-    C.EllipseC(cx, cy, rcx, rcy);
-    C.EllipseC(cx, cy, rax, ray);
-
-    HorzScrollBar.Position := cx - Width div 2;
-    VertScrollBar.Position := cy - Height div 2;
-    Application.ProcessMessages;
+    DrawExtents(s2t.Scan);
 
     s2t.EvalTrack;
 
@@ -148,10 +116,15 @@ begin
   sc := TScanCorrelator.Create(mmInputPNGs.Lines, StrToIntDef(cbDPI.Text, 2400));
   try
     sc.Method := TMinimizeMethod(cbMethod.ItemIndex);
-    sc.ImageDerivationOperator := TImageDerivationOperator(cbImgDerv.ItemIndex);
     sc.OutputPNGFileName := edOutputPNG.Text;
 
     sc.LoadPNGs;
+
+    if Length(sc.InputScans) > 0 then
+    begin
+      DrawImage(sc.InputScans[0].Image);
+      DrawExtents(sc.InputScans[0]);
+    end;
 
     sc.Process;
 
@@ -175,7 +148,6 @@ var
   fltHP: TFilterIIRHPBessel;
   smps: TSmallIntDynArray;
   mm: TMinimizeMethod;
-  ido: TImageDerivationOperator;
 begin
   SetLength(smps, 48000 * 2);
   fltLP := TFilterIIRLPBessel.Create(nil);
@@ -246,25 +218,20 @@ begin
     sl.Add('data\think_mock3.png');
 
     for mm := Succ(mmNone) to High(TMinimizeMethod) do
-      for ido := Low(TImageDerivationOperator) to High(TImageDerivationOperator) do
-      begin
-        if (ido <> Low(TImageDerivationOperator)) and (mm = mmPowell) then
-          Continue;
+    begin
+      scm := TScanCorrelator.Create(sl);
+      try
+        scm.OutputPNGFileName := fn;
+        scm.Method := mm;
 
-        scm := TScanCorrelator.Create(sl);
-        try
-          scm.OutputPNGFileName := fn;
-          scm.Method := mm;
-          scm.ImageDerivationOperator := ido;
-
-          scm.LoadPNGs;
-          scm.Process;
-          DrawImage(scm.OutputImage);
-          scm.Save;
-        finally
-          scm.Free;
-        end;
+        scm.LoadPNGs;
+        scm.Process;
+        DrawImage(scm.OutputImage);
+        scm.Save;
+      finally
+        scm.Free;
       end;
+    end;
 
   finally
     sl.Free;
@@ -275,16 +242,55 @@ end;
 procedure TMainForm.FormCreate(Sender: TObject);
 begin
   pnSettings.ControlStyle := pnSettings.ControlStyle + [csOpaque];
+  Image.ControlStyle := Image.ControlStyle + [csOpaque];
+end;
+
+procedure TMainForm.DrawExtents(AScan: TInputScan);
+var
+  C: TCanvas;
+  cx, cy, sx, sy, rfx, rfy, rcx, rcy, rax, ray: Integer;
+begin
+  C := Image.Picture.Bitmap.Canvas;
+
+  C.Brush.Style := bsClear;
+  C.Pen.Color := clRed;
+  C.Pen.Style := psDot;
+
+  cx := Round(AScan.Center.X * CReducFactor);
+  cy := Round(AScan.Center.Y * CReducFactor);
+  sx := Round(AScan.GrooveStartPoint.X * CReducFactor);
+  sy := Round(AScan.GrooveStartPoint.Y * CReducFactor);
+  rfx := Round(AScan.FirstGrooveRadius) shr CReducShift;
+  rfy := Round(AScan.FirstGrooveRadius) shr CReducShift;
+  rcx := Round(AScan.ConcentricGrooveRadius) shr CReducShift;
+  rcy := Round(AScan.ConcentricGrooveRadius) shr CReducShift;
+  rax := Round(C45RpmAdapterSize * 0.5 * AScan.DPI) shr CReducShift;
+  ray := Round(C45RpmAdapterSize * 0.5 * AScan.DPI) shr CReducShift;
+
+  C.Line(cx - 8, cy, cx + 9, cy);
+  C.Line(cx, cy - 8, cx, cy + 9);
+
+  C.Line(sx - 8, sy, sx + 9, sy);
+  C.Line(sx, sy - 8, sx, sy + 9);
+
+  C.EllipseC(cx, cy, rfx, rfy);
+  C.EllipseC(cx, cy, rcx, rcy);
+  C.EllipseC(cx, cy, rax, ray);
+
+  HorzScrollBar.Position := cx - Width div 2;
+  VertScrollBar.Position := cy - Height div 2;
+
+  Application.ProcessMessages;
 end;
 
 procedure TMainForm.DrawImage(const Img: TWordDynArray2);
 var
   x, y, ix, iy: Integer;
-  sc: PByte;
+  sc: PCardinal;
   b: Byte;
   acc: Integer;
 begin
-  Image.Picture.Bitmap.PixelFormat := pf8bit;
+  Image.Picture.Bitmap.PixelFormat := pf32bit;
   Image.Picture.Bitmap.Width := Length(Img[0]) shr CReducShift;
   Image.Picture.Bitmap.Height := Length(Img) shr CReducShift;
 
@@ -302,10 +308,30 @@ begin
 
         b := EnsureRange(Round(acc * (High(Byte)  / (High(Word) shl (CReducShift * 2)))), 0, High(Byte));
 
-        sc^ := b;
+        sc^ := ToRGB(b, b, b);
 
         Inc(sc);
       end;
+    end;
+  finally
+    Image.Picture.Bitmap.EndUpdate;
+  end;
+
+  Application.ProcessMessages;
+end;
+
+procedure TMainForm.DrawPoints(const APoints: TPointFList; AColor: TColor);
+var
+  i: Integer;
+  sc: PCardinal;
+begin
+  Image.Picture.Bitmap.BeginUpdate;
+  try
+    for i := 0 to APoints.Count - 1 do
+    begin
+      sc := Image.Picture.Bitmap.ScanLine[round(APoints[i].Y) shr CReducShift];
+      Inc(sc, round(APoints[i].X) shr CReducShift);
+      sc^ := SwapRB(AColor);
     end;
   finally
     Image.Picture.Bitmap.EndUpdate;

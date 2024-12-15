@@ -22,21 +22,22 @@ type
 
     FPerSnanCrops: TDoubleDynArray2;
     FPerSnanAngles: array of Double;
+    FPerAngleX: TDoubleDynArray2;
 
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
 
     FOutputImage: TWordDynArray2;
 
-    function GetImageDerivationOperator: TImageDerivationOperator;
-    procedure SetImageDerivationOperator(AValue: TImageDerivationOperator);
-
-    procedure GradientsAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+    procedure GradientAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
     function PowellAnalyze(const arg: TVector; obj: Pointer): TScalar;
+    procedure GradientCorrect(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+    function PowellCorrect(const arg: TVector; obj: Pointer): TScalar;
     function PowellCrop(const x: TVector; obj: Pointer): TScalar;
 
     procedure AngleInit;
     function Analyze(AMethod: TMinimizeMethod): Double;
+    procedure Correct;
     procedure Crop;
     procedure Rebuild;
   public
@@ -49,7 +50,6 @@ type
 
     property OutputPNGFileName: String read FOutputPNGFileName write FOutputPNGFileName;
     property Method: TMinimizeMethod read FMethod write FMethod;
-    property ImageDerivationOperator: TImageDerivationOperator read GetImageDerivationOperator write SetImageDerivationOperator;
 
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
@@ -74,15 +74,22 @@ type
   end;
 
 implementation
+uses main;
 
 { TScanCorrelator }
 
 const
   CAreaBegin = C45RpmInnerSize;
-  CAreaEnd = C45RpmLastMusicGroove;
+  CAreaEnd = C45RpmLabelOuterSize;
   CAreaWidth = (CAreaEnd - CAreaBegin) * 0.5;
   CAreaGroovesPerInchAnalyze = 60;
   CAreaGroovesPerInchCrop = 16;
+
+  CCorrectAngleCount = 18;
+  CCorrectPrecMul = 100;
+  CCorrectAreaBegin = C45RpmLabelOuterSize;
+  CCorrectAreaEnd = C45RpmLastMusicGroove;
+  CCorrectAreaWidth = (CCorrectAreaEnd - CCorrectAreaBegin) * 0.5;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
@@ -169,12 +176,12 @@ var
         px := cx + cs * iRadius;
         py := cy + sn * iRadius;
         if scn.InRangePointD(py, px) then
-          arr[Result + 0] := scn.GetPointD(py, px, isImage, imLinear);
+          arr[Result + 0] := scn.GetPointD(py, px, isImage);
 
         px := cx - cs * iRadius;
         py := cy - sn * iRadius;
         if scn.InRangePointD(py, px) then
-          arr[Result + 1] := scn.GetPointD(py, px, isImage, imLinear);
+          arr[Result + 1] := scn.GetPointD(py, px, isImage);
 
         Inc(Result, 2);
       end;
@@ -235,10 +242,10 @@ end;
 
 function TScanCorrelator.PowellAnalyze(const arg: TVector; obj: Pointer): TScalar;
 begin
-  GradientsAnalyze(arg, Result, nil, obj);
+  GradientAnalyze(arg, Result, nil, obj);
 end;
 
-procedure TScanCorrelator.GradientsAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+procedure TScanCorrelator.GradientAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 var
   gradData: TDoubleDynArray2;
   imgData: TDoubleDynArray2;
@@ -248,7 +255,7 @@ var
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     i, pos: Integer;
-    ri, t, r, px, py, cx, cy, rri, skx, sky, sn, cs, p, gimgx, gimgy, gr, gt, gcx, gcy, gskx, gsky, invLen: Double;
+    ri, t, r, px, py, cx, cy, rri, sn, cs, p, gimgx, gimgy, gr, gt, gcx, gcy: Double;
     sinCosLUT: TPointDDynArray;
   begin
     if not InRange(AIndex, 0, High(FInputScans)) then
@@ -259,22 +266,17 @@ var
       t   := arg[High(FInputScans) * 0 + AIndex - 1];
       cx  := arg[High(FInputScans) * 1 + AIndex - 1];
       cy  := arg[High(FInputScans) * 2 + AIndex - 1];
-      skx := arg[High(FInputScans) * 3 + AIndex - 1];
-      sky := arg[High(FInputScans) * 4 + AIndex - 1];
     end
     else
     begin
       t   := FPerSnanAngles[AIndex];
       cx  := FInputScans[AIndex].Center.X;
       cy  := FInputScans[AIndex].Center.Y;
-      skx := FInputScans[AIndex].Skew.X;
-      sky := FInputScans[AIndex].Skew.Y;
     end;
 
     BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
 
     ri := FOutputDPI / (CAreaGroovesPerInchAnalyze * (FPointsPerRevolution - 1));
-    invLen := 1.0 / Length(imgData[0]);
 
     r := CAreaBegin * 0.5 * FOutputDPI;
     pos := 0;
@@ -285,33 +287,29 @@ var
 
       rri := r + ri * i;
 
-      px := cs * rri * skx + cx;
-      py := sn * rri * sky + cy;
+      px := cs * rri + cx;
+      py := sn * rri + cy;
 
       if FInputScans[AIndex].InRangePointD(py, px) then
       begin
-        p := FInputScans[AIndex].GetPointD(py, px, isImage, imLinear);
+        p := FInputScans[AIndex].GetPointD(py, px, isImage);
 
         imgData[AIndex, i] := p;
 
         if (AIndex > 0) and Assigned(grad) then
         begin
-          gimgx := FInputScans[AIndex].GetPointD(py, px, isXGradient, imLinear);
-          gimgy := FInputScans[AIndex].GetPointD(py, px, isYGradient, imLinear);
+          gimgx := FInputScans[AIndex].GetPointD(py, px, isXGradient);
+          gimgy := FInputScans[AIndex].GetPointD(py, px, isYGradient);
 
-          gr := rri * invLen;
+          gr := rri;
 
-          gt := (gimgx * -sn * skx + gimgy * cs * sky) * gr;
+          gt := (gimgx * -sn + gimgy * cs) * gr;
           gcx := gimgx;
           gcy := gimgy;
-          gskx := gimgx * cs * gr;
-          gsky := gimgy * sn * gr;
 
           gradData[High(FInputScans) * 0 + AIndex - 1, i] := gt;
           gradData[High(FInputScans) * 1 + AIndex - 1, i] := gcx;
           gradData[High(FInputScans) * 2 + AIndex - 1, i] := gcy;
-          gradData[High(FInputScans) * 3 + AIndex - 1, i] := gskx;
-          gradData[High(FInputScans) * 4 + AIndex - 1, i] := gsky;
         end;
       end;
 
@@ -329,10 +327,10 @@ var
     if not InRange(AIndex, 0, High(FInputScans) - 1) then
       Exit;
 
-    imgResults[AIndex] := -PearsonCorrelation(imgData[0], imgData[AIndex + 1]);
+    imgResults[AIndex] := MSE(imgData[0], imgData[AIndex + 1]);
 
     for iArg := 0 to paramCount - 1 do
-      grad[High(FInputScans) * iArg + AIndex + 1 - 1] := -PearsonCorrelationGradient(imgData[0], imgData[AIndex + 1], gradData[High(FInputScans) * iArg + AIndex + 1 - 1]);
+      grad[High(FInputScans) * iArg + AIndex + 1 - 1] := MSEGradient(imgData[0], imgData[AIndex + 1], gradData[High(FInputScans) * iArg + AIndex + 1 - 1]);
   end;
 
 var
@@ -350,26 +348,7 @@ begin
 
   func := Sum(imgResults);
 
-  Write('Correlation: ', -DivDef(func, Length(imgResults), 1.0):12:9,#13);
-end;
-
-function TScanCorrelator.GetImageDerivationOperator: TImageDerivationOperator;
-var
-  dummy: TInputScan;
-begin
-  if Length(FInputScans) > 0 then
-  begin
-    Result := FInputScans[0].ImageDerivationOperator;
-  end
-  else
-  begin
-    dummy := TInputScan.Create;
-    try
-      Result := dummy.ImageDerivationOperator;
-    finally
-      dummy.Free;
-    end;
-  end;
+  Write('RMSE: ', Sqrt(DivDef(func, Length(imgResults), 1.0)):12:9,#13);
 end;
 
 function TScanCorrelator.Analyze(AMethod: TMinimizeMethod): Double;
@@ -380,7 +359,7 @@ var
 begin
   Result := NaN;
 
-  WriteLn('Analyze ', GetEnumName(TypeInfo(TMinimizeMethod), Ord(AMethod)), ', ', GetEnumName(TypeInfo(TImageDerivationOperator), Ord(GetImageDerivationOperator)));
+  WriteLn('Analyze ', GetEnumName(TypeInfo(TMinimizeMethod), Ord(AMethod)));
 
   if Length(FInputScans) <= 0 then
     Exit;
@@ -389,16 +368,14 @@ begin
     AMethod := mmNone;
 
   for i := 0 to High(FInputScans) do
-    WriteLn(FInputScans[i].PNGShortName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', SkewX: ', FInputScans[i].Skew.X:9:6, ', SkewY: ', FInputScans[i].Skew.Y:9:6, ' (before)');
+    WriteLn(FInputScans[i].PNGShortName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (before)');
 
-  SetLength(x, High(FInputScans) * 5);
+  SetLength(x, High(FInputScans) * 3);
   for i := 1 to High(FInputScans) do
   begin
     x[High(FInputScans) * 0 + i - 1] := FPerSnanAngles[i];
     x[High(FInputScans) * 1 + i - 1] := FInputScans[i].Center.X;
     x[High(FInputScans) * 2 + i - 1] := FInputScans[i].Center.Y;
-    x[High(FInputScans) * 3 + i - 1] := FInputScans[i].Skew.X;
-    x[High(FInputScans) * 4 + i - 1] := FInputScans[i].Skew.Y;
   end;
 
   case AMethod of
@@ -408,11 +385,11 @@ begin
     end;
     mmBFGS:
     begin
-      Result := BFGSMinimize(@GradientsAnalyze, x);
+      Result := BFGSMinimize(@GradientAnalyze, x);
     end;
     mmGradientDescent:
     begin
-      Result := GradientDescentMinimize(@GradientsAnalyze, x, 1.0, 1e-7);
+      Result := GradientDescentMinimize(@GradientAnalyze, x, 0.1, 1e-7);
     end;
     mmPowell:
     begin
@@ -430,14 +407,11 @@ begin
     p.X := x[High(FInputScans) * 1 + i - 1];
     p.Y := x[High(FInputScans) * 2 + i - 1];
     FInputScans[i].Center := p;
-    p.X := x[High(FInputScans) * 3 + i - 1];
-    p.Y := x[High(FInputScans) * 4 + i - 1];
-    FInputScans[i].Skew := p;
   end;
 
   WriteLn;
   for i := 0 to High(FInputScans) do
-    WriteLn(FInputScans[i].PNGShortName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', SkewX: ', FInputScans[i].Skew.X:9:6, ', SkewY: ', FInputScans[i].Skew.Y:9:6, ' (after)');
+    WriteLn(FInputScans[i].PNGShortName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (after)');
 end;
 
 function TScanCorrelator.PowellCrop(const x: TVector; obj: Pointer): TScalar;
@@ -485,7 +459,7 @@ begin
     if FInputScans[inputIdx].InRangePointD(py, px) and
         not In02PiExtentsAngle(bt, a0a, a0b) and not In02PiExtentsAngle(bt, a1a, a1b) then
     begin
-      p := FInputScans[inputIdx].GetPointD(py, px, isImage, imLinear);
+      p := FInputScans[inputIdx].GetPointD(py, px, isImage);
       stdDevArr[arrPos] := p;
       Inc(arrPos);
     end;
@@ -497,6 +471,170 @@ begin
     Result := -StdDev(PDouble(@stdDevArr[0]), arrPos);
 
   Write(FInputScans[inputIdx].PNGShortName, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', -Result:12:6, #13);
+end;
+
+procedure TScanCorrelator.GradientCorrect(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+var
+  angleIdx: PtrInt absolute obj;
+  imgData: TDoubleDynArray2;
+  gradData: TDoubleDynArray2;
+  i, pos, cnt, iX, iY: Integer;
+  t, ti, ri, bt, r, rEnd, sn, cs, px, py, cx, cy, skm, rskm, gimgx, gimgy, angle, startAngle, endAngle, angleInc, angleExtents: Double;
+  pbuf: TPointFList;
+begin
+  pbuf := TPointFList.Create;
+  try
+    angle := (angleIdx / CCorrectAngleCount) * 2.0 * Pi;
+    angleExtents := (2.0 * Pi / CCorrectAngleCount) * 0.5;
+    startAngle := angle - angleExtents;
+    endAngle := angle + angleExtents;
+    angleInc := angleExtents / CCorrectPrecMul;
+
+    cnt := Ceil(CCorrectAreaWidth * FOutputDPI + 1) * CCorrectPrecMul * Ceil((endAngle - startAngle + 1) / angleInc);
+
+    SetLength(imgData, Length(FInputScans), cnt);
+    SetLength(gradData, Length(grad), cnt);
+
+    for i := 0 to High(FInputScans) do
+    begin
+      bt := FPerSnanAngles[i];
+      cx := FInputScans[i].Center.X;
+      cy := FInputScans[i].Center.Y;
+
+      skm := 1.0;
+      if i > 0 then
+        skm := arg[High(FInputScans) * 0 + i - 1];
+
+      pos := 0;
+      ri := 1.0 / CCorrectPrecMul;
+      r := CCorrectAreaBegin * 0.5 * FOutputDPI;
+      rEnd := CCorrectAreaEnd * 0.5 * FOutputDPI;
+      repeat
+        rskm := r * skm;
+
+        ti := startAngle;
+        repeat
+          t := bt + ti;
+
+          SinCos(t, sn, cs);
+
+          px := cs * rskm + cx;
+          py := sn * rskm + cy;
+
+          Assert(pos < Length(imgData[i]));
+
+          if FInputScans[i].InRangePointD(py, px) then
+          begin
+            //if i = 0 then pbuf.Add(TPointF.Create(px, py));
+
+            imgData[i, pos] := FInputScans[i].GetPointD(py, px, isImage);
+
+            if (i > 0) and Assigned(grad) then
+            begin
+              gimgx := FInputScans[i].GetPointD(py, px, isXGradient);
+              gimgy := FInputScans[i].GetPointD(py, px, isYGradient);
+
+              gradData[i - 1, pos] := (gimgx * cs + gimgy * sn) * r;
+            end;
+          end;
+
+          ti += angleInc;
+          Inc(pos);
+        until ti >= endAngle;
+
+        r += ri;
+      until r >= rEnd;
+
+      SetLength(imgData[i], pos);
+      if (i > 0) and Assigned(grad) then
+        SetLength(gradData[i - 1], pos);
+    end;
+
+    //func := 0;
+    //for i := 1 to High(FInputScans) do
+    //begin
+    //  func += MSE(imgData[0], imgData[i]);
+    //  if Assigned(grad) then
+    //    grad[i - 1] := MSEGradient(imgData[0], imgData[i], gradData[i - 1]) / Length(gradData[0]);
+    //end;
+
+    func := 0;
+    FillQWord(grad[0], Length(grad), 0);
+    for iX := 0 to High(FInputScans) do
+      for iY := iX + 1 to High(FInputScans) do
+      begin
+        func += MSE(imgData[iX], imgData[iY]);
+        if Assigned(grad) then
+        begin
+          if iY > 0 then
+            grad[iY - 1] += MSEGradient(imgData[iX], imgData[iY], gradData[iY - 1]);
+          if iX > 0 then
+            grad[iX - 1] += MSEGradient(imgData[iY], imgData[iX], gradData[iX - 1]);
+        end;
+      end;
+
+    //main.MainForm.DrawImage(FInputScans[0].Image);
+    //main.MainForm.DrawPoints(pbuf, clBlue + 0 * 255 div High(FInputScans));
+    //pbuf.Clear;
+  finally
+    pbuf.Free;
+  end;
+end;
+
+function TScanCorrelator.PowellCorrect(const arg: TVector; obj: Pointer): TScalar;
+begin
+ GradientCorrect(arg, Result, nil, obj);
+end;
+
+procedure TScanCorrelator.Correct;
+var
+  x: TVector;
+  correls: TDoubleDynArray;
+
+  procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  var
+    angleIdx: PtrInt;
+    lx: TVector;
+    f: Double;
+  begin
+    angleIdx := AIndex;
+
+    lx := Copy(x);
+
+    //f := 0;
+    //f := BFGSMinimize(@GradientCorrect, lx, 1e-9, Pointer(angleIdx));
+    //f := ASAMinimize(@GradientCorrect, lx, [0.95,0.95], [1.05, 1.05], 1e-9, Pointer(angleIdx));
+    //f := GradientDescentMinimize(@GradientCorrect, lx, 0.01, 1e-7, Pointer(angleIdx));
+    f := PowellMinimize(@PowellCorrect, lx, 1e-8, 1e-9, 0, MaxInt, Pointer(angleIdx))[0];
+    //GradientCorrect(lx, f, nil, Pointer(angleIdx));
+
+    f := Sqrt(f / High(FInputScans));
+
+    correls[AIndex] := f;
+    FPerAngleX[AIndex] := Copy(lx);
+
+    WriteLn(AIndex + 1:6,' / ',Length(FPerAngleX):6,', RMSE: ', f:9:6, lx[0]:9:6, #13);
+  end;
+
+var
+  i: Integer;
+begin
+  WriteLn('Correct');
+
+  if Length(FInputScans) <= 1 then
+    Exit;
+
+  SetLength(FPerAngleX, CCorrectAngleCount);
+  SetLength(correls, CCorrectAngleCount);
+
+  SetLength(x, High(FInputScans) * 1);
+  for i := 0 to High(x) do
+    x[i] := 1.0;
+
+  ProcThreadPool.DoParallelLocalProc(@DoEval, 0, high(FPerAngleX));
+
+  WriteLn;
+  WriteLn('Worst RMSE: ', MaxValue(correls):9:6);
 end;
 
 procedure TScanCorrelator.Crop;
@@ -525,21 +663,58 @@ begin
 end;
 
 procedure TScanCorrelator.Rebuild;
+const
+  CTauToAngleIdx = CCorrectAngleCount / (2.0 * Pi);
 var
   center, rBeg, rEnd, rLmg, rLbl: Double;
 
+  procedure InterpolateX(tau: Double; var x: TVector);
+  var
+    ci, i, x0, x1, x2, x3, modulo: Integer;
+    c, alpha: Double;
+    y0, y1, y2, y3: TVector;
+  begin
+    if Length(FPerAngleX) = 0 then
+      Exit;
+
+    c := tau * CTauToAngleIdx;
+    ci := Trunc(c);
+    alpha := c - ci;
+
+    modulo := Length(FPerAngleX);
+
+    x0 := (ci - 1 + modulo) mod modulo;
+    x1 := (ci + 0 + modulo) mod modulo;
+    x2 := (ci + 1 + modulo) mod modulo;
+    x3 := (ci + 2 + modulo) mod modulo;
+
+    y0 := FPerAngleX[x0];
+    y1 := FPerAngleX[x1];
+    y2 := FPerAngleX[x2];
+    y3 := FPerAngleX[x3];
+
+    for i := 0 to High(x) do
+      x[i] := herp(y0[i], y1[i], y2[i], y3[i], alpha);
+  end;
+
   procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
+    x: TVector;
     i, ox, cnt: Integer;
-    r, sn, cs, px, py, t, cx, cy, acc, bt, skx, sky, ct: Double;
+    r, sn, cs, px, py, t, cx, cy, acc, bt, skm, ct: Double;
   begin
+    if High(FInputScans) > 0 then
+      SetLength(x, High(FInputScans));
+
     for ox := 0 to High(FOutputImage[0]) do
     begin
       r := Sqrt(Sqr(AIndex - center) + Sqr(ox - center));
 
       if InRange(r, rBeg, rEnd) then
       begin
-        bt := ArcTan2(AIndex - center, ox - center);
+        bt := AngleTo02Pi(ArcTan2(AIndex - center, ox - center));
+
+        InterpolateX(bt, x);
 
         cnt := 0;
         acc := 0;
@@ -548,22 +723,25 @@ var
           t  := FPerSnanAngles[i];
           cx := FInputScans[i].Center.X;
           cy := FInputScans[i].Center.Y;
-          skx := FInputScans[i].Skew.X;
-          sky := FInputScans[i].Skew.Y;
+
+          skm := 1.0;
+          if i > 0 then
+            skm := x[High(FInputScans) * 0 + i - 1];
 
           ct := AngleTo02Pi(bt + t);
 
           SinCos(ct, sn, cs);
-          px := cs * r * skx + cx;
-          py := sn * r * sky + cy;
+          px := cs * r * skm + cx;
+          py := sn * r * skm + cy;
 
           if FInputScans[i].InRangePointD(py, px) and
               (not In02PiExtentsAngle(ct, FPerSnanCrops[i, 0], FPerSnanCrops[i, 1]) and
                not In02PiExtentsAngle(ct, FPerSnanCrops[i, 2], FPerSnanCrops[i, 3]) or
                (r < rLbl)) then
           begin
-            acc += FInputScans[i].GetPointD(py, px, isImage, imHermite);
+            acc += FInputScans[i].GetPointD(py, px, isImage);
             Inc(cnt);
+            Break;
           end;
         end;
 
@@ -577,8 +755,20 @@ var
       end;
     end;
   end;
+
+var
+  i, j: Integer;
 begin
   WriteLn('Rebuild');
+
+  for j := 0 to high(FPerAngleX) do
+  begin
+    for i := 0 to high(FPerAngleX[0]) do
+    begin
+      Write(FPerAngleX[j,i]:9:6);
+    end;
+    writeln;
+  end;
 
   center := Length(FOutputImage) / 2.0;
   rBeg := C45RpmAdapterSize * 0.5 * FOutputDPI;
@@ -587,14 +777,6 @@ begin
   rLbl := C45RpmLabelOuterSize * 0.5 * FOutputDPI;
 
   ProcThreadPool.DoParallelLocalProc(@DoY, 0, High(FOutputImage));
-end;
-
-procedure TScanCorrelator.SetImageDerivationOperator(AValue: TImageDerivationOperator);
-var
-  i: Integer;
-begin
-  for i := 0 to High(FInputScans) do
-    FInputScans[i].ImageDerivationOperator := AValue;
 end;
 
 procedure TScanCorrelator.Save;
@@ -659,6 +841,7 @@ begin
     until SameValue(obj, prevObj, 1e-9);
   end;
 
+  Correct;
   Crop;
   Rebuild;
 end;
