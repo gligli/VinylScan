@@ -110,7 +110,8 @@ var
         smpBuf[ismp] := 0.0;
     end;
 
-    middleSmp := (MinValue(smpBuf) + MaxValue(smpBuf)) * 0.5;
+    //middleSmp := (MinValue(smpBuf) + MaxValue(smpBuf)) * 0.5;
+    middleSmp := GoldenRatioSearch(@EvalTrackGR, MaxValue(smpBuf), MinValue(smpBuf), Length(smpBuf) div 16, 0.0, 0.5, @smpBuf[0]);
 
     aboveAcc := 0;
     aboveCnt := 0;
@@ -158,7 +159,7 @@ begin
 
     angle := Scan.GrooveStartAngle;
     radius := Scan.FirstGrooveRadius;
-    fbRatio := (CLowCutoffFreq / FSampleRate) / sqrt(0.1024 + sqr(CLowCutoffFreq / FSampleRate));
+    fbRatio := 0.01;//(CLowCutoffFreq / FSampleRate);// / sqrt(0.1024 + sqr(CLowCutoffFreq / FSampleRate));
 
     repeat
       fsmp := DecodeSample(radius, angle, feedback);

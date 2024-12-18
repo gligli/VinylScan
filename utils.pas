@@ -74,7 +74,7 @@ const
   C45RpmLastMusicGroove = 4.25;
   C45RpmLeadInGroovesPerInch = 16.0;
   C45RpmMinGroovesPerInch = 2.0;
-  C45RpmMaxGrooveWidth = 0.0084;
+  C45RpmMaxGrooveWidth = 0.003;
   C45RpmAdapterSize = 1.496;
 
   CLowCutoffFreq = 7.0;

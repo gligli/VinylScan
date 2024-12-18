@@ -14,7 +14,6 @@ object MainForm: TMainForm
   ClientHeight = 720
   ClientWidth = 960
   Color = 4210752
-  DesignTimePPI = 120
   DoubleBuffered = False
   OnCreate = FormCreate
   ParentDoubleBuffered = False
@@ -45,7 +44,7 @@ object MainForm: TMainForm
     TabOrder = 0
     object edOutputWAV: TEdit
       Left = 8
-      Height = 28
+      Height = 23
       Hint = 'Scan to track output WAV file'
       Top = 152
       Width = 200
@@ -56,7 +55,7 @@ object MainForm: TMainForm
     end
     object edInputPNG: TEdit
       Left = 8
-      Height = 28
+      Height = 23
       Hint = 'Scan to track input PNG file'
       Top = 128
       Width = 200
@@ -67,7 +66,7 @@ object MainForm: TMainForm
     end
     object edOutputPNG: TEdit
       Left = 8
-      Height = 28
+      Height = 23
       Hint = 'Scans correlator output PNG file'
       Top = 97
       Width = 200
@@ -125,11 +124,11 @@ object MainForm: TMainForm
     end
     object cbDPI: TComboBox
       Left = 264
-      Height = 28
+      Height = 23
       Hint = 'Default dots per inch'
       Top = 8
       Width = 64
-      ItemHeight = 20
+      ItemHeight = 15
       ItemIndex = 2
       Items.Strings = (
         '600'
@@ -180,11 +179,11 @@ object MainForm: TMainForm
     end
     object cbSR: TComboBox
       Left = 329
-      Height = 28
+      Height = 23
       Hint = 'Sample rate'
       Top = 8
       Width = 66
-      ItemHeight = 20
+      ItemHeight = 15
       ItemIndex = 2
       Items.Strings = (
         '16000'
@@ -199,11 +198,11 @@ object MainForm: TMainForm
     end
     object cbMethod: TComboBox
       Left = 264
-      Height = 28
+      Height = 23
       Hint = 'Optimisation method'
       Top = 32
       Width = 131
-      ItemHeight = 20
+      ItemHeight = 15
       ItemIndex = 1
       Items.Strings = (
         'No optimization'
