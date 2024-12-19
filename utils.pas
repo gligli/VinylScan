@@ -123,8 +123,8 @@ function ASAMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, 
 
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 function PearsonCorrelationGradient(const a: TDoubleDynArray; const b: TDoubleDynArray; const gb: TDoubleDynArray): Double;
-function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
-function MSEGradient(const a: TDoubleDynArray; const b: TDoubleDynArray; const gb: TDoubleDynArray): Double;
+function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray; var gint: TDoubleDynArray): Double;
+function MSEGradient(const gint: TDoubleDynArray; const gb: TDoubleDynArray): Double;
 
 function Make16BitSample(smp: Double): SmallInt;
 function AngleTo02Pi(x: Double): Double;
@@ -328,7 +328,7 @@ begin
       gm := max(gm, Abs(grad[i]));
     end;
 
-    //WriteLn(Result:20:9, gm:20:9);
+    WriteLn(Result:20:9, gm:20:9);
   until gm <= Epsilon;
 end;
 
@@ -460,37 +460,42 @@ begin
   end;
 end;
 
-function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
+function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray; var gint: TDoubleDynArray): Double;
 var
   i: Integer;
+  d: Double;
 begin
   Assert(Length(a) = Length(b));
+  SetLength(gint, Length(a));
 
   Result := 0.0;
   if not Assigned(a) then
     Exit;
 
   for i := 0 to High(a) do
-    Result += Sqr(a[i] - b[i]);
+  begin
+    d := a[i] - b[i];
+    Result += Sqr(d);
+    gint[i] := d;
+  end;
 
   Result /= Length(a);
 end;
 
-function MSEGradient(const a: TDoubleDynArray; const b: TDoubleDynArray; const gb: TDoubleDynArray): Double;
+function MSEGradient(const gint: TDoubleDynArray; const gb: TDoubleDynArray): Double;
 var
   i: Integer;
 begin
-  Assert(Length(a) = Length(b));
-  Assert(Length(a) = Length(gb));
+  Assert(Length(gint) = Length(gb));
 
   Result := 0.0;
-  if not Assigned(a) then
+  if not Assigned(gint) then
     Exit;
 
-  for i := 0 to High(a) do
-    Result -= 2.0 *(a[i] - b[i]) * gb[i];
+  for i := 0 to High(gint) do
+    Result -= 2.0 * gint[i] * gb[i];
 
-  Result /= Length(a);
+  Result /= Length(gint);
 end;
 
 function Make16BitSample(smp: Double): SmallInt;

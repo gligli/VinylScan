@@ -192,7 +192,7 @@ var
   var
     iAngle: Integer;
     a, r, bestr, bestAngle: Double;
-    angle: TDoubleDynArray;
+    angle, gint: TDoubleDynArray;
   begin
     if not InRange(AIndex, 1, High(FInputScans)) then
       Exit;
@@ -208,7 +208,7 @@ var
 
       DoAngle(AIndex, a, angle);
 
-      r := MSE(base, angle);
+      r := MSE(base, angle, gint);
 
       if r <= bestr then
       begin
@@ -323,14 +323,15 @@ var
   procedure DoMSE(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     iArg: Integer;
+    gint: TDoubleDynArray;
   begin
     if not InRange(AIndex, 0, High(FInputScans) - 1) then
       Exit;
 
-    imgResults[AIndex] := MSE(imgData[0], imgData[AIndex + 1]);
+    imgResults[AIndex] := MSE(imgData[0], imgData[AIndex + 1], gint);
 
     for iArg := 0 to paramCount - 1 do
-      grad[High(FInputScans) * iArg + AIndex + 1 - 1] := MSEGradient(imgData[0], imgData[AIndex + 1], gradData[High(FInputScans) * iArg + AIndex + 1 - 1]);
+      grad[High(FInputScans) * iArg + AIndex + 1 - 1] := MSEGradient(gint, gradData[High(FInputScans) * iArg + AIndex + 1 - 1]);
   end;
 
 var
@@ -480,105 +481,86 @@ var
   gradData: TDoubleDynArray2;
   i, pos, cnt, iX, iY: Integer;
   t, ti, ri, bt, r, rEnd, sn, cs, px, py, cx, cy, skm, rskm, gimgx, gimgy, angle, startAngle, endAngle, angleInc, angleExtents: Double;
-  pbuf: TPointFList;
+  gint: TDoubleDynArray;
 begin
-  pbuf := TPointFList.Create;
-  try
-    angle := (angleIdx / CCorrectAngleCount) * 2.0 * Pi;
-    angleExtents := (2.0 * Pi / CCorrectAngleCount) * 0.5;
-    startAngle := angle - angleExtents;
-    endAngle := angle + angleExtents;
-    angleInc := angleExtents / CCorrectPrecMul;
+  angle := (angleIdx / CCorrectAngleCount) * 2.0 * Pi;
+  angleExtents := (2.0 * Pi / CCorrectAngleCount) * 0.5;
+  startAngle := angle - angleExtents;
+  endAngle := angle + angleExtents;
+  angleInc := angleExtents / CCorrectPrecMul;
 
-    cnt := Ceil(CCorrectAreaWidth * FOutputDPI + 1) * CCorrectPrecMul * Ceil((endAngle - startAngle + 1) / angleInc);
+  cnt := Ceil(CCorrectAreaWidth * FOutputDPI + 1) * CCorrectPrecMul * Ceil((endAngle - startAngle + 1) / angleInc);
 
-    SetLength(imgData, Length(FInputScans), cnt);
-    SetLength(gradData, Length(grad), cnt);
+  SetLength(imgData, Length(FInputScans), cnt);
+  SetLength(gradData, Length(grad), cnt);
 
-    for i := 0 to High(FInputScans) do
-    begin
-      bt := FPerSnanAngles[i];
-      cx := FInputScans[i].Center.X;
-      cy := FInputScans[i].Center.Y;
+  for i := 0 to High(FInputScans) do
+  begin
+    bt := FPerSnanAngles[i];
+    cx := FInputScans[i].Center.X;
+    cy := FInputScans[i].Center.Y;
 
-      skm := 1.0;
-      if i > 0 then
-        skm := arg[High(FInputScans) * 0 + i - 1];
+    skm := 1.0;
+    if i > 0 then
+      skm := arg[High(FInputScans) * 0 + i - 1];
 
-      pos := 0;
-      ri := 1.0 / CCorrectPrecMul;
-      r := CCorrectAreaBegin * 0.5 * FOutputDPI;
-      rEnd := CCorrectAreaEnd * 0.5 * FOutputDPI;
+    pos := 0;
+    ri := 1.0 / CCorrectPrecMul;
+    r := CCorrectAreaBegin * 0.5 * FOutputDPI;
+    rEnd := CCorrectAreaEnd * 0.5 * FOutputDPI;
+    repeat
+      rskm := r * skm;
+
+      ti := startAngle;
       repeat
-        rskm := r * skm;
+        t := bt + ti;
 
-        ti := startAngle;
-        repeat
-          t := bt + ti;
+        SinCos(t, sn, cs);
 
-          SinCos(t, sn, cs);
+        px := cs * rskm + cx;
+        py := sn * rskm + cy;
 
-          px := cs * rskm + cx;
-          py := sn * rskm + cy;
+        Assert(pos < Length(imgData[i]));
 
-          Assert(pos < Length(imgData[i]));
-
-          if FInputScans[i].InRangePointD(py, px) then
-          begin
-            //if i = 0 then pbuf.Add(TPointF.Create(px, py));
-
-            imgData[i, pos] := FInputScans[i].GetPointD(py, px, isImage);
-
-            if (i > 0) and Assigned(grad) then
-            begin
-              gimgx := FInputScans[i].GetPointD(py, px, isXGradient);
-              gimgy := FInputScans[i].GetPointD(py, px, isYGradient);
-
-              gradData[i - 1, pos] := (gimgx * cs + gimgy * sn) * r;
-            end;
-          end;
-
-          ti += angleInc;
-          Inc(pos);
-        until ti >= endAngle;
-
-        r += ri;
-      until r >= rEnd;
-
-      SetLength(imgData[i], pos);
-      if (i > 0) and Assigned(grad) then
-        SetLength(gradData[i - 1], pos);
-    end;
-
-    //func := 0;
-    //for i := 1 to High(FInputScans) do
-    //begin
-    //  func += MSE(imgData[0], imgData[i]);
-    //  if Assigned(grad) then
-    //    grad[i - 1] := MSEGradient(imgData[0], imgData[i], gradData[i - 1]) / Length(gradData[0]);
-    //end;
-
-    func := 0;
-    FillQWord(grad[0], Length(grad), 0);
-    for iX := 0 to High(FInputScans) do
-      for iY := iX + 1 to High(FInputScans) do
-      begin
-        func += MSE(imgData[iX], imgData[iY]);
-        if Assigned(grad) then
+        if FInputScans[i].InRangePointD(py, px) then
         begin
-          if iY > 0 then
-            grad[iY - 1] += MSEGradient(imgData[iX], imgData[iY], gradData[iY - 1]);
-          if iX > 0 then
-            grad[iX - 1] += MSEGradient(imgData[iY], imgData[iX], gradData[iX - 1]);
-        end;
-      end;
+          imgData[i, pos] := FInputScans[i].GetPointD(py, px, isImage);
 
-    //main.MainForm.DrawImage(FInputScans[0].Image);
-    //main.MainForm.DrawPoints(pbuf, clBlue + 0 * 255 div High(FInputScans));
-    //pbuf.Clear;
-  finally
-    pbuf.Free;
+          if (i > 0) and Assigned(grad) then
+          begin
+            gimgx := FInputScans[i].GetPointD(py, px, isXGradient);
+            gimgy := FInputScans[i].GetPointD(py, px, isYGradient);
+
+            gradData[i - 1, pos] := (gimgx * cs + gimgy * sn) * r;
+          end;
+        end;
+
+        ti += angleInc;
+        Inc(pos);
+      until ti >= endAngle;
+
+      r += ri;
+    until r >= rEnd;
+
+    SetLength(imgData[i], pos);
+    if (i > 0) and Assigned(grad) then
+      SetLength(gradData[i - 1], pos);
   end;
+
+  func := 0;
+  FillQWord(grad[0], Length(grad), 0);
+  for iX := 0 to High(FInputScans) do
+    for iY := iX + 1 to High(FInputScans) do
+    begin
+      func += MSE(imgData[iX], imgData[iY], gint);
+      if Assigned(grad) then
+      begin
+        if iY > 0 then
+          grad[iY - 1] += MSEGradient(gint, gradData[iY - 1]);
+        if iX > 0 then
+          grad[iX - 1] += MSEGradient(gint, gradData[iX - 1]);
+      end;
+    end;
 end;
 
 function TScanCorrelator.PowellCorrect(const arg: TVector; obj: Pointer): TScalar;
