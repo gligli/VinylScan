@@ -82,14 +82,16 @@ const
   CAreaBegin = C45RpmInnerSize;
   CAreaEnd = C45RpmLabelOuterSize;
   CAreaWidth = (CAreaEnd - CAreaBegin) * 0.5;
-  CAreaGroovesPerInchAnalyze = 60;
+  CAreaGroovesPerInchAnalyze = 32;
   CAreaGroovesPerInchCrop = 16;
 
   CCorrectAngleCount = 18;
-  CCorrectPrecMul = 100;
+  CCorrectPrecMul = 10;
   CCorrectAreaBegin = C45RpmLabelOuterSize;
   CCorrectAreaEnd = C45RpmLastMusicGroove;
-  CCorrectAreaWidth = (CCorrectAreaEnd - CCorrectAreaBegin) * 0.5;
+  CCorrectArea2Begin = C45RpmFirstMusicGroove;
+  CCorrectArea2End = C45RpmOuterSize;
+  CCorrectAreaWidth = (CCorrectAreaEnd - CCorrectAreaBegin) * 0.5 + (CCorrectArea2End - CCorrectArea2Begin) * 0.5;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
@@ -480,7 +482,7 @@ var
   imgData: TDoubleDynArray2;
   gradData: TDoubleDynArray2;
   i, pos, cnt, iX, iY: Integer;
-  t, ti, ri, bt, r, rEnd, sn, cs, px, py, cx, cy, skm, rskm, gimgx, gimgy, angle, startAngle, endAngle, angleInc, angleExtents: Double;
+  t, ti, ri, bt, r, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skm, rskm, gimgx, gimgy, angle, startAngle, endAngle, angleInc, angleExtents: Double;
   gint: TDoubleDynArray;
 begin
   angle := (angleIdx / CCorrectAngleCount) * 2.0 * Pi;
@@ -507,7 +509,9 @@ begin
     pos := 0;
     ri := 1.0 / CCorrectPrecMul;
     r := CCorrectAreaBegin * 0.5 * FOutputDPI;
-    rEnd := CCorrectAreaEnd * 0.5 * FOutputDPI;
+    rMid := CCorrectAreaEnd * 0.5 * FOutputDPI;
+    rMid2 := CCorrectArea2Begin * 0.5 * FOutputDPI;
+    rEnd := CCorrectArea2End * 0.5 * FOutputDPI;
     repeat
       rskm := r * skm;
 
@@ -540,6 +544,10 @@ begin
       until ti >= endAngle;
 
       r += ri;
+
+      if (r >= rMid) and (r < rMid2) then
+        r := rMid2;
+
     until r >= rEnd;
 
     SetLength(imgData[i], pos);
@@ -595,11 +603,11 @@ var
     correls[AIndex] := f;
     FPerAngleX[AIndex] := Copy(lx);
 
-    WriteLn(AIndex + 1:6,' / ',Length(FPerAngleX):6,', RMSE: ', f:9:6, lx[0]:9:6, #13);
+    Write(AIndex + 1:6,' / ',Length(FPerAngleX):6,', RMSE: ', f:9:6, #13);
   end;
 
 var
-  i: Integer;
+  i, j: Integer;
 begin
   WriteLn('Correct');
 
@@ -616,6 +624,14 @@ begin
   ProcThreadPool.DoParallelLocalProc(@DoEval, 0, high(FPerAngleX));
 
   WriteLn;
+
+  for j := 0 to high(FPerAngleX) do
+  begin
+    for i := 0 to high(FPerAngleX[0]) do
+      Write(FPerAngleX[j,i]:9:6);
+    WriteLn;
+  end;
+
   WriteLn('Worst RMSE: ', MaxValue(correls):9:6);
 end;
 
@@ -738,19 +754,8 @@ var
     end;
   end;
 
-var
-  i, j: Integer;
 begin
   WriteLn('Rebuild');
-
-  for j := 0 to high(FPerAngleX) do
-  begin
-    for i := 0 to high(FPerAngleX[0]) do
-    begin
-      Write(FPerAngleX[j,i]:9:6);
-    end;
-    writeln;
-  end;
 
   center := Length(FOutputImage) / 2.0;
   rBeg := C45RpmAdapterSize * 0.5 * FOutputDPI;
