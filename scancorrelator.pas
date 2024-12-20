@@ -482,7 +482,7 @@ var
   imgData: TDoubleDynArray2;
   gradData: TDoubleDynArray2;
   i, pos, cnt, iX, iY: Integer;
-  t, ti, ri, bt, r, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skc, rskc, gimgx, gimgy, angle, startAngle, endAngle, angleInc, angleExtents: Double;
+  t, ti, ri, bt, r, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, angle, startAngle, endAngle, angleInc, angleExtents: Double;
   gint: TDoubleDynArray;
 begin
   angle := (angleIdx / CCorrectAngleCount) * 2.0 * Pi;
@@ -503,8 +503,12 @@ begin
     cy := FInputScans[i].Center.Y;
 
     skc := 0.0;
+    skm := 1.0;
     if i > 0 then
+    begin
       skc := arg[High(FInputScans) * 0 + i - 1];
+      skm := arg[High(FInputScans) * 1 + i - 1];
+    end;
 
     pos := 0;
     ri := 1.0 / CCorrectPrecMul;
@@ -513,7 +517,7 @@ begin
     rMid2 := CCorrectArea2Begin * 0.5 * FOutputDPI;
     rEnd := CCorrectArea2End * 0.5 * FOutputDPI;
     repeat
-      rskc := r + skc;
+      rsk := r * skm + skc;
 
       ti := startAngle;
       repeat
@@ -521,8 +525,8 @@ begin
 
         SinCos(t, sn, cs);
 
-        px := cs * rskc + cx;
-        py := sn * rskc + cy;
+        px := cs * rsk + cx;
+        py := sn * rsk + cy;
 
         Assert(pos < Length(imgData[i]));
 
@@ -535,7 +539,8 @@ begin
             gimgx := FInputScans[i].GetPointD(py, px, isXGradient);
             gimgy := FInputScans[i].GetPointD(py, px, isYGradient);
 
-            gradData[i - 1, pos] := gimgx * cs + gimgy * sn;
+            gradData[High(FInputScans) * 0 + i - 1, pos] := gimgx * cs + gimgy * sn;
+            gradData[High(FInputScans) * 1 + i - 1, pos] := (gimgx * cs + gimgy * sn) * r;
           end;
         end;
 
@@ -552,8 +557,11 @@ begin
 
     SetLength(imgData[i], pos);
     if (i > 0) and Assigned(grad) then
-      SetLength(gradData[i - 1], pos);
+    begin
+      SetLength(gradData[High(FInputScans) * 0 + i - 1], pos);
+      SetLength(gradData[High(FInputScans) * 1 + i - 1], pos);
     end;
+  end;
 
   func := 0;
   FillQWord(grad[0], Length(grad), 0);
@@ -564,9 +572,15 @@ begin
       if Assigned(grad) then
       begin
         if iY > 0 then
-          grad[iY - 1] += MSEGradient(gint, gradData[iY - 1]);
+        begin
+          grad[High(FInputScans) * 0 + iY - 1] += MSEGradient(gint, gradData[High(FInputScans) * 0 + iY - 1]);
+          grad[High(FInputScans) * 1 + iY - 1] += MSEGradient(gint, gradData[High(FInputScans) * 1 + iY - 1]);
+        end;
         if iX > 0 then
-          grad[iX - 1] += MSEGradient(gint, gradData[iX - 1]);
+        begin
+          grad[High(FInputScans) * 0 + iX - 1] += MSEGradient(gint, gradData[High(FInputScans) * 0 + iX - 1]);
+          grad[High(FInputScans) * 1 + iX - 1] += MSEGradient(gint, gradData[High(FInputScans) * 1 + iX - 1]);
+        end;
        end;
     end;
 end;
@@ -579,7 +593,7 @@ end;
 procedure TScanCorrelator.Correct;
 var
   x: TVector;
-  correls: TDoubleDynArray;
+  rmses: TDoubleDynArray;
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
@@ -600,7 +614,7 @@ var
 
     f := Sqrt(f / High(FInputScans));
 
-    correls[AIndex] := f;
+    rmses[AIndex] := f;
     FPerAngleX[AIndex] := Copy(lx);
 
     Write(AIndex + 1:6,' / ',Length(FPerAngleX):6,', RMSE: ', f:9:6, #13);
@@ -615,11 +629,14 @@ begin
     Exit;
 
   SetLength(FPerAngleX, CCorrectAngleCount);
-  SetLength(correls, CCorrectAngleCount);
+  SetLength(rmses, CCorrectAngleCount);
 
-  SetLength(x, High(FInputScans) * 1);
-  for i := 0 to High(x) do
-    x[i] := 0.0;
+  SetLength(x, High(FInputScans) * 2);
+  for i := 1 to High(FInputScans) do
+  begin
+    x[High(FInputScans) * 0 + i - 1] := 0.0;
+    x[High(FInputScans) * 1 + i - 1] := 1.0;
+  end;
 
   ProcThreadPool.DoParallelLocalProc(@DoEval, 0, high(FPerAngleX));
 
@@ -632,7 +649,7 @@ begin
     WriteLn;
   end;
 
-  WriteLn('Worst RMSE: ', MaxValue(correls):9:6);
+  WriteLn('Worst RMSE: ', MaxValue(rmses):9:6);
 end;
 
 procedure TScanCorrelator.Crop;
@@ -699,10 +716,10 @@ var
   var
     x: TVector;
     i, ox, cnt: Integer;
-    r, sn, cs, px, py, t, cx, cy, acc, bt, skc, ct: Double;
+    r, sn, cs, px, py, t, cx, cy, acc, bt, skm, skc, ct, rsk: Double;
   begin
     if High(FInputScans) > 0 then
-      SetLength(x, High(FInputScans));
+      SetLength(x, High(FInputScans) * 2);
 
     for ox := 0 to High(FOutputImage[0]) do
     begin
@@ -723,14 +740,19 @@ var
           cy := FInputScans[i].Center.Y;
 
           skc := 0.0;
+          skm := 1.0;
           if i > 0 then
+          begin
             skc := x[High(FInputScans) * 0 + i - 1];
+            skm := x[High(FInputScans) * 1 + i - 1];
+          end;
 
           ct := AngleTo02Pi(bt + t);
+          rsk := r * skm + skc;
 
           SinCos(ct, sn, cs);
-          px := cs * (r + skc) + cx;
-          py := sn * (r + skc) + cy;
+          px := cs * rsk + cx;
+          py := sn * rsk + cy;
 
           if FInputScans[i].InRangePointD(py, px) and
               (not In02PiExtentsAngle(ct, FPerSnanCrops[i, 0], FPerSnanCrops[i, 1]) and
