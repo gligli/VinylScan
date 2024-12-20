@@ -77,7 +77,7 @@ const
   C45RpmMaxGrooveWidth = 0.003;
   C45RpmAdapterSize = 1.496;
 
-  CLowCutoffFreq = 7.0;
+  CLowCutoffFreq = 20.0;
 
 {$if 1}
   cRedMul = 2126;
