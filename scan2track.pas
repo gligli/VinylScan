@@ -10,7 +10,10 @@ uses
 
 const
   CSampleDecoderBits = 8;
+  CSampleDecoderMulti = 16;
+
   CSampleDecoderMax = (1 shl (CSampleDecoderBits - 1)) - 1;
+  CSampleDecoderMultiMax = CSampleDecoderMulti * (1 shl (CSampleDecoderBits - 1)) - 1;
 
 type
 
@@ -76,7 +79,7 @@ var
   ismp, aboveCnt: Integer;
 begin
   aboveCnt := 0;
-  for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
+  for ismp := -CSampleDecoderMultiMax-1 to CSampleDecoderMultiMax do
    if PDouble(data)[ismp] >= x then
      Inc(aboveCnt);
 
@@ -90,24 +93,32 @@ var
 
   function DecodeSample(radius, angle: Double; out feedback: Double): Double;
   var
-    ismp, aboveCnt, aboveAcc: Integer;
-    r, px, py, middleSmp, cxa, sn, cs: Double;
-    smpBuf: array[-CSampleDecoderMax-1 .. CSampleDecoderMax] of Double;
+    imulti, ismp, ismpmulti, aboveCnt, aboveAcc: Integer;
+    r, px, py, middleSmp, cxa, cma, sn, cs: Double;
+    smpBuf: array[-CSampleDecoderMultiMax-1 .. CSampleDecoderMultiMax] of Double;
   begin
-    SinCos(angle, sn, cs);
     cxa := C45RpmMaxGrooveWidth * Scan.DPI / CSampleDecoderMax;
+    cma := FRadiansPerRevolutionPoint / CSampleDecoderMulti;
 
-    for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
+    Result := 0;
+    for imulti := 0 to CSampleDecoderMulti - 1 do
     begin
-      r := radius + ismp * cxa;
+      SinCos(angle + imulti * cma, sn, cs);
 
-      px := cs * r + Scan.Center.X;
-      py := sn * r + Scan.Center.Y;
+      for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
+      begin
+        r := radius + ismp * cxa;
 
-      if Scan.InRangePointD(py, px) then
-        smpBuf[ismp] := Scan.GetPointD(py, px, isImage)
-      else
-        smpBuf[ismp] := 0.0;
+        px := cs * r + Scan.Center.X;
+        py := sn * r + Scan.Center.Y;
+
+        ismpmulti := ismp * CSampleDecoderMulti + imulti;
+
+        if Scan.InRangePointD(py, px) then
+          smpBuf[ismpmulti] := Scan.GetPointD(py, px, isImage)
+        else
+          smpBuf[ismpmulti] := 0.0;
+      end;
     end;
 
     //middleSmp := (MinValue(smpBuf) + MaxValue(smpBuf)) * 0.5;
@@ -115,14 +126,14 @@ var
 
     aboveAcc := 0;
     aboveCnt := 0;
-    for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
+    for ismp := -CSampleDecoderMultiMax-1 to CSampleDecoderMultiMax do
       if smpBuf[ismp] >= middleSmp then
       begin
         aboveAcc += ismp;
         Inc(aboveCnt);
       end;
 
-    Result := DivDef(aboveAcc, CSampleDecoderMax * aboveCnt, 0.0);
+    Result := DivDef(aboveAcc, CSampleDecoderMultiMax * aboveCnt, 0.0);
 
     feedback := Result * C45RpmMaxGrooveWidth * Scan.DPI;
   end;
