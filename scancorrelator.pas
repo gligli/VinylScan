@@ -417,65 +417,6 @@ begin
     WriteLn(FInputScans[i].PNGShortName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (after)');
 end;
 
-function TScanCorrelator.PowellCrop(const x: TVector; obj: Pointer): TScalar;
-var
-  inputIdx: PtrInt absolute obj;
-  rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy, t, ri, rri, sn, cs, bt, px, py, p: Double;
-  pos, arrPos: Integer;
-  stdDevArr: TDoubleDynArray;
-begin
-  Result := 1000.0;
-
-  if not InRange(AngleTo02Pi(x[1] - x[0]), DegToRad(0.0), DegToRad(120.0)) then
-    Exit;
-
-  a0a := AngleTo02Pi(x[0]);
-  a0b := AngleTo02Pi(x[1]);
-  a1a := AngleTo02Pi(x[0] + Pi);
-  a1b := AngleTo02Pi(x[1] + Pi);
-
-  rBeg := C45RpmLastMusicGroove * 0.5 * FOutputDPI;
-  rEnd := C45RpmFirstMusicGroove * 0.5 * FOutputDPI;
-
-  t := FPerSnanAngles[inputIdx];
-  cx := FInputScans[inputIdx].Center.X;
-  cy := FInputScans[inputIdx].Center.Y;
-
-  SetLength(stdDevArr, Ceil((rEnd - rBeg) / FOutputDPI * CAreaGroovesPerInchCrop) * FPointsPerRevolution);
-
-  ri := (rEnd - rBeg) / (CAreaGroovesPerInchCrop * (FPointsPerRevolution - 1));
-
-  pos := 0;
-  arrPos := 0;
-  repeat
-    bt := AngleTo02Pi(FRadiansPerRevolutionPoint * pos + t);
-
-    SinCos(bt, sn, cs);
-
-    rri := rBeg + ri * pos;
-
-    px := cs * rri + cx;
-    py := sn * rri + cy;
-
-    Assert(pos < Length(stdDevArr));
-
-    if FInputScans[inputIdx].InRangePointD(py, px) and
-        not In02PiExtentsAngle(bt, a0a, a0b) and not In02PiExtentsAngle(bt, a1a, a1b) then
-    begin
-      p := FInputScans[inputIdx].GetPointD(py, px, isImage);
-      stdDevArr[arrPos] := p;
-      Inc(arrPos);
-    end;
-
-    Inc(pos);
-  until rri >= rEnd;
-
-  if arrPos > 0 then
-    Result := -StdDev(PDouble(@stdDevArr[0]), arrPos);
-
-  Write(FInputScans[inputIdx].PNGShortName, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', -Result:12:6, #13);
-end;
-
 procedure TScanCorrelator.GradientCorrect(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 var
   angleIdx: PtrInt absolute obj;
@@ -611,6 +552,8 @@ begin
 end;
 
 procedure TScanCorrelator.Correct;
+const
+  CMultiMethod = 2;
 var
   x: TVector;
   rmses: TDoubleDynArray;
@@ -621,55 +564,155 @@ var
     lx: TVector;
     f: Double;
   begin
-    angleIdx := AIndex;
+    angleIdx := AIndex mod CCorrectAngleCount;
 
     lx := Copy(x);
 
-    //f := 0;
-    f := BFGSMinimize(@GradientCorrect, lx, 1e-7, Pointer(angleIdx));
+    case AIndex div CCorrectAngleCount of
+      0:
+      begin
+        f := BFGSMinimize(@GradientCorrect, lx, 1e-7, Pointer(angleIdx));
+      end;
+      1:
+      begin
+        f := PowellMinimize(@PowellCorrect, lx, 1.0, 1e-9, 0.0, MaxInt, Pointer(angleIdx))[0];
+      end;
+      else
+      begin
+        Assert(False);
+      end;
+    end;
     //f := ASAMinimize(@GradientCorrect, lx, [0.95,0.95], [1.05, 1.05], 1e-9, Pointer(angleIdx));
     //f := GradientDescentMinimize(@GradientCorrect, lx, 1.0, 1e-7, Pointer(angleIdx));
-    //f := PowellMinimize(@PowellCorrect, lx, 1.0, 1e-9, 0.0, MaxInt, Pointer(angleIdx))[0];
     //GradientCorrect(lx, f, nil, Pointer(angleIdx));
 
     f := Sqrt(f / High(FInputScans));
 
     rmses[AIndex] := f;
-    FPerAngleX[AIndex] := Copy(lx);
+    FPerAngleX[AIndex] := lx;
 
     Write(AIndex + 1:6,' / ',Length(FPerAngleX):6,', RMSE: ', f:9:6, #13);
   end;
 
 var
-  i, j: Integer;
+  ivar, iangle, imulti: Integer;
+  lx: TVector;
 begin
   WriteLn('Correct');
 
   if Length(FInputScans) <= 1 then
     Exit;
 
-  SetLength(FPerAngleX, CCorrectAngleCount);
-  SetLength(rmses, CCorrectAngleCount);
+  SetLength(FPerAngleX, CCorrectAngleCount * CMultiMethod);
+  SetLength(rmses, Length(FPerAngleX));
+
+  // starting point
 
   SetLength(x, High(FInputScans) * 2);
-  for i := 1 to High(FInputScans) do
+  for ivar := 1 to High(FInputScans) do
   begin
-    x[High(FInputScans) * 0 + i - 1] := 0.0;
-    x[High(FInputScans) * 1 + i - 1] := 1.0;
+    x[High(FInputScans) * 0 + ivar - 1] := 0.0;
+    x[High(FInputScans) * 1 + ivar - 1] := 1.0;
   end;
 
-  ProcThreadPool.DoParallelLocalProc(@DoEval, 0, high(FPerAngleX));
+  // compute
+
+  ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FPerAngleX));
 
   WriteLn;
 
-  for j := 0 to high(FPerAngleX) do
+  // aggregate method results
+
+  for iangle := 0 to CCorrectAngleCount - 1 do
   begin
-    for i := 0 to high(FPerAngleX[0]) do
-      Write(FPerAngleX[j,i]:16:9);
+    lx := Copy(x);
+
+    for ivar := 1 to High(FInputScans) do
+    begin
+      for imulti := 0 to CMultiMethod - 1 do
+      begin
+        lx[High(FInputScans) * 0 + ivar - 1] += FPerAngleX[iangle + CCorrectAngleCount * imulti, High(FInputScans) * 0 + ivar - 1];
+        lx[High(FInputScans) * 1 + ivar - 1] *= FPerAngleX[iangle + CCorrectAngleCount * imulti, High(FInputScans) * 1 + ivar - 1];
+      end;
+
+      lx[High(FInputScans) * 0 + ivar - 1] /= CMultiMethod; // arithmetic mean (offset)
+      lx[High(FInputScans) * 1 + ivar - 1] := Power(lx[High(FInputScans) * 1 + ivar - 1], 1 / CMultiMethod); // geometric mean (factor)
+    end;
+
+    FPerAngleX[iangle] := lx;
+  end;
+  SetLength(FPerAngleX, CCorrectAngleCount);
+
+  // log
+
+  for iangle := 0 to High(FPerAngleX) do
+  begin
+    Write('Angle: ', (iangle / CCorrectAngleCount) * 360.0:9:3);
+    for ivar := 1 to High(FInputScans) do
+      Write('; ', FInputScans[ivar].PNGShortName, ': (', FPerAngleX[iangle, High(FInputScans) * 0 + ivar - 1]:12:9, ', ', FPerAngleX[iangle, High(FInputScans) * 1 + ivar - 1]:12:9, ')');
     WriteLn;
   end;
 
   WriteLn('Worst RMSE: ', MaxValue(rmses):9:6);
+end;
+
+function TScanCorrelator.PowellCrop(const x: TVector; obj: Pointer): TScalar;
+var
+  inputIdx: PtrInt absolute obj;
+  rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy, t, ri, rri, sn, cs, bt, px, py, p: Double;
+  pos, arrPos: Integer;
+  stdDevArr: TDoubleDynArray;
+begin
+  Result := 1000.0;
+
+  if not InRange(AngleTo02Pi(x[1] - x[0]), DegToRad(0.0), DegToRad(120.0)) then
+    Exit;
+
+  a0a := AngleTo02Pi(x[0]);
+  a0b := AngleTo02Pi(x[1]);
+  a1a := AngleTo02Pi(x[0] + Pi);
+  a1b := AngleTo02Pi(x[1] + Pi);
+
+  rBeg := C45RpmLastMusicGroove * 0.5 * FOutputDPI;
+  rEnd := C45RpmFirstMusicGroove * 0.5 * FOutputDPI;
+
+  t := FPerSnanAngles[inputIdx];
+  cx := FInputScans[inputIdx].Center.X;
+  cy := FInputScans[inputIdx].Center.Y;
+
+  SetLength(stdDevArr, Ceil((rEnd - rBeg) / FOutputDPI * CAreaGroovesPerInchCrop) * FPointsPerRevolution);
+
+  ri := (rEnd - rBeg) / (CAreaGroovesPerInchCrop * (FPointsPerRevolution - 1));
+
+  pos := 0;
+  arrPos := 0;
+  repeat
+    bt := AngleTo02Pi(FRadiansPerRevolutionPoint * pos + t);
+
+    SinCos(bt, sn, cs);
+
+    rri := rBeg + ri * pos;
+
+    px := cs * rri + cx;
+    py := sn * rri + cy;
+
+    Assert(pos < Length(stdDevArr));
+
+    if FInputScans[inputIdx].InRangePointD(py, px) and
+        not In02PiExtentsAngle(bt, a0a, a0b) and not In02PiExtentsAngle(bt, a1a, a1b) then
+    begin
+      p := FInputScans[inputIdx].GetPointD(py, px, isImage);
+      stdDevArr[arrPos] := p;
+      Inc(arrPos);
+    end;
+
+    Inc(pos);
+  until rri >= rEnd;
+
+  if arrPos > 0 then
+    Result := -StdDev(PDouble(@stdDevArr[0]), arrPos);
+
+  Write(FInputScans[inputIdx].PNGShortName, ', begin: ', RadToDeg(a0a):9:3, ', end: ', RadToDeg(a0b):9:3, ', obj: ', -Result:12:6, #13);
 end;
 
 procedure TScanCorrelator.Crop;
