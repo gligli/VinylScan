@@ -89,7 +89,7 @@ const
   CCorrectPrecMul = 10;
   CCorrectAreaBegin = C45RpmLabelOuterSize;
   CCorrectAreaEnd = C45RpmLastMusicGroove;
-  CCorrectArea2Begin = C45RpmFirstMusicGroove;
+  CCorrectArea2Begin = C45RpmFirstMusicGroove - (C45RpmOuterSize - C45RpmFirstMusicGroove) * 0.5;
   CCorrectArea2End = C45RpmOuterSize;
   CCorrectAreaWidth = (CCorrectAreaEnd - CCorrectAreaBegin) * 0.5 + (CCorrectArea2End - CCorrectArea2Begin) * 0.5;
 
@@ -481,9 +481,10 @@ var
   angleIdx: PtrInt absolute obj;
   imgData: TDoubleDynArray2;
   gradData: TDoubleDynArray2;
-  i, pos, cnt, iX, iY: Integer;
+  iscan, ilut, pos, cnt, iX, iY: Integer;
   t, ti, ri, bt, r, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, angle, startAngle, endAngle, angleInc, angleExtents: Double;
   gint: TDoubleDynArray;
+  sinCosLUT: TPointDDynArray;
 begin
   angle := (angleIdx / CCorrectAngleCount) * 2.0 * Pi;
   angleExtents := (2.0 * Pi / CCorrectAngleCount) * 0.5;
@@ -496,19 +497,38 @@ begin
   SetLength(imgData, Length(FInputScans), cnt);
   SetLength(gradData, Length(grad), cnt);
 
-  for i := 0 to High(FInputScans) do
+  for iscan := 0 to High(FInputScans) do
   begin
-    bt := FPerSnanAngles[i];
-    cx := FInputScans[i].Center.X;
-    cy := FInputScans[i].Center.Y;
+    // get params
+
+    bt := FPerSnanAngles[iscan];
+    cx := FInputScans[iscan].Center.X;
+    cy := FInputScans[iscan].Center.Y;
 
     skc := 0.0;
     skm := 1.0;
-    if i > 0 then
+    if iscan > 0 then
     begin
-      skc := arg[High(FInputScans) * 0 + i - 1];
-      skm := arg[High(FInputScans) * 1 + i - 1];
+      skc := arg[High(FInputScans) * 0 + iscan - 1];
+      skm := arg[High(FInputScans) * 1 + iscan - 1];
     end;
+
+    // build sin / cos lookup table
+
+    SetLength(sinCosLUT, Ceil((endAngle - startAngle + 1) / angleInc));
+    pos := 0;
+    repeat
+      ti := startAngle + angleInc * pos;
+      t := bt + ti;
+
+      Assert(pos < Length(sinCosLUT));
+      SinCos(t, sinCosLUT[pos].Y, sinCosLUT[pos].X);
+
+      Inc(pos);
+    until ti >= endAngle;
+    SetLength(sinCosLUT, pos);
+
+    // parse image
 
     pos := 0;
     ri := 1.0 / CCorrectPrecMul;
@@ -519,34 +539,32 @@ begin
     repeat
       rsk := r * skm + skc;
 
-      ti := startAngle;
-      repeat
-        t := bt + ti;
-
-        SinCos(t, sn, cs);
+      for ilut := 0 to High(sinCosLUT) do
+      begin
+        cs := sinCosLUT[ilut].X;
+        sn := sinCosLUT[ilut].Y;
 
         px := cs * rsk + cx;
         py := sn * rsk + cy;
 
-        Assert(pos < Length(imgData[i]));
+        Assert(pos < Length(imgData[iscan]));
 
-        if FInputScans[i].InRangePointD(py, px) then
+        if FInputScans[iscan].InRangePointD(py, px) then
         begin
-          imgData[i, pos] := FInputScans[i].GetPointD(py, px, isImage);
+          imgData[iscan, pos] := FInputScans[iscan].GetPointD(py, px, isImage);
 
-          if (i > 0) and Assigned(grad) then
+          if (iscan > 0) and Assigned(grad) then
           begin
-            gimgx := FInputScans[i].GetPointD(py, px, isXGradient);
-            gimgy := FInputScans[i].GetPointD(py, px, isYGradient);
+            gimgx := FInputScans[iscan].GetPointD(py, px, isXGradient);
+            gimgy := FInputScans[iscan].GetPointD(py, px, isYGradient);
 
-            gradData[High(FInputScans) * 0 + i - 1, pos] := gimgx * cs + gimgy * sn;
-            gradData[High(FInputScans) * 1 + i - 1, pos] := (gimgx * cs + gimgy * sn) * r;
+            gradData[High(FInputScans) * 0 + iscan - 1, pos] := gimgx * cs + gimgy * sn;
+            gradData[High(FInputScans) * 1 + iscan - 1, pos] := (gimgx * cs + gimgy * sn) * r;
           end;
         end;
 
-        ti += angleInc;
         Inc(pos);
-      until ti >= endAngle;
+      end;
 
       r += ri;
 
@@ -555,13 +573,15 @@ begin
 
     until r >= rEnd;
 
-    SetLength(imgData[i], pos);
-    if (i > 0) and Assigned(grad) then
+    SetLength(imgData[iscan], pos);
+    if (iscan > 0) and Assigned(grad) then
     begin
-      SetLength(gradData[High(FInputScans) * 0 + i - 1], pos);
-      SetLength(gradData[High(FInputScans) * 1 + i - 1], pos);
+      SetLength(gradData[High(FInputScans) * 0 + iscan - 1], pos);
+      SetLength(gradData[High(FInputScans) * 1 + iscan - 1], pos);
     end;
   end;
+
+  // compute MSE and MSE gradients
 
   func := 0;
   FillQWord(grad[0], Length(grad), 0);
@@ -574,12 +594,12 @@ begin
         if iY > 0 then
         begin
           grad[High(FInputScans) * 0 + iY - 1] += MSEGradient(gint, gradData[High(FInputScans) * 0 + iY - 1]);
-          grad[High(FInputScans) * 1 + iY - 1] += MSEGradient(gint, gradData[High(FInputScans) * 1 + iY - 1]);
+          grad[High(FInputScans) * 1 + iY - 1] += MSEGradient(gint, gradData[High(FInputScans) * 1 + iY - 1]) / Length(imgData[0]);
         end;
         if iX > 0 then
         begin
-          grad[High(FInputScans) * 0 + iX - 1] += MSEGradient(gint, gradData[High(FInputScans) * 0 + iX - 1]);
-          grad[High(FInputScans) * 1 + iX - 1] += MSEGradient(gint, gradData[High(FInputScans) * 1 + iX - 1]);
+          grad[High(FInputScans) * 0 + iX - 1] -= MSEGradient(gint, gradData[High(FInputScans) * 0 + iX - 1]);
+          grad[High(FInputScans) * 1 + iX - 1] -= MSEGradient(gint, gradData[High(FInputScans) * 1 + iX - 1]) / Length(imgData[0]);
         end;
        end;
     end;
@@ -587,7 +607,7 @@ end;
 
 function TScanCorrelator.PowellCorrect(const arg: TVector; obj: Pointer): TScalar;
 begin
- GradientCorrect(arg, Result, nil, obj);
+  GradientCorrect(arg, Result, nil, obj);
 end;
 
 procedure TScanCorrelator.Correct;
@@ -606,10 +626,10 @@ var
     lx := Copy(x);
 
     //f := 0;
-    //f := BFGSMinimize(@GradientCorrect, lx, 1e-9, Pointer(angleIdx));
+    f := BFGSMinimize(@GradientCorrect, lx, 1e-7, Pointer(angleIdx));
     //f := ASAMinimize(@GradientCorrect, lx, [0.95,0.95], [1.05, 1.05], 1e-9, Pointer(angleIdx));
-    //f := GradientDescentMinimize(@GradientCorrect, lx, 1000.0, 1e-7, Pointer(angleIdx));
-    f := PowellMinimize(@PowellCorrect, lx, 1e-3, 1e-9, 0, MaxInt, Pointer(angleIdx))[0];
+    //f := GradientDescentMinimize(@GradientCorrect, lx, 1.0, 1e-7, Pointer(angleIdx));
+    //f := PowellMinimize(@PowellCorrect, lx, 1.0, 1e-9, 0.0, MaxInt, Pointer(angleIdx))[0];
     //GradientCorrect(lx, f, nil, Pointer(angleIdx));
 
     f := Sqrt(f / High(FInputScans));
@@ -645,7 +665,7 @@ begin
   for j := 0 to high(FPerAngleX) do
   begin
     for i := 0 to high(FPerAngleX[0]) do
-      Write(FPerAngleX[j,i]:12:6);
+      Write(FPerAngleX[j,i]:16:9);
     WriteLn;
   end;
 
