@@ -10,7 +10,7 @@ uses
 
 const
   CSampleDecoderBits = 8;
-  CSampleDecoderMulti = 16;
+  CSampleDecoderMulti = 4;
 
   CSampleDecoderMax = (1 shl (CSampleDecoderBits - 1)) - 1;
   CSampleDecoderMultiMax = CSampleDecoderMulti * (1 shl (CSampleDecoderBits - 1)) - 1;
