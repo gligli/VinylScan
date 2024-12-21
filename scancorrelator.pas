@@ -86,7 +86,7 @@ const
   CAreaGroovesPerInchCrop = 16;
 
   CCorrectAngleCount = 18;
-  CCorrectPrecMul = 10;
+  CCorrectPrecMul = 1;
   CCorrectAreaBegin = C45RpmLabelOuterSize;
   CCorrectAreaEnd = C45RpmLastMusicGroove;
   CCorrectArea2Begin = C45RpmFirstMusicGroove - (C45RpmOuterSize - C45RpmFirstMusicGroove) * 0.5;
@@ -423,7 +423,7 @@ var
   imgData: TDoubleDynArray2;
   gradData: TDoubleDynArray2;
   iscan, ilut, pos, cnt, iX, iY: Integer;
-  t, ti, ri, bt, r, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, angle, startAngle, endAngle, angleInc, angleExtents: Double;
+  t, ti, ri, bt, r, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, ga, gr, angle, startAngle, endAngle, angleInc, angleExtents: Double;
   gint: TDoubleDynArray;
   sinCosLUT: TPointDDynArray;
 begin
@@ -499,8 +499,11 @@ begin
             gimgx := FInputScans[iscan].GetPointD(py, px, isXGradient);
             gimgy := FInputScans[iscan].GetPointD(py, px, isYGradient);
 
-            gradData[High(FInputScans) * 0 + iscan - 1, pos] := gimgx * cs + gimgy * sn;
-            gradData[High(FInputScans) * 1 + iscan - 1, pos] := (gimgx * cs + gimgy * sn) * r;
+            ga := gimgx * cs + gimgy * sn;
+            gr := r / Length(imgData[0]);
+
+            gradData[High(FInputScans) * 0 + iscan - 1, pos] := ga;
+            gradData[High(FInputScans) * 1 + iscan - 1, pos] := ga * gr;
           end;
         end;
 
@@ -535,12 +538,12 @@ begin
         if iY > 0 then
         begin
           grad[High(FInputScans) * 0 + iY - 1] += MSEGradient(gint, gradData[High(FInputScans) * 0 + iY - 1]);
-          grad[High(FInputScans) * 1 + iY - 1] += MSEGradient(gint, gradData[High(FInputScans) * 1 + iY - 1]) / Length(imgData[0]);
+          grad[High(FInputScans) * 1 + iY - 1] += MSEGradient(gint, gradData[High(FInputScans) * 1 + iY - 1]);
         end;
         if iX > 0 then
         begin
           grad[High(FInputScans) * 0 + iX - 1] -= MSEGradient(gint, gradData[High(FInputScans) * 0 + iX - 1]);
-          grad[High(FInputScans) * 1 + iX - 1] -= MSEGradient(gint, gradData[High(FInputScans) * 1 + iX - 1]) / Length(imgData[0]);
+          grad[High(FInputScans) * 1 + iX - 1] -= MSEGradient(gint, gradData[High(FInputScans) * 1 + iX - 1]);
         end;
        end;
     end;
@@ -591,7 +594,7 @@ var
     rmses[AIndex] := f;
     FPerAngleX[AIndex] := lx;
 
-    Write(AIndex + 1:6,' / ',Length(FPerAngleX):6,', RMSE: ', f:9:6, #13);
+    Write(AIndex + 1:6,' / ',Length(FPerAngleX):6,', RMSE: ', f:12:9, #13);
   end;
 
 var
@@ -649,11 +652,11 @@ begin
   begin
     Write('Angle: ', (iangle / CCorrectAngleCount) * 360.0:9:3);
     for ivar := 1 to High(FInputScans) do
-      Write('; ', FInputScans[ivar].PNGShortName, ': (', FPerAngleX[iangle, High(FInputScans) * 0 + ivar - 1]:12:9, ', ', FPerAngleX[iangle, High(FInputScans) * 1 + ivar - 1]:12:9, ')');
+      Write('; ', FInputScans[ivar].PNGShortName, ': (', FPerAngleX[iangle, High(FInputScans) * 0 + ivar - 1]:9:3, ', ', FPerAngleX[iangle, High(FInputScans) * 1 + ivar - 1]:9:6, ')');
     WriteLn;
   end;
 
-  WriteLn('Worst RMSE: ', MaxValue(rmses):9:6);
+  WriteLn('Worst RMSE: ', MaxValue(rmses):12:9);
 end;
 
 function TScanCorrelator.PowellCrop(const x: TVector; obj: Pointer): TScalar;
