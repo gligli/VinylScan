@@ -570,7 +570,7 @@ var
     angleIdx := AIndex mod CCorrectAngleCount;
 
     lx := Copy(x);
-
+    f := NaN;
     case AIndex div CCorrectAngleCount of
       0:
       begin
@@ -639,7 +639,7 @@ begin
       end;
 
       lx[High(FInputScans) * 0 + ivar - 1] /= CMultiMethod; // arithmetic mean (offset)
-      lx[High(FInputScans) * 1 + ivar - 1] := Power(lx[High(FInputScans) * 1 + ivar - 1], 1 / CMultiMethod); // geometric mean (factor)
+      lx[High(FInputScans) * 1 + ivar - 1] := Power(Max(0.0, lx[High(FInputScans) * 1 + ivar - 1]), 1 / CMultiMethod); // geometric mean (factor)
     end;
 
     FPerAngleX[iangle] := lx;
