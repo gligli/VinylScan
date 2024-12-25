@@ -97,6 +97,7 @@ const
   CCorrectArea2Begin = C45RpmFirstMusicGroove - (C45RpmOuterSize - C45RpmFirstMusicGroove) * 0.5;
   CCorrectArea2End = C45RpmOuterSize;
   CCorrectAreaWidth = (CCorrectArea1End - CCorrectArea1Begin) * 0.5 + (CCorrectArea2End - CCorrectArea2Begin) * 0.5;
+  CCorrectPrecMul = 10;
 
   CCropAreaGroovesPerInch = 16;
 
@@ -440,7 +441,7 @@ begin
   endAngle := angle + angleExtents;
   angleInc := FRadiansPerRevolutionPoint;
 
-  cnt := Ceil(CCorrectAreaWidth * FOutputDPI + 1) * Ceil((endAngle - startAngle + 1) / angleInc);
+  cnt := Ceil(CCorrectAreaWidth * CCorrectPrecMul * FOutputDPI + 1)  * Ceil((endAngle - startAngle + angleInc) / angleInc);
 
   SetLength(imgData, 2, cnt);
   SetLength(gradData, Length(grad), cnt);
@@ -518,7 +519,7 @@ begin
         Inc(pos);
       end;
 
-      r += 1.0;
+      r += 1.0 / CCorrectPrecMul;
 
       if (r >= rMid) and (r < rMid2) then
         r := rMid2;
