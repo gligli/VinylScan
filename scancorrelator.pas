@@ -430,77 +430,85 @@ var
   coords: PCorrectCoords absolute obj;
   imgData: TDoubleDynArray2;
   gradData: TDoubleDynArray2;
-  idata, iscan, ilut, pos, cnt: Integer;
-  t, ti, bt, r, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, ga, gr, angle, startAngle, endAngle, angleInc, angleExtents: Double;
+  idata, iscan, ilut, radiusCnt, angleCnt: Integer;
+  r, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, ga, gr, angle, startAngle, endAngle, angleInc, angleExtents: Double;
   gint: TDoubleDynArray;
-  sinCosLUT: TPointDDynArray;
+  scanIdx: array[0 .. 1] of Integer;
+  sinCosLUT: array[0 .. 1] of TPointDDynArray;
 begin
+  func := 0.0;
+  if Assigned(grad) then
+  begin
+    grad[0] := 0.0;
+    grad[1] := 0.0;
+  end;
+
+  skc := arg[0];
+  skm := arg[1];
+
+  scanIdx[0] := 0;
+  scanIdx[1] := coords^.ScanIdx;
+
   angle := (coords^.AngleIdx / CCorrectAngleCount) * 2.0 * Pi;
   angleExtents := 2.0 * Pi / CCorrectAngleCount;
   startAngle := angle - angleExtents;
   endAngle := angle + angleExtents;
   angleInc := FRadiansPerRevolutionPoint;
 
-  cnt := Ceil(CCorrectAreaWidth * CCorrectPrecMul * FOutputDPI) * Ceil((endAngle - startAngle + angleInc) / angleInc);
+  radiusCnt := Ceil(CCorrectAreaWidth * CCorrectPrecMul * FOutputDPI);
+  angleCnt := Ceil((endAngle - startAngle + angleInc) / angleInc);
 
-  SetLength(imgData, 2, cnt);
-  SetLength(gradData, Length(grad), cnt);
+  SetLength(imgData, 2, angleCnt);
+  SetLength(gradData, Length(grad), angleCnt);
+
+  // build sin / cos lookup table
 
   for idata := 0 to 1 do
   begin
-    iscan := IfThen(idata = 0, 0, coords^.ScanIdx);
+    iscan := scanIdx[idata];
+    BuildSinCosLUT(angleCnt, sinCosLUT[idata], startAngle + FPerSnanAngles[iscan], endAngle - startAngle + angleInc);
+  end;
 
-    // get params
+  r := CCorrectArea1Begin * 0.5 * FOutputDPI;
+  rMid := CCorrectArea1End * 0.5 * FOutputDPI;
+  rMid2 := CCorrectArea2Begin * 0.5 * FOutputDPI;
+  rEnd := CCorrectArea2End * 0.5 * FOutputDPI;
+  repeat
+    rsk := r * skm + skc;
 
-    bt := FPerSnanAngles[iscan];
-    cx := FInputScans[iscan].Center.X;
-    cy := FInputScans[iscan].Center.Y;
-
-    skc := 0.0;
-    skm := 1.0;
-    if idata > 0 then
+    for idata := 0 to 1 do
     begin
-      skc := arg[0];
-      skm := arg[1];
-    end;
+      iscan := scanIdx[idata];
 
-    // build sin / cos lookup table
+      // get params
 
-    SetLength(sinCosLUT, Ceil((endAngle - startAngle + angleInc) / angleInc));
-    pos := 0;
-    repeat
-      ti := startAngle + angleInc * pos;
-      t := bt + ti;
+      cx := FInputScans[iscan].Center.X;
+      cy := FInputScans[iscan].Center.Y;
 
-      Assert(pos < Length(sinCosLUT));
-      SinCos(t, sinCosLUT[pos].Y, sinCosLUT[pos].X);
+      // parse image arc
 
-      Inc(pos);
-    until ti >= endAngle;
-
-    // parse image
-
-    pos := 0;
-    r := CCorrectArea1Begin * 0.5 * FOutputDPI;
-    rMid := CCorrectArea1End * 0.5 * FOutputDPI;
-    rMid2 := CCorrectArea2Begin * 0.5 * FOutputDPI;
-    rEnd := CCorrectArea2End * 0.5 * FOutputDPI;
-    repeat
-      rsk := r * skm + skc;
-
-      for ilut := 0 to High(sinCosLUT) do
+      for ilut := 0 to High(sinCosLUT[0]) do
       begin
-        cs := sinCosLUT[ilut].X;
-        sn := sinCosLUT[ilut].Y;
+        cs := sinCosLUT[idata, ilut].X;
+        sn := sinCosLUT[idata, ilut].Y;
 
-        px := cs * rsk + cx;
-        py := sn * rsk + cy;
+        if idata > 0 then
+        begin
+          px := cs * rsk;
+          py := sn * rsk;
+        end
+        else
+        begin
+          px := cs * r;
+          py := sn * r;
+        end;
 
-        Assert(pos < Length(imgData[0]));
+        px += cx;
+        py += cy;
 
         if FInputScans[iscan].InRangePointD(py, px) then
         begin
-          imgData[idata, pos] := FInputScans[iscan].GetPointD(py, px, isImage);
+          imgData[idata, ilut] := FInputScans[iscan].GetPointD(py, px, isImage);
 
           if (idata > 0) and Assigned(grad) then
           begin
@@ -510,29 +518,36 @@ begin
             ga := gimgx * cs + gimgy * sn;
             gr := r;
 
-            gradData[0, pos] := ga;
-            gradData[1, pos] := ga * gr;
+            gradData[0, ilut] := ga;
+            gradData[1, ilut] := ga * gr;
           end;
         end;
-
-        Inc(pos);
       end;
+    end;
 
-      r += 1.0 / CCorrectPrecMul;
+    // compute MSE and MSE gradients
 
-      if (r >= rMid) and (r < rMid2) then
-        r := rMid2;
+    func += MSE(imgData[0], imgData[1], gint);
+    if Assigned(grad) then
+    begin
+      grad[0] += MSEGradient(gint, gradData[0]);
+      grad[1] += MSEGradient(gint, gradData[1]);
+    end;
 
-    until r >= rEnd;
-  end;
+    // move forward
 
-  // compute MSE and MSE gradients
+    r += 1.0 / CCorrectPrecMul;
 
-  func := MSE(imgData[0], imgData[1], gint);
+    if (r >= rMid) and (r < rMid2) then
+      r := rMid2;
+
+  until r >= rEnd;
+
+  func /= radiusCnt;
   if Assigned(grad) then
   begin
-    grad[0] := MSEGradient(gint, gradData[0]);
-    grad[1] := MSEGradient(gint, gradData[1]);
+    grad[0] /= radiusCnt;
+    grad[1] /= radiusCnt;
   end;
 end;
 
@@ -561,8 +576,8 @@ var
     iter := 1;
     repeat
       prevF := f;
-      //BFGSMinimize(@GradientCorrect, lx, 1e-9, @coords);
-      ASAMinimize(@GradientCorrect, lx, [-100, 0.99], [100, 1.01], 1e-9, @coords);
+      BFGSMinimize(@GradientCorrect, lx, 1e-9, @coords);
+      //ASAMinimize(@GradientCorrect, lx, [-100, 0.99], [100, 1.01], 1e-9, @coords);
       f := Sqrt(PowellMinimize(@PowellCorrect, lx, 1.0, 1e-9, 0.0, MaxInt, @coords)[0]);
 
       WriteLn(AIndex + 1:6,' / ',Length(FPerAngleX):6,', RMSE: ', f:12:9, ', Iteration: ', iter:3, #13);
