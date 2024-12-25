@@ -130,7 +130,7 @@ function Make16BitSample(smp: Double): SmallInt;
 function AngleTo02Pi(x: Double): Double;
 function In02PiExtentsAngle(x, xmin, xmax: Double): Boolean;
 
-procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TPointDDynArray; AOriginAngle: Double = 0.0);
+procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TPointDDynArray; AOriginAngle: Double = 0.0; AExtentsAngle: Double = 2.0 * Pi);
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray); overload;
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TDoubleDynArray); overload;
@@ -526,13 +526,13 @@ begin
     Result := InRange(x, 0, xmax) or InRange(x, xmin, 2.0 * Pi);
 end;
 
-procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TPointDDynArray; AOriginAngle: Double = 0.0);
+procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TPointDDynArray; AOriginAngle: Double; AExtentsAngle: Double);
 var
   i: Integer;
   rprp: Double;
 begin
   SetLength(ASinCosLUT, APointCount);
-  rprp := Pi * 2.0 / APointCount;
+  rprp := AExtentsAngle / APointCount;
   for i := 0 to APointCount - 1 do
     SinCos(AOriginAngle + i * rprp, ASinCosLUT[i].Y, ASinCosLUT[i].X);
 end;
