@@ -10,7 +10,7 @@ uses
 
 type
   TCorrectCoords = record
-    AngleIdx, ScanIdx, MethodIdx: Integer;
+    AngleIdx, ScanIdx: Integer;
   end;
 
   PCorrectCoords = ^TCorrectCoords;
@@ -97,7 +97,7 @@ const
   CCorrectArea2Begin = C45RpmFirstMusicGroove - (C45RpmOuterSize - C45RpmFirstMusicGroove) * 0.5;
   CCorrectArea2End = C45RpmOuterSize;
   CCorrectAreaWidth = (CCorrectArea1End - CCorrectArea1Begin) * 0.5 + (CCorrectArea2End - CCorrectArea2Begin) * 0.5;
-  CCorrectPrecMul = 10;
+  CCorrectPrecMul = 2;
 
   CCropAreaGroovesPerInch = 16;
 
@@ -400,7 +400,7 @@ begin
     end;
     mmGradientDescent:
     begin
-      Result := GradientDescentMinimize(@GradientAnalyze, x, 0.1, 1e-7);
+      Result := GradientDescentMinimize(@GradientAnalyze, x, 0.01, 1e-7);
     end;
     mmPowell:
     begin
@@ -441,7 +441,7 @@ begin
   endAngle := angle + angleExtents;
   angleInc := FRadiansPerRevolutionPoint;
 
-  cnt := Ceil(CCorrectAreaWidth * CCorrectPrecMul * FOutputDPI + 1)  * Ceil((endAngle - startAngle + angleInc) / angleInc);
+  cnt := Ceil(CCorrectAreaWidth * CCorrectPrecMul * FOutputDPI) * Ceil((endAngle - startAngle + angleInc) / angleInc);
 
   SetLength(imgData, 2, cnt);
   SetLength(gradData, Length(grad), cnt);
@@ -466,7 +466,7 @@ begin
 
     // build sin / cos lookup table
 
-    SetLength(sinCosLUT, Ceil((endAngle - startAngle + 1) / angleInc));
+    SetLength(sinCosLUT, Ceil((endAngle - startAngle + angleInc) / angleInc));
     pos := 0;
     repeat
       ti := startAngle + angleInc * pos;
@@ -477,7 +477,6 @@ begin
 
       Inc(pos);
     until ti >= endAngle;
-    SetLength(sinCosLUT, pos);
 
     // parse image
 
@@ -525,13 +524,6 @@ begin
         r := rMid2;
 
     until r >= rEnd;
-
-    SetLength(imgData[idata], pos);
-    if (idata > 0) and Assigned(grad) then
-    begin
-      SetLength(gradData[0], pos);
-      SetLength(gradData[1], pos);
-    end;
   end;
 
   // compute MSE and MSE gradients
@@ -550,8 +542,6 @@ begin
 end;
 
 procedure TScanCorrelator.Correct;
-const
-  CMultiMethod = 2;
 var
   x: TVector;
   rmses: TDoubleDynArray;
@@ -560,50 +550,39 @@ var
   var
     coords: TCorrectCoords;
     lx: TVector;
-    f: Double;
+    iter: Integer;
+    f, prevF: Double;
   begin
     coords.AngleIdx := AIndex mod CCorrectAngleCount;
     coords.ScanIdx := (AIndex div CCorrectAngleCount) mod High(FInputScans) + 1;
-    coords.MethodIdx := AIndex div (CCorrectAngleCount * High(FInputScans));
 
     lx := Copy(x);
-    f := NaN;
-    case coords.MethodIdx of
-      0:
-      begin
-        f := PowellMinimize(@PowellCorrect, lx, 1.0, 1e-9, 0.0, MaxInt, @coords)[0];
-      end;
-      1:
-      begin
-        f := BFGSMinimize(@GradientCorrect, lx, 1e-9, @coords);
-      end;
-      else
-      begin
-        Assert(False);
-      end;
-    end;
-    //f := ASAMinimize(@GradientCorrect, lx, [0.95,0.95], [1.05, 1.05], 1e-9, Pointer(angleIdx));
-    //f := GradientDescentMinimize(@GradientCorrect, lx, 1.0, 1e-7, Pointer(angleIdx));
-    //GradientCorrect(lx, f, nil, Pointer(angleIdx));
+    f := 1000.0;
+    iter := 1;
+    repeat
+      prevF := f;
+      //BFGSMinimize(@GradientCorrect, lx, 1e-9, @coords);
+      ASAMinimize(@GradientCorrect, lx, [-100, 0.99], [100, 1.01], 1e-9, @coords);
+      f := Sqrt(PowellMinimize(@PowellCorrect, lx, 1.0, 1e-9, 0.0, MaxInt, @coords)[0]);
 
-    f := Sqrt(f);
+      WriteLn(AIndex + 1:6,' / ',Length(FPerAngleX):6,', RMSE: ', f:12:9, ', Iteration: ', iter:3, #13);
+
+      Inc(iter);
+    until SameValue(f, prevF, 1e-9);
 
     rmses[AIndex] := f;
     FPerAngleX[AIndex] := lx;
-
-    Write(AIndex + 1:6,' / ',Length(FPerAngleX):6,', RMSE: ', f:12:9, #13);
   end;
 
 var
-  ianglescan, imethod, idx: Integer;
-  rmse: Double;
+  ianglescan: Integer;
 begin
   WriteLn('Correct');
 
   if Length(FInputScans) <= 1 then
     Exit;
 
-  SetLength(FPerAngleX, CCorrectAngleCount * High(FInputScans) * CMultiMethod);
+  SetLength(FPerAngleX, CCorrectAngleCount * High(FInputScans));
   SetLength(rmses, Length(FPerAngleX));
 
   // starting point
@@ -617,33 +596,6 @@ begin
   ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FPerAngleX));
 
   WriteLn;
-
-  // aggregate method results
-
-  for ianglescan := 0 to CCorrectAngleCount * High(FInputScans) - 1 do
-  begin
-    rmse := 0.0;
-    x[0] := 0.0;
-    x[1] := 0.0;
-
-    for imethod := 0 to CMultiMethod - 1 do
-    begin
-      idx := ianglescan + CCorrectAngleCount * High(FInputScans) * imethod;
-
-      rmse += rmses[idx];
-      x[0] += FPerAngleX[idx, 0];
-      x[1] += FPerAngleX[idx, 1];
-    end;
-
-    rmse /= CMultiMethod;
-    x[0] /= CMultiMethod;
-    x[1] /= CMultiMethod;
-
-    rmses[ianglescan] := rmse;
-    FPerAngleX[ianglescan] := Copy(x);
-  end;
-  SetLength(rmses, CCorrectAngleCount * High(FInputScans));
-  SetLength(FPerAngleX, CCorrectAngleCount * High(FInputScans));
 
   // log
 
@@ -910,7 +862,7 @@ begin
 
       prevObj := obj;
       Analyze(mmBFGS);
-      Analyze(mmGradientDescent);
+      //Analyze(mmGradientDescent);
       obj := Analyze(mmPowell);
       Inc(iter);
     until SameValue(obj, prevObj, 1e-9);
