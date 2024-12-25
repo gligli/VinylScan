@@ -383,7 +383,7 @@ begin
   end;
 
   MinASACreate(Length(X), X, lb, ub, state);
-  MinASASetCond(state, Epsilon, 0.0, 0.0, 0);
+  MinASASetCond(state, 0.0, 0.0, Epsilon, 0);
   while MinASAIteration(state) do
     if state.NeedFG then
       Func(state.X, state.F, state.G, data);
