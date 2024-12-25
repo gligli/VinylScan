@@ -8,7 +8,7 @@ uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, Types, scan2track, scancorrelator, utils, math, inputscan, FilterIIRLPBessel, FilterIIRHPBessel;
 
 const
-  CReducShift = 4;
+  CReducShift = 2;
   CReducFactor = 1.0 / (1 shl CReducShift);
 
 type
@@ -23,6 +23,7 @@ type
     btScan2Track: TButton;
     btScansCorrelator: TButton;
     btTest: TButton;
+    chkCorrect: TCheckBox;
     cbDPI: TComboBox;
     cbSR: TComboBox;
     cbMethod: TComboBox;
@@ -117,6 +118,7 @@ begin
   try
     sc.Method := TMinimizeMethod(cbMethod.ItemIndex);
     sc.OutputPNGFileName := edOutputPNG.Text;
+    sc.CorrectAngles := chkCorrect.Checked;
 
     sc.LoadPNGs;
 
