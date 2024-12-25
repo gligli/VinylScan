@@ -103,7 +103,7 @@ implementation
 const
   CAreaBegin = 0;
   CAreaEnd = (C45RpmInnerSize + C45RpmAdapterSize) * 0.5;
-  CRadiusXOffsets: array[TValueSign] of Double = (-C45RpmMaxGrooveWidth * 2, 0, C45RpmMaxGrooveWidth * 2);
+  CRadiusXOffsets: array[TValueSign] of Double = (-C45RpmMaxGrooveWidth * 4, 0, C45RpmMaxGrooveWidth * 4);
   CRadiusYFactors: array[TValueSign] of Double = (1, -2, 1);
 
 { TInputScan }
@@ -126,18 +126,18 @@ begin
   cnt := 0;
   for t := 0 to High(FSinCosLUT)  do
   begin
-    sn := FSinCosLUT[t].X;
-    cs := FSinCosLUT[t].Y;
+    cs := FSinCosLUT[t].X;
+    sn := FSinCosLUT[t].Y;
 
-    if sn <= 0 then sn *= 0.99;
-    if cs >= 0 then cs *= 0.94;
+    if cs <= 0 then cs *= 0.99;
+    if sn >= 0 then sn *= 0.89;
 
     pos := 0;
     repeat
       r := radiusInner + pos;
 
-      x := sn * r + arg[0];
-      y := cs * r + arg[1];
+      x := cs * r + arg[0];
+      y := sn * r + arg[1];
 
       if InRangePointD(y, x) then
       begin
@@ -222,7 +222,7 @@ begin
           gimgx := GetPointD(y, x, isXGradient);
           gimgy := GetPointD(y, x, isYGradient);
 
-          grad[0] += (gimgx * -sn + gimgy * cs) * CRadiusYFactors[vs];
+          grad[0] += (gimgx * cs + gimgy * sn) * CRadiusYFactors[vs];
           grad[1] += gimgx * CRadiusYFactors[vs];
           grad[2] += gimgy * CRadiusYFactors[vs];
         end;
@@ -272,8 +272,8 @@ begin
   xrc[0] := bestr;
   ASAMinimize(@GradientEvalConcentricGroove, xrc, [radiusInner, radiusLimit, radiusLimit], [radiusOuter, Width - radiusLimit, Height - radiusLimit]);
   FConcentricGrooveRadius := xrc[0];
-  //FCenter.X := xrc[1];
-  //FCenter.Y := xrc[2];
+  FCenter.X := xrc[1];
+  FCenter.Y := xrc[2];
 end;
 
 procedure TInputScan.FindGrooveStart;
