@@ -329,7 +329,7 @@ function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource): Double; inli
   function GetPt(AY, AX: Double): Double; inline;
   var
     ix, iy: Integer;
-    y0, y1, y2, y3: Double;
+    y0, y1, y2, y3: Single;
   begin
     ix := trunc(AX);
     iy := trunc(AY);
