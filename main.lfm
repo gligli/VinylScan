@@ -15,11 +15,11 @@ object MainForm: TMainForm
   ClientWidth = 960
   Color = 4210752
   DoubleBuffered = False
-  OnCreate = FormCreate
   ParentDoubleBuffered = False
-  LCLVersion = '3.6.0.0'
+  LCLVersion = '4.0.0.1'
   Scaled = False
   WindowState = wsMaximized
+  OnCreate = FormCreate
   object Image: TImage
     Left = 0
     Height = 480
