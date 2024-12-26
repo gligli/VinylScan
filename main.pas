@@ -187,6 +187,10 @@ begin
     img[i + 1024, round(herp(16, 128, 64, 256, i / 512) * 2 + 1024)] := High(Word);
     img[i + 1536, round(herp(128, 64, 256, 512, i / 512) * 2 + 1024)] := High(Word);
 
+    img[i + 512, round(cerp(0, 16, 128, 64, i / 512) * 2 + 1024)] := High(Word);
+    img[i + 1024, round(cerp(16, 128, 64, 256, i / 512) * 2 + 1024)] := High(Word);
+    img[i + 1536, round(cerp(128, 64, 256, 512, i / 512) * 2 + 1024)] := High(Word);
+
     img[i + 512, round(lerp(16, 128, i / 512) * 2 + 1024)] := High(Word);
     img[i + 1024, round(lerp(128, 64, i / 512) * 2 + 1024)] := High(Word);
     img[i + 1536, round(lerp(64, 256, i / 512) * 2 + 1024)] := High(Word);

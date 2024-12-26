@@ -28,6 +28,8 @@ type
     FGrooveStartAngle: Double;
     FGrooveStartPoint: TPointD;
 
+    FCenterQuality: Double;
+
     FImage: TWordDynArray2;
 
     function GetPNGShortName: String;
@@ -66,6 +68,8 @@ type
     property GrooveStartPoint: TPointD read FGrooveStartPoint;
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
+
+    property CenterQuality: Double read FCenterQuality;
 
     property Image: TWordDynArray2 read FImage;
   end;
@@ -183,7 +187,7 @@ begin
   x[1] := FCenter.Y;
 
   if (x[0] <> rOut) and (x[1] <> rOut) then
-    BFGSMinimize(@GradientEvalCenter, x, 1e-6);
+    FCenterQuality := -BFGSMinimize(@GradientEvalCenter, x, 1e-6);
 
   FCenter.X := x[0];
   FCenter.Y := x[1];
@@ -381,6 +385,7 @@ begin
   FPointsPerRevolution := APointsPerRevolution;
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
   FSilent := ASilent;
+  FCenterQuality := NaN;
 end;
 
 destructor TInputScan.Destroy;

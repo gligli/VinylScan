@@ -129,6 +129,14 @@ begin
   inherited Destroy;
 end;
 
+function CompareInputScans(Item1, Item2, UserParameter: Pointer): Integer;
+var
+  s1: ^TInputScan absolute Item1;
+  s2: ^TInputScan absolute Item2;
+begin
+  Result := CompareValue(s2^.CenterQuality, s1^.CenterQuality);
+end;
+
 procedure TScanCorrelator.LoadPNGs;
 
   procedure DoOne(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
@@ -137,7 +145,8 @@ procedure TScanCorrelator.LoadPNGs;
     WriteLn(FInputScans[AIndex].PNGFileName);
   end;
 
-var i: Integer;
+var
+  i: Integer;
 begin
   WriteLn('LoadPNGs');
 
@@ -156,6 +165,12 @@ begin
   WriteLn('DPI:', FOutputDPI:6);
   WriteLn('PointsPerRevolution:', FPointsPerRevolution:8);
   Writeln('Inner raw sample rate: ', Round(Pi * C45RpmLastMusicGroove * FOutputDPI * C45RpmRevolutionsPerSecond), ' Hz');
+
+  if Length(FInputScans) > 1 then
+  begin
+    QuickSort(FInputScans[0], 0, High(FInputScans), SizeOf(TInputScan), @CompareInputScans);
+    Writeln('Best centering: ', FInputScans[0].PNGShortName);
+  end;
 
   SetLength(FOutputImage, Ceil(C45RpmOuterSize * FOutputDPI), Ceil(C45RpmOuterSize * FOutputDPI));
 end;
@@ -576,9 +591,9 @@ var
     iter := 1;
     repeat
       prevF := f;
-      BFGSMinimize(@GradientCorrect, lx, 1e-9, @coords);
-      //ASAMinimize(@GradientCorrect, lx, [-100, 0.99], [100, 1.01], 1e-9, @coords);
-      f := Sqrt(PowellMinimize(@PowellCorrect, lx, 1.0, 1e-9, 0.0, MaxInt, @coords)[0]);
+      BFGSMinimize(@GradientCorrect, lx, 1e-12, @coords);
+      PowellMinimize(@PowellCorrect, lx, 1.0, 1e-12, 0.0, MaxInt, @coords);
+      f := Sqrt(ASAMinimize(@GradientCorrect, lx, [-10, 0.99], [10, 1.01], 1e-12, @coords));
 
       WriteLn(AIndex + 1:6,' / ',Length(FPerAngleX):6,', RMSE: ', f:12:9, ', Iteration: ', iter:3, #13);
 
