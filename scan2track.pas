@@ -122,7 +122,7 @@ var
     end;
 
     //middleSmp := (MinValue(smpBuf) + MaxValue(smpBuf)) * 0.5;
-    middleSmp := GoldenRatioSearch(@EvalTrackGR, MaxValue(smpBuf), MinValue(smpBuf), Length(smpBuf) div 4, 0.0, 0.5, @smpBuf[0]);
+    middleSmp := GoldenRatioSearch(@EvalTrackGR, MaxValue(smpBuf), MinValue(smpBuf), Length(smpBuf) div 4, 1e-6, 0.5, @smpBuf[0]);
 
     aboveAcc := 0;
     aboveCnt := 0;
