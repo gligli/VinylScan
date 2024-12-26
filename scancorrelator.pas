@@ -92,7 +92,7 @@ const
   CAnalyzeAreaGroovesPerInch = 32;
 
   CCorrectAngleCount = 8;
-  CCorrectArea1Begin = (C45RpmLabelOuterSize + C45RpmConcentricGroove) * 0.5;
+  CCorrectArea1Begin = C45RpmLabelOuterSize - (C45RpmLastMusicGroove - C45RpmLabelOuterSize) * 0.5;
   CCorrectArea1End = C45RpmLastMusicGroove;
   CCorrectArea2Begin = C45RpmFirstMusicGroove - (C45RpmOuterSize - C45RpmFirstMusicGroove) * 0.5;
   CCorrectArea2End = C45RpmOuterSize;
@@ -465,7 +465,7 @@ begin
   scanIdx[1] := coords^.ScanIdx;
 
   angle := (coords^.AngleIdx / CCorrectAngleCount) * 2.0 * Pi;
-  angleExtents := 2.0 * Pi / CCorrectAngleCount;
+  angleExtents := 2.0 * Pi / CCorrectAngleCount * 0.5;
   startAngle := angle - angleExtents;
   endAngle := angle + angleExtents;
   angleInc := FRadiansPerRevolutionPoint;
@@ -588,16 +588,24 @@ var
 
     lx := Copy(x);
     f := 1000.0;
-    iter := 1;
+    iter := 0;
     repeat
       prevF := f;
-      BFGSMinimize(@GradientCorrect, lx, 1e-12, @coords);
-      PowellMinimize(@PowellCorrect, lx, 1.0, 1e-12, 0.0, MaxInt, @coords);
-      f := Sqrt(ASAMinimize(@GradientCorrect, lx, [-10, 0.99], [10, 1.01], 1e-12, @coords));
+
+      case iter mod 3 of
+        0:
+          f := BFGSMinimize(@GradientCorrect, lx, 1e-12, @coords);
+        1:
+          f := PowellMinimize(@PowellCorrect, lx, 1.0, 1e-12, 0.0, MaxInt, @coords)[0];
+        2:
+          f := ASAMinimize(@GradientCorrect, lx, [-10, 0.99], [10, 1.01], 1e-12, @coords);
+      end;
+
+      f := Sqrt(f);
+      Inc(iter);
 
       WriteLn(AIndex + 1:6,' / ',Length(FPerAngleX):6,', RMSE: ', f:12:9, ', Iteration: ', iter:3, #13);
 
-      Inc(iter);
     until SameValue(f, prevF, 1e-9);
 
     rmses[AIndex] := f;
@@ -891,9 +899,11 @@ begin
       WriteLn('Iteration: ', iter:3);
 
       prevObj := obj;
-      Analyze(mmBFGS);
-      //Analyze(mmGradientDescent);
-      obj := Analyze(mmPowell);
+      if Odd(iter) then
+        obj := Analyze(mmBFGS)
+      else
+        obj := Analyze(mmPowell);
+
       Inc(iter);
     until SameValue(obj, prevObj, 1e-9);
   end;
