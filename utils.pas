@@ -36,6 +36,7 @@ type
 
   TGRSEvalFunc = function(arg: Double; obj: Pointer): Double of object;
   TGradientEvalFunc = procedure(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer) of object;
+  TCompareFunction = function(Item1, Item2, UserParameter: Pointer): Integer;
 
   { format of WAV file header }
   TWavHeader = record         { parameter description }
@@ -115,6 +116,7 @@ function lerp(x, y, alpha: Double): Double; inline;
 function ilerp(x, y, alpha, maxAlpha: Integer): Integer; inline;
 function revlerp(x, r, alpha: Double): Double; inline;
 function herp(y0, y1, y2, y3, alpha: Double): Double;
+function cerp(y0, y1, y2, y3, alpha: Double): Double;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; Epsilon: Double = 1e-9; Data: Pointer = nil): Double;
@@ -134,6 +136,8 @@ procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TPointDDynArray; 
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray); overload;
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TDoubleDynArray); overload;
+
+procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFunction:TCompareFunction;AUserParameter:Pointer=nil);
 
 implementation
 
@@ -279,6 +283,22 @@ begin
     Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
 end;
 
+function cerp(y0, y1, y2, y3, alpha: Double): Double;
+var
+  alpha2, alpha3: Double;
+  a0, a1, a2, a3: Double;
+begin
+    alpha2 := alpha * alpha;
+    alpha3 := alpha2 * alpha;
+
+    a3 := y3 - y2 - y0 + y1;
+    a2 := y0 - y1 - a3;
+    a1 := y2 - y0;
+    a0 := y1;
+
+    Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
+end;
+
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double;
   EpsilonX, EpsilonY: Double; Data: Pointer): Double;
 var
@@ -380,6 +400,8 @@ begin
   begin
     lb[i] := LowBound[i];
     ub[i] := UpBound[i];
+
+    X[i] := EnsureRange(X[i], lb[i], ub[i]); // ensure feasible X
   end;
 
   MinASACreate(Length(X), X, lb, ub, state);
@@ -577,6 +599,57 @@ begin
 
   CreateWAV(channels, resolution, rate, fn, idata);
 end;
+
+procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFunction:TCompareFunction;AUserParameter:Pointer=nil);
+var I, J, P: Integer;
+    PData,P1,P2: PByte;
+    Tmp: array[0..4095] of Byte;
+begin
+  if ALastItem <= AFirstItem then
+    Exit;
+
+  Assert(AItemSize < SizeOf(Tmp),'AItemSize too big!');
+  PData:=PByte(@AData);
+  repeat
+    I := AFirstItem;
+    J := ALastItem;
+    P := (AFirstItem + ALastItem) shr 1;
+    repeat
+      P1:=PData;Inc(P1,I*AItemSize);
+      P2:=PData;Inc(P2,P*AItemSize);
+      while ACompareFunction(P1, P2, AUserParameter) < 0 do
+      begin
+        Inc(I);
+        Inc(P1,AItemSize);
+      end;
+      P1:=PData;Inc(P1,J*AItemSize);
+      //P2:=PData;Inc(P2,P*AItemSize); already done
+      while ACompareFunction(P1, P2, AUserParameter) > 0 do
+      begin
+        Dec(J);
+        Dec(P1,AItemSize);
+      end;
+      if I <= J then
+      begin
+        P1:=PData;Inc(P1,I*AItemSize);
+        P2:=PData;Inc(P2,J*AItemSize);
+        Move(P2^, Tmp[0], AItemSize);
+        Move(P1^, P2^, AItemSize);
+        Move(Tmp[0], P1^, AItemSize);
+
+        if P = I then
+          P := J
+        else if P = J then
+          P := I;
+        Inc(I);
+        Dec(J);
+      end;
+    until I > J;
+    if AFirstItem < J then QuickSort(AData,AFirstItem,J,AItemSize,ACompareFunction,AUserParameter);
+    AFirstItem := I;
+  until I >= ALastItem;
+end;
+
 
 initialization
 {$ifdef DEBUG}
