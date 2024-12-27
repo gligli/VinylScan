@@ -597,7 +597,7 @@ var
 
       case iter mod 3 of
         0:
-          f := ASAMinimize(@GradientCorrect, lx, [-15, 0.99], [15, 1.01], 1e-12, @coords);
+          f := ASAMinimize(@GradientCorrect, lx, [-0.03 * FOutputDPI, 0.99], [0.03 * FOutputDPI, 1.01], 1e-12, @coords);
         1:
           f := PowellMinimize(@PowellCorrect, lx, 1.0, 1e-12, 0.0, MaxInt, @coords)[0];
         2:

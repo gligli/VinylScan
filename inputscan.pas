@@ -345,7 +345,7 @@ function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource): Double; inli
   end;
 
 const
-  CH = 0.05;
+  CH = 1e-5;
 begin
   Result := 0;
   case Source of
