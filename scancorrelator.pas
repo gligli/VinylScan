@@ -97,7 +97,7 @@ const
   CCorrectArea2Begin = C45RpmFirstMusicGroove - (C45RpmOuterSize - C45RpmFirstMusicGroove) * 0.5;
   CCorrectArea2End = C45RpmOuterSize;
   CCorrectAreaWidth = (CCorrectArea1End - CCorrectArea1Begin) * 0.5 + (CCorrectArea2End - CCorrectArea2Begin) * 0.5;
-  CCorrectPrecMul = 2;
+  CCorrectAreaGroovesPerInch = 1200;
 
   CCropAreaGroovesPerInch = 16;
 
@@ -446,7 +446,7 @@ var
   imgData: TDoubleDynArray2;
   gradData: TDoubleDynArray2;
   idata, iscan, ilut, radiusCnt, angleCnt: Integer;
-  r, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, ga, gr, angle, startAngle, endAngle, angleInc, angleExtents: Double;
+  r, ri, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, ga, gr, angle, startAngle, endAngle, angleInc, angleExtents: Double;
   gint: TDoubleDynArray;
   scanIdx: array[0 .. 1] of Integer;
   sinCosLUT: array[0 .. 1] of TPointDDynArray;
@@ -470,7 +470,7 @@ begin
   endAngle := angle + angleExtents;
   angleInc := FRadiansPerRevolutionPoint;
 
-  radiusCnt := Ceil(CCorrectAreaWidth * CCorrectPrecMul * FOutputDPI);
+  radiusCnt := Ceil(CCorrectAreaWidth * CCorrectAreaGroovesPerInch);
   angleCnt := Ceil((endAngle - startAngle + angleInc) / angleInc);
 
   SetLength(imgData, 2, angleCnt);
@@ -488,6 +488,7 @@ begin
   rMid := CCorrectArea1End * 0.5 * FOutputDPI;
   rMid2 := CCorrectArea2Begin * 0.5 * FOutputDPI;
   rEnd := CCorrectArea2End * 0.5 * FOutputDPI;
+  ri := FOutputDPI / CCorrectAreaGroovesPerInch;
   repeat
     rsk := r * skm + skc;
 
@@ -551,7 +552,7 @@ begin
 
     // move forward
 
-    r += 1.0 / CCorrectPrecMul;
+    r += ri;
 
     if (r >= rMid) and (r < rMid2) then
       r := rMid2;
@@ -606,7 +607,7 @@ var
 
       WriteLn(AIndex + 1:6,' / ',Length(FPerAngleX):6,', RMSE: ', f:12:9, ', Iteration: ', iter:3, #13);
 
-    until SameValue(f, prevF, 1e-9);
+    until CompareValue(f, prevF, 1e-9) >= 0;
 
     rmses[AIndex] := f;
     FPerAngleX[AIndex] := lx;
@@ -905,7 +906,7 @@ begin
         obj := Analyze(mmPowell);
 
       Inc(iter);
-    until SameValue(obj, prevObj, 1e-9);
+    until CompareValue(obj, prevObj, 1e-9) >= 0;
   end;
 
   if FCorrectAngles then
