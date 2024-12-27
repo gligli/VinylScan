@@ -16,7 +16,41 @@
     </General>
     <BuildModes>
       <Item Name="Debug" Default="True"/>
-      <Item Name="Release">
+      <Item Name="Test">
+        <CompilerOptions>
+          <Version Value="11"/>
+          <PathDelim Value="\"/>
+          <Target>
+            <Filename Value="VinylScan_test"/>
+          </Target>
+          <SearchPaths>
+            <IncludeFiles Value="$(ProjOutDir)"/>
+            <OtherUnitFiles Value="alglib;LazFiltersIIR"/>
+            <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)-$(BuildMode)"/>
+          </SearchPaths>
+          <Parsing>
+            <Style Value="1"/>
+            <SyntaxOptions>
+              <IncludeAssertionCode Value="True"/>
+            </SyntaxOptions>
+          </Parsing>
+          <CodeGeneration>
+            <SmartLinkUnit Value="True"/>
+            <TargetOS Value="win64"/>
+            <Optimizations>
+              <OptimizationLevel Value="3"/>
+            </Optimizations>
+          </CodeGeneration>
+          <Linking>
+            <Debugging>
+              <RunWithoutDebug Value="True"/>
+              <UseExternalDbgSyms Value="True"/>
+            </Debugging>
+            <LinkSmart Value="True"/>
+          </Linking>
+        </CompilerOptions>
+      </Item>
+      <Item Name="ReleaseWPO Pass 1">
         <CompilerOptions>
           <Version Value="11"/>
           <PathDelim Value="\"/>
@@ -43,20 +77,25 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
+              <GenerateDebugInfo Value="False"/>
               <RunWithoutDebug Value="True"/>
-              <DebugInfoType Value="dsStabs"/>
               <UseExternalDbgSyms Value="True"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
+          <Other>
+            <CustomOptions Value="-Xs-
+-FWlib\$(TargetCPU)-$(TargetOS)-fb.wpo
+-OWALL"/>
+          </Other>
         </CompilerOptions>
       </Item>
-      <Item Name="Release2">
+      <Item Name="ReleaseWPO Pass 2">
         <CompilerOptions>
           <Version Value="11"/>
           <PathDelim Value="\"/>
           <Target>
-            <Filename Value="VinylScan2"/>
+            <Filename Value="VinylScan"/>
           </Target>
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir)"/>
@@ -80,10 +119,15 @@
             <Debugging>
               <GenerateDebugInfo Value="False"/>
               <RunWithoutDebug Value="True"/>
-              <DebugInfoType Value="dsDwarf3"/>
+              <UseExternalDbgSyms Value="True"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
+          <Other>
+            <CustomOptions Value="-Xs-
+-Fwlib\$(TargetCPU)-$(TargetOS)-fb.wpo
+-OwALL"/>
+          </Other>
         </CompilerOptions>
       </Item>
     </BuildModes>
