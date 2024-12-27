@@ -597,11 +597,11 @@ var
 
       case iter mod 3 of
         0:
-          f := BFGSMinimize(@GradientCorrect, lx, 1e-12, @coords);
+          f := ASAMinimize(@GradientCorrect, lx, [-15, 0.99], [15, 1.01], 1e-12, @coords);
         1:
           f := PowellMinimize(@PowellCorrect, lx, 1.0, 1e-12, 0.0, MaxInt, @coords)[0];
         2:
-          f := ASAMinimize(@GradientCorrect, lx, [-10, 0.99], [10, 1.01], 1e-12, @coords);
+          f := BFGSMinimize(@GradientCorrect, lx, 1e-12, @coords);
       end;
 
       f := Sqrt(f);
