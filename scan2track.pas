@@ -93,8 +93,8 @@ var
 
   function DecodeSample(radius, angle: Double; out feedback: Double): Double;
   var
-    imulti, ismp, ismpmulti, aboveCnt, aboveAcc: Integer;
-    r, px, py, middleSmp, cxa, cma, sn, cs: Double;
+    imulti, ismp, ismpmulti, upCnt, upAcc: Integer;
+    r, px, py, middleSmp, stdDev, upLimit, cxa, cma, sn, cs: Double;
     smpBuf: array[-CSampleDecoderMultiMax-1 .. CSampleDecoderMultiMax] of Double;
   begin
     cxa := C45RpmMaxGrooveWidth * Scan.DPI / CSampleDecoderMax;
@@ -121,19 +121,24 @@ var
       end;
     end;
 
-    //middleSmp := (MinValue(smpBuf) + MaxValue(smpBuf)) * 0.5;
-    middleSmp := GoldenRatioSearch(@EvalTrackGR, MaxValue(smpBuf), MinValue(smpBuf), Length(smpBuf) div 4, 1e-6, 0.5, @smpBuf[0]);
+    MeanAndStdDev(smpBuf, middleSmp, stdDev);
 
-    aboveAcc := 0;
-    aboveCnt := 0;
+    upLimit := middleSmp + stdDev;
+
+    //middleSmp := Mean(smpBuf);
+    //middleSmp := (MinValue(smpBuf) + MaxValue(smpBuf)) * 0.5;
+    //middleSmp := GoldenRatioSearch(@EvalTrackGR, MaxValue(smpBuf), MinValue(smpBuf), Length(smpBuf) div 4, 1e-6, 0.5, @smpBuf[0]);
+
+    upAcc := 0;
+    upCnt := 0;
     for ismp := -CSampleDecoderMultiMax-1 to CSampleDecoderMultiMax do
-      if smpBuf[ismp] >= middleSmp then
+      if InRange(smpBuf[ismp], middleSmp, upLimit) then
       begin
-        aboveAcc += ismp;
-        Inc(aboveCnt);
+        upAcc += ismp;
+        Inc(upCnt);
       end;
 
-    Result := DivDef(aboveAcc, CSampleDecoderMultiMax * aboveCnt, 0.0);
+    Result := DivDef(upAcc, CSampleDecoderMultiMax * upCnt, 0.0);
 
     feedback := Result * C45RpmMaxGrooveWidth * Scan.DPI;
   end;
@@ -170,7 +175,7 @@ begin
 
     angle := Scan.GrooveStartAngle;
     radius := Scan.FirstGrooveRadius;
-    fbRatio := (CLowCutoffFreq / FSampleRate) / sqrt(0.1024 + sqr(CLowCutoffFreq / FSampleRate));
+    fbRatio := (CLowCutoffFreq * 2.0 / FSampleRate) / sqrt(0.1024 + sqr(CLowCutoffFreq * 2.0 / FSampleRate));
 
     repeat
       fsmp := DecodeSample(radius, angle, feedback);
