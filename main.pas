@@ -23,6 +23,7 @@ type
     btScan2Track: TButton;
     btScansCorrelator: TButton;
     btTest: TButton;
+    chkBlend: TCheckBox;
     chkCorrect: TCheckBox;
     cbDPI: TComboBox;
     cbSR: TComboBox;
@@ -119,6 +120,7 @@ begin
     sc.Method := TMinimizeMethod(cbMethod.ItemIndex);
     sc.OutputPNGFileName := edOutputPNG.Text;
     sc.CorrectAngles := chkCorrect.Checked;
+    sc.RebuildBlended := chkBlend.Checked;
 
     sc.LoadPNGs;
 

@@ -22,6 +22,7 @@ type
     FInputScans: TInputScanDynArray;
     FMethod: TMinimizeMethod;
     FCorrectAngles: Boolean;
+    FRebuildBlended: Boolean;
     FOutputPNGFileName: String;
     FOutputDPI: Integer;
     FObjective: Double;
@@ -57,6 +58,7 @@ type
     property OutputPNGFileName: String read FOutputPNGFileName write FOutputPNGFileName;
     property Method: TMinimizeMethod read FMethod write FMethod;
     property CorrectAngles: Boolean read FCorrectAngles write FCorrectAngles;
+    property RebuildBlended: Boolean read FRebuildBlended write FRebuildBlended;
 
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
@@ -818,7 +820,8 @@ var
           begin
             acc += FInputScans[i].GetPointD(py, px, isImage);
             Inc(cnt);
-            //Break;
+            if not FRebuildBlended then
+              Break;
           end;
         end;
 

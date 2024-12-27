@@ -44,7 +44,7 @@
           <Linking>
             <Debugging>
               <RunWithoutDebug Value="True"/>
-              <DebugInfoType Value="dsDwarf3"/>
+              <DebugInfoType Value="dsStabs"/>
               <UseExternalDbgSyms Value="True"/>
             </Debugging>
             <LinkSmart Value="True"/>
