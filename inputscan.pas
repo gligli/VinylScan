@@ -49,8 +49,6 @@ type
     procedure LoadPNG;
     procedure FindTrack;
 
-    procedure Run;
-
     function InRangePointD(Y, X: Double): Boolean;
     function GetPointD(Y, X: Double; Source: TInterpSource): Double;
 
@@ -134,7 +132,7 @@ begin
     sn := FSinCosLUT[t].Y;
 
     if cs <= 0 then cs *= 0.99;
-    if sn >= 0 then sn *= 0.89;
+    if sn >= 0 then sn *= 0.87;
 
     pos := 0;
     repeat
@@ -187,7 +185,7 @@ begin
   x[1] := FCenter.Y;
 
   if (x[0] <> rOut) and (x[1] <> rOut) then
-    BFGSMinimize(@GradientEvalCenter, x, 1e-6);
+    FCenterQuality := -BFGSMinimize(@GradientEvalCenter, x, 1e-6);
 
   FCenter.X := x[0];
   FCenter.Y := x[1];
@@ -453,15 +451,9 @@ begin
   end;
 end;
 
-procedure TInputScan.Run;
-begin
-  LoadPNG;
-  FindTrack;
-end;
-
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
 begin
-  Result := InRange(Y, 2, Height - 3) and InRange(X, 2, Width - 3);
+  Result := InRange(Y, 1, Height - 2) and InRange(X, 1, Width - 2);
 end;
 
 { TScanImage }

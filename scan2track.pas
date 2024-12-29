@@ -31,7 +31,6 @@ type
 
     FTrack: TIntegerDynArray;
 
-    function EvalTrackGR(x: Double; Data: Pointer): Double;
   public
     constructor Create(ASampleRate: Integer = 48000; ABitsPerSample: Integer = 16; ADPI: Integer = 2400);
     destructor Destroy; override;
@@ -72,18 +71,6 @@ begin
   FScan.Free;
 
   inherited Destroy;
-end;
-
-function TScan2Track.EvalTrackGR(x: Double; Data: Pointer): Double;
-var
-  ismp, aboveCnt: Integer;
-begin
-  aboveCnt := 0;
-  for ismp := -CSampleDecoderMultiMax-1 to CSampleDecoderMultiMax do
-   if PDouble(data)[ismp] >= x then
-     Inc(aboveCnt);
-
-  Result := aboveCnt;
 end;
 
 procedure TScan2Track.EvalTrack;
@@ -156,9 +143,10 @@ var
 
 var
   angle, radius, sn, cs, px, py, feedback, fbRatio, fsmp, ffSmp: Double;
-  pos: Integer;
+  iSample, iLut: Integer;
   pbuf: TPointFList;
   t, pt: QWord;
+  sinCosLut: TPointDDynArray;
 begin
   WriteLn('EvalTrack');
 
@@ -170,28 +158,36 @@ begin
     fltSamples.SampleRate := FSampleRate;
     fltSamples.Order := 4;
 
-    pos := 0;
     pt := GetTickCount64;
 
-    angle := Scan.GrooveStartAngle;
-    radius := Scan.FirstGrooveRadius;
-    fbRatio := (CLowCutoffFreq * 2.0 / FSampleRate) / sqrt(0.1024 + sqr(CLowCutoffFreq * 2.0 / FSampleRate));
+    fbRatio := CutoffToFeedback(CLowCutoffFreq, FSampleRate);
+    BuildSinCosLUT(FPointsPerRevolution, sinCosLut, Scan.GrooveStartAngle, -2.0 * Pi);
 
+    iSample := 0;
+    iLut := 0;
+    radius := Scan.FirstGrooveRadius;
     repeat
+      angle := Scan.GrooveStartAngle - FRadiansPerRevolutionPoint * iLut;
+
       fsmp := DecodeSample(radius, angle, feedback);
       ffSmp := fltSamples.FilterFilter(fsmp);
-      StoreSample(ffSmp, pos);
+      StoreSample(ffSmp, iSample);
 
+      radius -= C45RpmMaxGrooveWidth * Scan.DPI / FPointsPerRevolution;
       radius += feedback * fbRatio;
-      angle := Scan.GrooveStartAngle - FRadiansPerRevolutionPoint * pos;
 
-      //WriteLn(feedback:9:6);
-      SinCos(angle, sn, cs);
+      cs := sinCosLut[iLut].X;
+      sn := sinCosLut[iLut].Y;
+
       px := cs * radius + Scan.Center.X;
       py := sn * radius + Scan.Center.Y;
       pbuf.Add(TPointF.Create(px, py));
 
-      Inc(pos);
+      Inc(iSample);
+
+      Inc(iLut);
+      if iLut >= FPointsPerRevolution then
+        iLut := 0;
 
 ////////////////////////
       t := GetTickCount64;
@@ -199,8 +195,8 @@ begin
       begin
         main.MainForm.DrawPoints(pbuf, clLime);
 
-        SetLength(samples, pos);
-        CreateWAV(1, FBitsPerSample, FSampleRate, FOutputWAVFileName, samples);
+        SetLength(samples, iSample);
+        CreateWAV(1, 16, FSampleRate, FOutputWAVFileName, samples);
 
         pbuf.Clear;
 
@@ -210,8 +206,8 @@ begin
 
     until not InRange(radius, Scan.ConcentricGrooveRadius, C45RpmOuterSize * 0.5 * Scan.DPI);
 
-    SetLength(samples, pos);
-    CreateWAV(1, FBitsPerSample, FSampleRate, FOutputWAVFileName, samples);
+    SetLength(samples, iSample);
+    CreateWAV(1, 16, FSampleRate, FOutputWAVFileName, samples);
   finally
     pbuf.Free;
     fltSamples.Free;
@@ -222,7 +218,8 @@ end;
 
 procedure TScan2Track.Run;
 begin
-  Scan.Run;
+  Scan.LoadPNG;
+  Scan.FindTrack;
   EvalTrack;
 end;
 

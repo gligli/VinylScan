@@ -143,7 +143,8 @@ procedure TScanCorrelator.LoadPNGs;
 
   procedure DoOne(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   begin
-    FInputScans[AIndex].Run;
+    FInputScans[AIndex].LoadPNG;
+    FInputScans[AIndex].FindTrack;
     WriteLn(FInputScans[AIndex].PNGFileName);
   end;
 
