@@ -102,7 +102,7 @@ var
         ismpmulti := ismp * CSampleDecoderMulti + imulti;
 
         if Scan.InRangePointD(py, px) then
-          smpBuf[ismpmulti] := Scan.GetPointD(py, px, isImage)
+          smpBuf[ismpmulti] := Scan.GetPointD(py, px, isImage, False)
         else
           smpBuf[ismpmulti] := 0.0;
       end;
@@ -160,7 +160,7 @@ begin
 
     pt := GetTickCount64;
 
-    fbRatio := CutoffToFeedback(CLowCutoffFreq, FSampleRate);
+    fbRatio := CutoffToFeedbackRatio(CLowCutoffFreq, FSampleRate);
     BuildSinCosLUT(FPointsPerRevolution, sinCosLut, Scan.GrooveStartAngle, -2.0 * Pi);
 
     iSample := 0;

@@ -99,7 +99,7 @@ const
   CCorrectArea2Begin = C45RpmFirstMusicGroove - (C45RpmOuterSize - C45RpmFirstMusicGroove) * 0.5;
   CCorrectArea2End = C45RpmOuterSize;
   CCorrectAreaWidth = (CCorrectArea1End - CCorrectArea1Begin) * 0.5 + (CCorrectArea2End - CCorrectArea2Begin) * 0.5;
-  CCorrectAreaGroovesPerInch = 1200;
+  CCorrectAreaGroovesPerInch = 300;
 
   CCropAreaGroovesPerInch = 16;
 
@@ -204,12 +204,12 @@ var
         px := cx + cs * iRadius;
         py := cy + sn * iRadius;
         if scn.InRangePointD(py, px) then
-          arr[Result + 0] := scn.GetPointD(py, px, isImage);
+          arr[Result + 0] := scn.GetPointD(py, px, isImage, False);
 
         px := cx - cs * iRadius;
         py := cy - sn * iRadius;
         if scn.InRangePointD(py, px) then
-          arr[Result + 1] := scn.GetPointD(py, px, isImage);
+          arr[Result + 1] := scn.GetPointD(py, px, isImage, False);
 
         Inc(Result, 2);
       end;
@@ -320,14 +320,14 @@ var
 
       if FInputScans[AIndex].InRangePointD(py, px) then
       begin
-        p := FInputScans[AIndex].GetPointD(py, px, isImage);
+        p := FInputScans[AIndex].GetPointD(py, px, isImage, False);
 
         imgData[AIndex, i] := p;
 
         if (AIndex > 0) and Assigned(grad) then
         begin
-          gimgx := FInputScans[AIndex].GetPointD(py, px, isXGradient);
-          gimgy := FInputScans[AIndex].GetPointD(py, px, isYGradient);
+          gimgx := FInputScans[AIndex].GetPointD(py, px, isXGradient, False);
+          gimgy := FInputScans[AIndex].GetPointD(py, px, isYGradient, False);
 
           gr := rri;
 
@@ -527,12 +527,12 @@ begin
 
         if FInputScans[iscan].InRangePointD(py, px) then
         begin
-          imgData[idata, ilut] := FInputScans[iscan].GetPointD(py, px, isImage);
+          imgData[idata, ilut] := FInputScans[iscan].GetPointD(py, px, isImage, True);
 
           if (idata > 0) and Assigned(grad) then
           begin
-            gimgx := FInputScans[iscan].GetPointD(py, px, isXGradient);
-            gimgy := FInputScans[iscan].GetPointD(py, px, isYGradient);
+            gimgx := FInputScans[iscan].GetPointD(py, px, isXGradient, True);
+            gimgy := FInputScans[iscan].GetPointD(py, px, isYGradient, True);
 
             ga := gimgx * cs + gimgy * sn;
             gr := r;
@@ -656,8 +656,9 @@ function TScanCorrelator.PowellCrop(const x: TVector; obj: Pointer): TScalar;
 var
   inputIdx: PtrInt absolute obj;
   rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy, t, ri, rri, sn, cs, bt, px, py, p: Double;
-  pos, arrPos: Integer;
+  iLut, pos, arrPos: Integer;
   stdDevArr: TDoubleDynArray;
+  sinCosLUT: TPointDDynArray;
 begin
   Result := 1000.0;
 
@@ -680,12 +681,16 @@ begin
 
   ri := (rEnd - rBeg) / (CCropAreaGroovesPerInch * (FPointsPerRevolution - 1));
 
+  BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
+
+  iLut := 0;
   pos := 0;
   arrPos := 0;
   repeat
-    bt := AngleTo02Pi(FRadiansPerRevolutionPoint * pos + t);
+    bt := AngleTo02Pi(FRadiansPerRevolutionPoint * iLut + t);
 
-    SinCos(bt, sn, cs);
+    cs := sinCosLUT[iLut].X;
+    sn := sinCosLUT[iLut].Y;
 
     rri := rBeg + ri * pos;
 
@@ -697,10 +702,14 @@ begin
     if FInputScans[inputIdx].InRangePointD(py, px) and
         not In02PiExtentsAngle(bt, a0a, a0b) and not In02PiExtentsAngle(bt, a1a, a1b) then
     begin
-      p := FInputScans[inputIdx].GetPointD(py, px, isImage);
+      p := FInputScans[inputIdx].GetPointD(py, px, isImage, False);
       stdDevArr[arrPos] := p;
       Inc(arrPos);
     end;
+
+    Inc(iLut);
+    if iLut >= FPointsPerRevolution then
+      iLut := 0;
 
     Inc(pos);
   until rri >= rEnd;
@@ -819,7 +828,7 @@ var
                not In02PiExtentsAngle(ct, FPerSnanCrops[i, 2], FPerSnanCrops[i, 3]) or
                (r < rLbl)) then
           begin
-            acc += FInputScans[i].GetPointD(py, px, isImage);
+            acc += FInputScans[i].GetPointD(py, px, isImage, False);
             Inc(cnt);
             if not FRebuildBlended then
               Break;

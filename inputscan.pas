@@ -28,6 +28,7 @@ type
     FGrooveStartAngle: Double;
     FGrooveStartPoint: TPointD;
 
+    FImageTruncMin, FImageTruncMax: Word;
     FCenterQuality: Double;
 
     FImage: TWordDynArray2;
@@ -42,6 +43,7 @@ type
     procedure FindCenter;
     procedure FindConcentricGroove;
     procedure FindGrooveStart;
+    procedure ComputeStats;
   public
     constructor Create(APointsPerRevolution: Integer = 36000; ADPI: Integer = 2400; ASilent: Boolean = False);
     destructor Destroy; override;
@@ -49,8 +51,8 @@ type
     procedure LoadPNG;
     procedure FindTrack;
 
-    function InRangePointD(Y, X: Double): Boolean;
-    function GetPointD(Y, X: Double; Source: TInterpSource): Double;
+    function InRangePointD(Y, X: Double): Boolean; inline;
+    function GetPointD(Y, X: Double; Source: TInterpSource; Truncate: Boolean): Double; inline;
 
     property PNGFileName: String read FPNGFileName write FPNGFileName;
     property PNGShortName: String read GetPNGShortName;
@@ -143,11 +145,11 @@ begin
 
       if InRangePointD(y, x) then
       begin
-        func -= GetPointD(y, x, isImage);
+        func -= GetPointD(y, x, isImage, False);
         if Assigned(grad) then
         begin
-          grad[0] -= GetPointD(y, x, isXGradient);
-          grad[1] -= GetPointD(y, x, isYGradient);
+          grad[0] -= GetPointD(y, x, isXGradient, False);
+          grad[1] -= GetPointD(y, x, isYGradient, False);
         end;
         Inc(cnt);
       end;
@@ -217,12 +219,12 @@ begin
 
       if InRangePointD(y, x) then
       begin
-        func += GetPointD(y, x, isImage) * CRadiusYFactors[vs];
+        func += GetPointD(y, x, isImage, True) * CRadiusYFactors[vs];
 
         if Assigned(grad) then
         begin
-          gimgx := GetPointD(y, x, isXGradient);
-          gimgy := GetPointD(y, x, isYGradient);
+          gimgx := GetPointD(y, x, isXGradient, True);
+          gimgy := GetPointD(y, x, isYGradient, True);
 
           grad[0] += (gimgx * cs + gimgy * sn) * CRadiusYFactors[vs];
           grad[1] += gimgx * CRadiusYFactors[vs];
@@ -298,7 +300,7 @@ begin
 
     if InRangePointD(y, x) then
     begin
-      v := v * 0.99 + GetPointD(y, x, isImage) * 0.01;
+      v := v * 0.99 + GetPointD(y, x, isImage, True) * 0.01;
 
       if v > best then
       begin
@@ -322,7 +324,7 @@ begin
   Result := Length(FImage);
 end;
 
-function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource): Double; inline;
+function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource; Truncate: Boolean): Double;
 
   function GetPt(AY, AX: Double): Double; inline;
   var
@@ -338,6 +340,9 @@ function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource): Double; inli
     y3 := herp(FImage[iy + 2, ix - 1], FImage[iy + 2, ix + 0], FImage[iy + 2, ix + 1], FImage[iy + 2, ix + 2], AX - ix);
 
     Result := herp(y0, y1, y2, y3, AY - iy);
+
+    if Truncate then
+      Result := EnsureRange(Result, FImageTruncMin, FImageTruncMax);
 
     Result *= (1.0 / High(Word));
   end;
@@ -432,6 +437,49 @@ begin
   end;
 end;
 
+procedure TInputScan.ComputeStats;
+var
+  x, y, cnt, mn, sd: Integer;
+  r, rEnd, rBeg: Single;
+  acc: UInt64;
+begin
+  rBeg := C45RpmLastMusicGroove * 0.5 * FDPI;
+  rEnd := C45RpmFirstMusicGroove * 0.5 * FDPI;
+
+  acc := 0;
+  cnt := 0;
+  for y := 0 to Height - 1 do
+    for x := 0 to Width - 1 do
+    begin
+      r := Sqrt(Sqr(y - FCenter.Y) + Sqr(x - FCenter.X));
+
+      if InRange(r, rBeg, rEnd) then
+      begin
+        acc += FImage[y, x];
+        Inc(cnt);
+      end;
+    end;
+
+  mn := round(acc / cnt);
+
+
+  acc := 0;
+  for y := 0 to Height - 1 do
+    for x := 0 to Width - 1 do
+    begin
+      r := Sqrt(Sqr(y - FCenter.Y) + Sqr(x - FCenter.X));
+
+      if InRange(r, rBeg, rEnd) then
+        acc += Sqr(FImage[y, x] - mn);
+    end;
+
+  sd := round(Sqrt(acc / cnt));
+
+
+  FImageTruncMin := Round(mn - 1.0 * sd);
+  FImageTruncMax := Round(mn + 4.0 * sd);
+end;
+
 procedure TInputScan.FindTrack;
 begin
   if not FSilent then WriteLn('FindTrack');
@@ -439,12 +487,14 @@ begin
   FFirstGrooveRadius := C45RpmFirstMusicGroove * Self.FDPI * 0.5;
 
   FindCenter;
+  ComputeStats;
   FindConcentricGroove;
   FindGrooveStart;
 
   if not FSilent then
   begin
     WriteLn('Center:', FCenter.X:12:3, ',', FCenter.Y:12:3);
+    WriteLn('TruncMin:', FImageTruncMin:6, ', TruncMax:', FImageTruncMax:6);
     WriteLn('FirstGrooveRadius:', FFirstGrooveRadius:12:3);
     WriteLn('ConcentricGrooveRadius:', FConcentricGrooveRadius:12:3);
     WriteLn('GrooveStartPoint:', FGrooveStartPoint.X:12:3, ',', FGrooveStartPoint.Y:12:3);

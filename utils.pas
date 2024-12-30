@@ -135,7 +135,7 @@ function AngleTo02Pi(x: Double): Double;
 function In02PiExtentsAngle(x, xmin, xmax: Double): Boolean;
 
 procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TPointDDynArray; AOriginAngle: Double = 0.0; AExtentsAngle: Double = 2.0 * Pi);
-function CutoffToFeedback(Cutoff: Double; SampleRate: Integer): Double;
+function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray); overload;
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TDoubleDynArray); overload;
@@ -594,7 +594,7 @@ begin
     SinCos(AOriginAngle + i * rprp, ASinCosLUT[i].Y, ASinCosLUT[i].X);
 end;
 
-function CutoffToFeedback(Cutoff: Double; SampleRate: Integer): Double;
+function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
 begin
   Result := (Cutoff * 2.0 / SampleRate) / sqrt(0.1024 + sqr(Cutoff * 2.0 / SampleRate));
 end;
