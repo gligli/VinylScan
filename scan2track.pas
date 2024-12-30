@@ -13,7 +13,6 @@ const
   CSampleDecoderMulti = 4;
 
   CSampleDecoderMax = (1 shl (CSampleDecoderBits - 1)) - 1;
-  CSampleDecoderMultiMax = CSampleDecoderMulti * (1 shl (CSampleDecoderBits - 1)) - 1;
 
 type
 
@@ -80,9 +79,9 @@ var
 
   function DecodeSample(radius, angle: Double; out feedback: Double): Double;
   var
-    imulti, ismp, ismpmulti, upCnt, upAcc: Integer;
+    imulti, ismp, upCnt, upAcc: Integer;
     r, px, py, middleSmp, stdDev, upLimit, cxa, cma, sn, cs: Double;
-    smpBuf: array[-CSampleDecoderMultiMax-1 .. CSampleDecoderMultiMax] of Double;
+    smpBuf: array[-CSampleDecoderMax-1 .. CSampleDecoderMax] of Double;
   begin
     cxa := C45RpmMaxGrooveWidth * Scan.DPI / CSampleDecoderMax;
     cma := FRadiansPerRevolutionPoint / CSampleDecoderMulti;
@@ -99,33 +98,32 @@ var
         px := cs * r + Scan.Center.X;
         py := sn * r + Scan.Center.Y;
 
-        ismpmulti := ismp * CSampleDecoderMulti + imulti;
-
         if Scan.InRangePointD(py, px) then
-          smpBuf[ismpmulti] := Scan.GetPointD(py, px, isImage, False)
+          smpBuf[ismp] := Scan.GetPointD(py, px, isImage, False)
         else
-          smpBuf[ismpmulti] := 0.0;
+          smpBuf[ismp] := 0.0;
       end;
+
+      MeanAndStdDev(smpBuf, middleSmp, stdDev);
+
+      upLimit := middleSmp + stdDev;
+
+      //middleSmp := Mean(smpBuf);
+      //middleSmp := (MinValue(smpBuf) + MaxValue(smpBuf)) * 0.5;
+
+      upAcc := 0;
+      upCnt := 0;
+      for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
+        if InRange(smpBuf[ismp], middleSmp, upLimit) then
+        begin
+          upAcc += ismp;
+          Inc(upCnt);
+        end;
+
+      Result += DivDef(upAcc, CSampleDecoderMax * upCnt, 0.0);
     end;
 
-    MeanAndStdDev(smpBuf, middleSmp, stdDev);
-
-    upLimit := middleSmp + stdDev;
-
-    //middleSmp := Mean(smpBuf);
-    //middleSmp := (MinValue(smpBuf) + MaxValue(smpBuf)) * 0.5;
-    //middleSmp := GoldenRatioSearch(@EvalTrackGR, MaxValue(smpBuf), MinValue(smpBuf), Length(smpBuf) div 4, 1e-6, 0.5, @smpBuf[0]);
-
-    upAcc := 0;
-    upCnt := 0;
-    for ismp := -CSampleDecoderMultiMax-1 to CSampleDecoderMultiMax do
-      if InRange(smpBuf[ismp], middleSmp, upLimit) then
-      begin
-        upAcc += ismp;
-        Inc(upCnt);
-      end;
-
-    Result := DivDef(upAcc, CSampleDecoderMultiMax * upCnt, 0.0);
+    Result *= (1.0 / CSampleDecoderMulti);
 
     feedback := Result * C45RpmMaxGrooveWidth * Scan.DPI;
   end;
@@ -160,7 +158,7 @@ begin
 
     pt := GetTickCount64;
 
-    fbRatio := CutoffToFeedbackRatio(CLowCutoffFreq, FSampleRate);
+    fbRatio := CutoffToFeedbackRatio(CLowCutoffFreq, FSampleRate) * 2.0;
     BuildSinCosLUT(FPointsPerRevolution, sinCosLut, Scan.GrooveStartAngle, -2.0 * Pi);
 
     iSample := 0;
