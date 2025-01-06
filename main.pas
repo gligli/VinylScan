@@ -43,7 +43,7 @@ type
     procedure btTestClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
   private
-    FReducShift: Byte;
+    FReducRatio: Integer;
     FReducFactor: Double;
   public
     procedure SetReduc(AImageWidth, AImageHeight: Integer);
@@ -253,8 +253,8 @@ end;
 
 procedure TMainForm.SetReduc(AImageWidth, AImageHeight: Integer);
 begin
-  FReducShift := Floor(Log2(AImageWidth / Width));
-  FReducFactor := 1.0 / (1 shl FReducShift);
+  FReducRatio := Floor(AImageWidth / Width);
+  FReducFactor := 1.0 / FReducRatio;
 end;
 
 procedure TMainForm.DrawExtents(AScan: TInputScan);
@@ -272,12 +272,12 @@ begin
   cy := Round(AScan.Center.Y * FReducFactor);
   sx := Round(AScan.GrooveStartPoint.X * FReducFactor);
   sy := Round(AScan.GrooveStartPoint.Y * FReducFactor);
-  rfx := Round(AScan.FirstGrooveRadius) shr FReducShift;
-  rfy := Round(AScan.FirstGrooveRadius) shr FReducShift;
-  rcx := Round(AScan.ConcentricGrooveRadius) shr FReducShift;
-  rcy := Round(AScan.ConcentricGrooveRadius) shr FReducShift;
-  rax := Round(C45RpmAdapterSize * 0.5 * AScan.DPI) shr FReducShift;
-  ray := Round(C45RpmAdapterSize * 0.5 * AScan.DPI) shr FReducShift;
+  rfx := Round(AScan.FirstGrooveRadius) div FReducRatio;
+  rfy := Round(AScan.FirstGrooveRadius) div FReducRatio;
+  rcx := Round(AScan.ConcentricGrooveRadius) div FReducRatio;
+  rcy := Round(AScan.ConcentricGrooveRadius) div FReducRatio;
+  rax := Round(C45RpmAdapterSize * 0.5 * AScan.DPI) div FReducRatio;
+  ray := Round(C45RpmAdapterSize * 0.5 * AScan.DPI) div FReducRatio;
 
   C.Line(cx - 8, cy, cx + 9, cy);
   C.Line(cx, cy - 8, cx, cy + 9);
@@ -305,8 +305,8 @@ begin
   SetReduc(Length(Img[0]), Length(Img));
 
   Image.Picture.Bitmap.PixelFormat := pf32bit;
-  Image.Picture.Bitmap.Width := Length(Img[0]) shr FReducShift;
-  Image.Picture.Bitmap.Height := Length(Img) shr FReducShift;
+  Image.Picture.Bitmap.Width := Length(Img[0]) div FReducRatio;
+  Image.Picture.Bitmap.Height := Length(Img) div FReducRatio;
 
   Image.Picture.Bitmap.BeginUpdate;
   try
@@ -316,11 +316,11 @@ begin
       for x := 0 to Image.Picture.Bitmap.Width - 1 do
       begin
         acc  := 0;
-        for iy := 0 to (1 shl FReducShift) - 1 do
-          for ix := 0 to (1 shl FReducShift) - 1 do
-            acc += Img[(y shl FReducShift) + iy, (x shl FReducShift) + ix];
+        for iy := 0 to FReducRatio - 1 do
+          for ix := 0 to FReducRatio - 1 do
+            acc += Img[(y * FReducRatio) + iy, (x * FReducRatio) + ix];
 
-        b := EnsureRange(Round(acc * (High(Byte)  / (High(Word) shl (FReducShift * 2)))), 0, High(Byte));
+        b := EnsureRange(Round(acc * (High(Byte)  / (High(Word) * Sqr(FReducRatio)))), 0, High(Byte));
 
         sc^ := ToRGB(b, b, b);
 
@@ -343,8 +343,8 @@ begin
   try
     for i := 0 to APoints.Count - 1 do
     begin
-      sc := Image.Picture.Bitmap.ScanLine[round(APoints[i].Y) shr FReducShift];
-      Inc(sc, round(APoints[i].X) shr FReducShift);
+      sc := Image.Picture.Bitmap.ScanLine[round(APoints[i].Y) div FReducRatio];
+      Inc(sc, round(APoints[i].X) div FReducRatio);
       sc^ := SwapRB(AColor);
     end;
   finally
