@@ -94,9 +94,9 @@ const
   CAnalyzeAreaGroovesPerInch = 32;
 
   CCorrectAngleCount = 8;
-  CCorrectArea1Begin = C45RpmLabelOuterSize - (C45RpmLastMusicGroove - C45RpmLabelOuterSize) * 0.5;
+  CCorrectArea1Begin = C45RpmInnerSize;
   CCorrectArea1End = C45RpmLastMusicGroove;
-  CCorrectArea2Begin = C45RpmFirstMusicGroove - (C45RpmOuterSize - C45RpmFirstMusicGroove) * 0.5;
+  CCorrectArea2Begin = C45RpmFirstMusicGroove;
   CCorrectArea2End = C45RpmOuterSize;
   CCorrectAreaWidth = (CCorrectArea1End - CCorrectArea1Begin) * 0.5 + (CCorrectArea2End - CCorrectArea2Begin) * 0.5;
   CCorrectAreaGroovesPerInch = 300;
@@ -204,12 +204,12 @@ var
         px := cx + cs * iRadius;
         py := cy + sn * iRadius;
         if scn.InRangePointD(py, px) then
-          arr[Result + 0] := scn.GetPointD(py, px, isImage, False);
+          arr[Result + 0] := scn.GetPointD(py, px, isImage);
 
         px := cx - cs * iRadius;
         py := cy - sn * iRadius;
         if scn.InRangePointD(py, px) then
-          arr[Result + 1] := scn.GetPointD(py, px, isImage, False);
+          arr[Result + 1] := scn.GetPointD(py, px, isImage);
 
         Inc(Result, 2);
       end;
@@ -320,14 +320,14 @@ var
 
       if FInputScans[AIndex].InRangePointD(py, px) then
       begin
-        p := FInputScans[AIndex].GetPointD(py, px, isImage, False);
+        p := FInputScans[AIndex].GetPointD(py, px, isImage);
 
         imgData[AIndex, i] := p;
 
         if (AIndex > 0) and Assigned(grad) then
         begin
-          gimgx := FInputScans[AIndex].GetPointD(py, px, isXGradient, False);
-          gimgy := FInputScans[AIndex].GetPointD(py, px, isYGradient, False);
+          gimgx := FInputScans[AIndex].GetPointD(py, px, isXGradient);
+          gimgy := FInputScans[AIndex].GetPointD(py, px, isYGradient);
 
           gr := rri;
 
@@ -449,7 +449,7 @@ var
   imgData: TDoubleDynArray2;
   gradData: TDoubleDynArray2;
   idata, iscan, ilut, radiusCnt, angleCnt: Integer;
-  r, ri, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, ga, gr, angle, startAngle, endAngle, angleInc, angleExtents: Double;
+  w, r, ri, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, ga, gr, angle, startAngle, endAngle, angleInc, angleExtents: Double;
   gint: TDoubleDynArray;
   scanIdx: array[0 .. 1] of Integer;
   sinCosLUT: array[0 .. 1] of TPointDDynArray;
@@ -468,7 +468,7 @@ begin
   scanIdx[1] := coords^.ScanIdx;
 
   angle := (coords^.AngleIdx / CCorrectAngleCount) * 2.0 * Pi;
-  angleExtents := 2.0 * Pi / CCorrectAngleCount * 0.5;
+  angleExtents := 2.0 * Pi / CCorrectAngleCount;
   startAngle := angle - angleExtents;
   endAngle := angle + angleExtents;
   angleInc := FRadiansPerRevolutionPoint;
@@ -527,14 +527,16 @@ begin
 
         if FInputScans[iscan].InRangePointD(py, px) then
         begin
-          imgData[idata, ilut] := FInputScans[iscan].GetPointD(py, px, isImage, True);
+          w := 2.0 - 4.0 * abs(ilut / angleCnt - 0.5);
+
+          imgData[idata, ilut] := FInputScans[iscan].GetPointD(py, px, isImage) * w;
 
           if (idata > 0) and Assigned(grad) then
           begin
-            gimgx := FInputScans[iscan].GetPointD(py, px, isXGradient, True);
-            gimgy := FInputScans[iscan].GetPointD(py, px, isYGradient, True);
+            gimgx := FInputScans[iscan].GetPointD(py, px, isXGradient);
+            gimgy := FInputScans[iscan].GetPointD(py, px, isYGradient);
 
-            ga := gimgx * cs + gimgy * sn;
+            ga := (gimgx * cs + gimgy * sn) * w;
             gr := r;
 
             gradData[0, ilut] := ga;
@@ -587,6 +589,9 @@ var
     iter: Integer;
     f, prevF: Double;
   begin
+    if not InRange(AIndex, 0, High(FPerAngleX)) then
+      Exit;
+
     coords.AngleIdx := AIndex mod CCorrectAngleCount;
     coords.ScanIdx := (AIndex div CCorrectAngleCount) mod High(FInputScans) + 1;
 
@@ -596,13 +601,12 @@ var
     repeat
       prevF := f;
 
-      case iter mod 3 of
+      case iter mod 2 of
         0:
-          f := ASAMinimize(@GradientCorrect, lx, [-0.03 * FOutputDPI, 0.99], [0.03 * FOutputDPI, 1.01], 1e-12, @coords);
+          f := BFGSMinimize(@GradientCorrect, lx, 1e-12, @coords);
+          //f := ASAMinimize(@GradientCorrect, lx, [-0.03 * FOutputDPI, 0.99], [0.03 * FOutputDPI, 1.01], 1e-12, @coords);
         1:
           f := PowellMinimize(@PowellCorrect, lx, 1.0, 1e-12, 0.0, MaxInt, @coords)[0];
-        2:
-          f := BFGSMinimize(@GradientCorrect, lx, 1e-12, @coords);
       end;
 
       f := Sqrt(f);
@@ -702,7 +706,7 @@ begin
     if FInputScans[inputIdx].InRangePointD(py, px) and
         not In02PiExtentsAngle(bt, a0a, a0b) and not In02PiExtentsAngle(bt, a1a, a1b) then
     begin
-      p := FInputScans[inputIdx].GetPointD(py, px, isImage, False);
+      p := FInputScans[inputIdx].GetPointD(py, px, isImage);
       stdDevArr[arrPos] := p;
       Inc(arrPos);
     end;
@@ -753,11 +757,11 @@ var
 
   procedure InterpolateX(tau: Double; scanIdx: Integer; var x: TVector);
   var
-    ci, i, x0, x1, x2, x3, so: Integer;
+    ci, i, x1, x2, so: Integer;
     c, alpha: Double;
-    y0, y1, y2, y3: TVector;
+    y1, y2: TVector;
   begin
-    if Length(FPerAngleX) = 0 then
+    if (Length(FPerAngleX) = 0) or (scanIdx <= 0) then
     begin
       x[0] := 0.0;
       x[1] := 1.0;
@@ -769,18 +773,14 @@ var
     alpha := c - ci;
     so := (scanIdx - 1) * CCorrectAngleCount;
 
-    x0 := (ci - 1 + CCorrectAngleCount) mod CCorrectAngleCount;
     x1 := (ci + 0 + CCorrectAngleCount) mod CCorrectAngleCount;
     x2 := (ci + 1 + CCorrectAngleCount) mod CCorrectAngleCount;
-    x3 := (ci + 2 + CCorrectAngleCount) mod CCorrectAngleCount;
 
-    y0 := FPerAngleX[x0 + so];
     y1 := FPerAngleX[x1 + so];
     y2 := FPerAngleX[x2 + so];
-    y3 := FPerAngleX[x3 + so];
 
     for i := 0 to High(x) do
-      x[i] := herp(y0[i], y1[i], y2[i], y3[i], alpha);
+      x[i] := lerp(y1[i], y2[i], alpha);
   end;
 
   procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
@@ -807,14 +807,9 @@ var
           cx := FInputScans[i].Center.X;
           cy := FInputScans[i].Center.Y;
 
-          skc := 0.0;
-          skm := 1.0;
-          if i > 0 then
-          begin
-            InterpolateX(bt, i, x);
-            skc := x[0];
-            skm := x[1];
-          end;
+          InterpolateX(bt, i, x);
+          skc := x[0];
+          skm := x[1];
 
           ct := AngleTo02Pi(bt + t);
           rsk := r * skm + skc;
@@ -828,7 +823,7 @@ var
                not In02PiExtentsAngle(ct, FPerSnanCrops[i, 2], FPerSnanCrops[i, 3]) or
                (r < rLbl)) then
           begin
-            acc += FInputScans[i].GetPointD(py, px, isImage, False);
+            acc += FInputScans[i].GetPointD(py, px, isImage);
             Inc(cnt);
             if not FRebuildBlended then
               Break;
