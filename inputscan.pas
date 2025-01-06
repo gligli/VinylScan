@@ -28,7 +28,6 @@ type
     FGrooveStartAngle: Double;
     FGrooveStartPoint: TPointD;
 
-    FImageTruncMin, FImageTruncMax: Word;
     FCenterQuality: Double;
 
     FImage: TWordDynArray2;
@@ -43,16 +42,15 @@ type
     procedure FindCenter;
     procedure FindConcentricGroove;
     procedure FindGrooveStart;
-    procedure ComputeStats;
   public
-    constructor Create(APointsPerRevolution: Integer = 36000; ADPI: Integer = 2400; ASilent: Boolean = False);
+    constructor Create(APointsPerRevolution: Integer = 36000; ADefaultDPI: Integer = 2400; ASilent: Boolean = False);
     destructor Destroy; override;
 
     procedure LoadPNG;
     procedure FindTrack;
 
     function InRangePointD(Y, X: Double): Boolean; inline;
-    function GetPointD(Y, X: Double; Source: TInterpSource; Truncate: Boolean): Double; inline;
+    function GetPointD(Y, X: Double; Source: TInterpSource): Double; inline;
 
     property PNGFileName: String read FPNGFileName write FPNGFileName;
     property PNGShortName: String read GetPNGShortName;
@@ -114,8 +112,8 @@ const
 
 procedure TInputScan.GradientEvalCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 var
-  t, pos, cnt: Integer;
-  r, x, y, radiusInner, radiusOuter, sn, cs: Double;
+  cnt, ix, iy, radiusOuter: Integer;
+  x, y: Double;
 begin
   func := 0;
   if Assigned(grad) then
@@ -124,47 +122,26 @@ begin
     grad[1] := 0;
   end;
 
-  radiusInner := CAreaBegin * FDPI * 0.5;
-  radiusOuter := CAreaEnd * FDPI * 0.5;
+  radiusOuter := Round(CAreaEnd * FDPI * 0.5);
 
-  cnt := 0;
-  for t := 0 to High(FSinCosLUT)  do
+  for iy := -radiusOuter to radiusOuter do
   begin
-    cs := FSinCosLUT[t].X;
-    sn := FSinCosLUT[t].Y;
+    y := iy + arg[1];
 
-    if cs <= 0 then cs *= 0.99;
-    if sn >= 0 then sn *= 0.87;
+    for ix := -radiusOuter to radiusOuter do
+    begin
+      x := ix + arg[0];
 
-    pos := 0;
-    repeat
-      r := radiusInner + pos;
-
-      x := cs * r + arg[0];
-      y := sn * r + arg[1];
-
-      if InRangePointD(y, x) then
+      if (Sqrt(Sqr(ix) + Sqr(iy)) <= radiusOuter) and  InRangePointD(y, x) then
       begin
-        func -= GetPointD(y, x, isImage, False);
+        func -= GetPointD(y, x, isImage);
         if Assigned(grad) then
         begin
-          grad[0] -= GetPointD(y, x, isXGradient, False);
-          grad[1] -= GetPointD(y, x, isYGradient, False);
+          grad[0] -= GetPointD(y, x, isXGradient);
+          grad[1] -= GetPointD(y, x, isYGradient);
         end;
         Inc(cnt);
       end;
-      Inc(pos);
-
-    until r >= radiusOuter;
-  end;
-
-  if cnt > 1 then
-  begin
-    func /= cnt;
-    if Assigned(grad) then
-    begin
-      grad[0] /= cnt;
-      grad[1] /= cnt;
     end;
   end;
 
@@ -174,13 +151,9 @@ end;
 procedure TInputScan.FindCenter;
 var
   x: TVector;
-  ppr: Integer;
   rOut: Double;
 begin
   rOut := C45RpmOuterSize * FDPI * 0.5;
-  ppr := round(CAreaEnd * FDPI * Pi);
-
-  BuildSinCosLUT(ppr, FSinCosLUT);
 
   SetLength(x, 2);
   x[0] := FCenter.X;
@@ -195,8 +168,8 @@ end;
 
 procedure TInputScan.GradientEvalConcentricGroove(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 var
-  t: Integer;
-  sn, cs, x, y, gimgx, gimgy: Double;
+  iradius, ilut, trackWidth: Integer;
+  radius, sn, cs, x, y, gimgx, gimgy: Double;
   vs: TValueSign;
 begin
   func := 0.0;
@@ -207,31 +180,36 @@ begin
     grad[2] := 0.0;
   end;
 
-  for t := 0 to FPointsPerRevolution - 1  do
+  trackWidth := Ceil(C45RpmMaxGrooveWidth * FDPI * 0.5);
+
+  for ilut := 0 to FPointsPerRevolution - 1  do
   begin
-    cs := FSinCosLUT[t].X;
-    sn := FSinCosLUT[t].Y;
+    cs := FSinCosLUT[ilut].X;
+    sn := FSinCosLUT[ilut].Y;
 
-    for vs := Low(TValueSign) to High(TValueSign) do
-    begin
-      x := cs * (arg[0] + CRadiusXOffsets[vs] * FDPI) + arg[1];
-      y := sn * (arg[0] + CRadiusXOffsets[vs] * FDPI) + arg[2];
-
-      if InRangePointD(y, x) then
+    for iradius := -trackWidth to trackWidth do
+      for vs := Low(TValueSign) to High(TValueSign) do
       begin
-        func += GetPointD(y, x, isImage, True) * CRadiusYFactors[vs];
+        radius := arg[0] + iradius + CRadiusXOffsets[vs] * FDPI;
 
-        if Assigned(grad) then
+        x := cs * radius + arg[1];
+        y := sn * radius + arg[2];
+
+        if InRangePointD(y, x) then
         begin
-          gimgx := GetPointD(y, x, isXGradient, True);
-          gimgy := GetPointD(y, x, isYGradient, True);
+          func += GetPointD(y, x, isImage) * CRadiusYFactors[vs];
 
-          grad[0] += (gimgx * cs + gimgy * sn) * CRadiusYFactors[vs];
-          grad[1] += gimgx * CRadiusYFactors[vs];
-          grad[2] += gimgy * CRadiusYFactors[vs];
+          if Assigned(grad) then
+          begin
+            gimgx := GetPointD(y, x, isXGradient) * CRadiusYFactors[vs];
+            gimgy := GetPointD(y, x, isYGradient) * CRadiusYFactors[vs];
+
+            grad[0] += (gimgx * cs + gimgy * sn);
+            grad[1] += gimgx;
+            grad[2] += gimgy;
+          end;
         end;
       end;
-    end;
   end;
 
   //WriteLn(arg[0]:12:3,arg[1]:12:3,arg[2]:12:3,func:12:3);
@@ -300,7 +278,7 @@ begin
 
     if InRangePointD(y, x) then
     begin
-      v := v * 0.99 + GetPointD(y, x, isImage, True) * 0.01;
+      v := v * 0.99 + GetPointD(y, x, isImage) * 0.01;
 
       if v > best then
       begin
@@ -324,9 +302,9 @@ begin
   Result := Length(FImage);
 end;
 
-function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource; Truncate: Boolean): Double;
+function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource): Double;
 
-  function GetPt(AY, AX: Double): Double; inline;
+  function GetPt(AY, AX: Single): Single; inline;
   var
     ix, iy: Integer;
     y0, y1, y2, y3: Single;
@@ -340,17 +318,13 @@ function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource; Truncate: Boo
     y3 := herp(FImage[iy + 2, ix - 1], FImage[iy + 2, ix + 0], FImage[iy + 2, ix + 1], FImage[iy + 2, ix + 2], AX - ix);
 
     Result := herp(y0, y1, y2, y3, AY - iy);
-
-    if Truncate then
-      Result := EnsureRange(Result, FImageTruncMin, FImageTruncMax);
-
-    Result *= (1.0 / High(Word));
   end;
 
 const
-  CH = 1e-5;
+  CH = 1.0;
 begin
   Result := 0;
+
   case Source of
     isImage:
     begin
@@ -375,6 +349,8 @@ begin
       Result += GetPt(Y + 3.0 * CH, X) * (1 / CH) * (1/60);
     end;
   end;
+
+  Result *= (1.0 / High(Word));
 end;
 
 function TInputScan.GetWidth: Integer;
@@ -382,9 +358,9 @@ begin
   Result := Length(FImage[0]);
 end;
 
-constructor TInputScan.Create(APointsPerRevolution: Integer; ADPI: Integer; ASilent: Boolean);
+constructor TInputScan.Create(APointsPerRevolution: Integer; ADefaultDPI: Integer; ASilent: Boolean);
 begin
-  FDPI := ADPI;
+  FDPI := ADefaultDPI;
   FPointsPerRevolution := APointsPerRevolution;
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
   FSilent := ASilent;
@@ -437,64 +413,19 @@ begin
   end;
 end;
 
-procedure TInputScan.ComputeStats;
-var
-  x, y, cnt, mn, sd: Integer;
-  r, rEnd, rBeg: Single;
-  acc: UInt64;
-begin
-  rBeg := C45RpmLastMusicGroove * 0.5 * FDPI;
-  rEnd := C45RpmFirstMusicGroove * 0.5 * FDPI;
-
-  acc := 0;
-  cnt := 0;
-  for y := 0 to Height - 1 do
-    for x := 0 to Width - 1 do
-    begin
-      r := Sqrt(Sqr(y - FCenter.Y) + Sqr(x - FCenter.X));
-
-      if InRange(r, rBeg, rEnd) then
-      begin
-        acc += FImage[y, x];
-        Inc(cnt);
-      end;
-    end;
-
-  mn := round(acc / cnt);
-
-
-  acc := 0;
-  for y := 0 to Height - 1 do
-    for x := 0 to Width - 1 do
-    begin
-      r := Sqrt(Sqr(y - FCenter.Y) + Sqr(x - FCenter.X));
-
-      if InRange(r, rBeg, rEnd) then
-        acc += Sqr(FImage[y, x] - mn);
-    end;
-
-  sd := round(Sqrt(acc / cnt));
-
-
-  FImageTruncMin := Round(mn - 1.0 * sd);
-  FImageTruncMax := Round(mn + 4.0 * sd);
-end;
-
 procedure TInputScan.FindTrack;
 begin
   if not FSilent then WriteLn('FindTrack');
 
-  FFirstGrooveRadius := C45RpmFirstMusicGroove * Self.FDPI * 0.5;
+  FFirstGrooveRadius := C45RpmFirstMusicGroove * FDPI * 0.5;
 
   FindCenter;
-  ComputeStats;
   FindConcentricGroove;
   FindGrooveStart;
 
   if not FSilent then
   begin
     WriteLn('Center:', FCenter.X:12:3, ',', FCenter.Y:12:3);
-    WriteLn('TruncMin:', FImageTruncMin:6, ', TruncMax:', FImageTruncMax:6);
     WriteLn('FirstGrooveRadius:', FFirstGrooveRadius:12:3);
     WriteLn('ConcentricGrooveRadius:', FConcentricGrooveRadius:12:3);
     WriteLn('GrooveStartPoint:', FGrooveStartPoint.X:12:3, ',', FGrooveStartPoint.Y:12:3);
@@ -503,7 +434,7 @@ end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
 begin
-  Result := InRange(Y, 1, Height - 2) and InRange(X, 1, Width - 2);
+  Result := InRange(Y, 4, Height - 6) and InRange(X, 4, Width - 6);
 end;
 
 { TScanImage }
