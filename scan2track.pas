@@ -99,7 +99,7 @@ var
         py := sn * r + Scan.Center.Y;
 
         if Scan.InRangePointD(py, px) then
-          smpBuf[ismp] := Scan.GetPointD(py, px, isImage, False)
+          smpBuf[ismp] := Scan.GetPointD(py, px, isImage)
         else
           smpBuf[ismp] := 0.0;
       end;

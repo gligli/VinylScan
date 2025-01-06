@@ -52,8 +52,8 @@ begin
   EvtHolder := TEvtHolder.Create;
   try
     RequireDerivedFormResource:=True;
- Application.Title := 'GliGli''s VinylScan';
- Application.Scaled := True;
+  Application.Title := 'GliGli''s VinylScan';
+  Application.Scaled := True;
     Application.Initialize;
     Application.CreateForm(TMainForm, MainForm);
     Application.OnException := @EvtHolder.AppException;

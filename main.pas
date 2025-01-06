@@ -7,10 +7,6 @@ interface
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, Types, scan2track, scancorrelator, utils, math, inputscan, FilterIIRLPBessel, FilterIIRHPBessel;
 
-const
-  CReducShift = 2;
-  CReducFactor = 1.0 / (1 shl CReducShift);
-
 type
 
   { TMainForm }
@@ -47,8 +43,10 @@ type
     procedure btTestClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
   private
-
+    FReducShift: Byte;
+    FReducFactor: Double;
   public
+    procedure SetReduc(AImageWidth, AImageHeight: Integer);
     procedure DrawExtents(AScan: TInputScan);
     procedure DrawImage(const Img: TWordDynArray2);
     procedure DrawPoints(const APoints: TPointFList; AColor: TColor);
@@ -253,6 +251,12 @@ begin
   Image.ControlStyle := Image.ControlStyle + [csOpaque];
 end;
 
+procedure TMainForm.SetReduc(AImageWidth, AImageHeight: Integer);
+begin
+  FReducShift := Floor(Log2(AImageWidth / Width));
+  FReducFactor := 1.0 / (1 shl FReducShift);
+end;
+
 procedure TMainForm.DrawExtents(AScan: TInputScan);
 var
   C: TCanvas;
@@ -264,16 +268,16 @@ begin
   C.Pen.Color := clRed;
   C.Pen.Style := psDot;
 
-  cx := Round(AScan.Center.X * CReducFactor);
-  cy := Round(AScan.Center.Y * CReducFactor);
-  sx := Round(AScan.GrooveStartPoint.X * CReducFactor);
-  sy := Round(AScan.GrooveStartPoint.Y * CReducFactor);
-  rfx := Round(AScan.FirstGrooveRadius) shr CReducShift;
-  rfy := Round(AScan.FirstGrooveRadius) shr CReducShift;
-  rcx := Round(AScan.ConcentricGrooveRadius) shr CReducShift;
-  rcy := Round(AScan.ConcentricGrooveRadius) shr CReducShift;
-  rax := Round(C45RpmAdapterSize * 0.5 * AScan.DPI) shr CReducShift;
-  ray := Round(C45RpmAdapterSize * 0.5 * AScan.DPI) shr CReducShift;
+  cx := Round(AScan.Center.X * FReducFactor);
+  cy := Round(AScan.Center.Y * FReducFactor);
+  sx := Round(AScan.GrooveStartPoint.X * FReducFactor);
+  sy := Round(AScan.GrooveStartPoint.Y * FReducFactor);
+  rfx := Round(AScan.FirstGrooveRadius) shr FReducShift;
+  rfy := Round(AScan.FirstGrooveRadius) shr FReducShift;
+  rcx := Round(AScan.ConcentricGrooveRadius) shr FReducShift;
+  rcy := Round(AScan.ConcentricGrooveRadius) shr FReducShift;
+  rax := Round(C45RpmAdapterSize * 0.5 * AScan.DPI) shr FReducShift;
+  ray := Round(C45RpmAdapterSize * 0.5 * AScan.DPI) shr FReducShift;
 
   C.Line(cx - 8, cy, cx + 9, cy);
   C.Line(cx, cy - 8, cx, cy + 9);
@@ -298,9 +302,11 @@ var
   b: Byte;
   acc: Integer;
 begin
+  SetReduc(Length(Img[0]), Length(Img));
+
   Image.Picture.Bitmap.PixelFormat := pf32bit;
-  Image.Picture.Bitmap.Width := Length(Img[0]) shr CReducShift;
-  Image.Picture.Bitmap.Height := Length(Img) shr CReducShift;
+  Image.Picture.Bitmap.Width := Length(Img[0]) shr FReducShift;
+  Image.Picture.Bitmap.Height := Length(Img) shr FReducShift;
 
   Image.Picture.Bitmap.BeginUpdate;
   try
@@ -310,11 +316,11 @@ begin
       for x := 0 to Image.Picture.Bitmap.Width - 1 do
       begin
         acc  := 0;
-        for iy := 0 to (1 shl CReducShift) - 1 do
-          for ix := 0 to (1 shl CReducShift) - 1 do
-            acc += Img[(y shl CReducShift) + iy, (x shl CReducShift) + ix];
+        for iy := 0 to (1 shl FReducShift) - 1 do
+          for ix := 0 to (1 shl FReducShift) - 1 do
+            acc += Img[(y shl FReducShift) + iy, (x shl FReducShift) + ix];
 
-        b := EnsureRange(Round(acc * (High(Byte)  / (High(Word) shl (CReducShift * 2)))), 0, High(Byte));
+        b := EnsureRange(Round(acc * (High(Byte)  / (High(Word) shl (FReducShift * 2)))), 0, High(Byte));
 
         sc^ := ToRGB(b, b, b);
 
@@ -337,8 +343,8 @@ begin
   try
     for i := 0 to APoints.Count - 1 do
     begin
-      sc := Image.Picture.Bitmap.ScanLine[round(APoints[i].Y) shr CReducShift];
-      Inc(sc, round(APoints[i].X) shr CReducShift);
+      sc := Image.Picture.Bitmap.ScanLine[round(APoints[i].Y) shr FReducShift];
+      Inc(sc, round(APoints[i].X) shr FReducShift);
       sc^ := SwapRB(AColor);
     end;
   finally
