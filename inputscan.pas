@@ -180,7 +180,7 @@ begin
     grad[2] := 0.0;
   end;
 
-  trackWidth := Ceil(C45RpmMaxGrooveWidth * FDPI * 0.5);
+  trackWidth := Floor(C45RpmMaxGrooveWidth * FDPI * 0.5);
 
   for ilut := 0 to FPointsPerRevolution - 1  do
   begin
