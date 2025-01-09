@@ -60,7 +60,7 @@
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir)"/>
             <OtherUnitFiles Value="alglib;LazFiltersIIR"/>
-            <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)-$(BuildMode)"/>
+            <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)-WPO"/>
           </SearchPaths>
           <Parsing>
             <Style Value="1"/>
@@ -100,7 +100,7 @@
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir)"/>
             <OtherUnitFiles Value="alglib;LazFiltersIIR"/>
-            <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)-$(BuildMode)"/>
+            <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)-WPO"/>
           </SearchPaths>
           <Parsing>
             <Style Value="1"/>
