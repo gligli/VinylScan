@@ -105,7 +105,7 @@ implementation
 const
   CAreaBegin = 0;
   CAreaEnd = (C45RpmInnerSize + C45RpmAdapterSize) * 0.5;
-  CRadiusXOffsets: array[TValueSign] of Double = (-C45RpmMaxGrooveWidth * 4, 0, C45RpmMaxGrooveWidth * 4);
+  CRadiusXOffsets: array[TValueSign] of Double = (-C45RpmMaxGrooveWidth, 0, C45RpmMaxGrooveWidth);
   CRadiusYFactors: array[TValueSign] of Double = (1, -2, 1);
 
 { TInputScan }
