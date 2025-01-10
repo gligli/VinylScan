@@ -799,7 +799,7 @@ procedure TScanCorrelator.Rebuild;
 const
   CTauToAngleIdx = CCorrectAngleCount / (2.0 * Pi);
 var
-  center, rBeg, rEnd, rLmg, rLbl: Double;
+  center, rBeg, rEnd, rLbl: Double;
 
   procedure InterpolateX(tau: Double; scanIdx: Integer; var x: TVector);
   var
@@ -819,8 +819,8 @@ var
     alpha := c - ci;
     so := (scanIdx - 1) * CCorrectAngleCount;
 
-    x1 := (ci + 0 + CCorrectAngleCount) mod CCorrectAngleCount;
-    x2 := (ci + 1 + CCorrectAngleCount) mod CCorrectAngleCount;
+    x1 := (ci + 0) mod CCorrectAngleCount;
+    x2 := (ci + 1) mod CCorrectAngleCount;
 
     y1 := FPerAngleX[x1 + so];
     y2 := FPerAngleX[x2 + so];
@@ -882,7 +882,7 @@ var
       end
       else
       begin
-        FOutputImage[AIndex, ox] := IfThen(r >= rLmg, Round(0.25 * High(Word)), Round(1.0 * High(Word)));
+        FOutputImage[AIndex, ox] := IfThen(r >= rLbl, Round(0.25 * High(Word)), Round(1.0 * High(Word)));
       end;
     end;
   end;
@@ -893,7 +893,6 @@ begin
   center := Length(FOutputImage) / 2.0;
   rBeg := C45RpmAdapterSize * 0.5 * FOutputDPI;
   rEnd := C45RpmOuterSize * 0.5 * FOutputDPI;
-  rLmg := C45RpmLastMusicGroove * 0.5 * FOutputDPI;
   rLbl := C45RpmLabelOuterSize * 0.5 * FOutputDPI;
 
   ProcThreadPool.DoParallelLocalProc(@DoY, 0, High(FOutputImage));

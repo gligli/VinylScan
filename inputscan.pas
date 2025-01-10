@@ -112,7 +112,7 @@ const
 
 procedure TInputScan.GradientEvalCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 var
-  cnt, ix, iy, radiusOuter: Integer;
+  ix, iy, radiusOuter: Integer;
   x, y: Double;
 begin
   func := 0;
@@ -140,7 +140,6 @@ begin
           grad[0] -= GetPointD(y, x, isXGradient);
           grad[1] -= GetPointD(y, x, isYGradient);
         end;
-        Inc(cnt);
       end;
     end;
   end;
