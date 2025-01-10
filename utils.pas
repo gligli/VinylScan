@@ -22,7 +22,7 @@ type
     L, T, R, B: Double;
   end;
 
-  TMinimizeMethod = (mmNone, mmBFGS, mmGradientDescent, mmPowell, mmAll);
+  TMinimizeMethod = (mmNone, mmBFGS, mmPowell, mmAll);
 
   TPointDDynArray = array of TPointD;
   TPointDDynArray2 = array of TPointDDynArray;

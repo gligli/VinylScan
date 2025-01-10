@@ -16,7 +16,6 @@ object MainForm: TMainForm
   Color = 4210752
   DoubleBuffered = False
   ParentDoubleBuffered = False
-  LCLVersion = '4.0.0.1'
   Scaled = False
   WindowState = wsMaximized
   OnCreate = FormCreate
@@ -93,19 +92,19 @@ object MainForm: TMainForm
       WordWrap = False
     end
     object btScansCorrelator: TButton
-      Left = 248
+      Left = 240
       Height = 25
       Top = 96
-      Width = 147
+      Width = 155
       Caption = 'Scans correlator'
       TabOrder = 13
       OnClick = btScansCorrelatorClick
     end
     object btScan2Track: TButton
-      Left = 248
+      Left = 240
       Height = 25
       Top = 151
-      Width = 147
+      Width = 155
       Caption = 'Scan to track'
       TabOrder = 14
       OnClick = btScan2TrackClick
@@ -123,11 +122,11 @@ object MainForm: TMainForm
       OnClick = btTestClick
     end
     object cbDPI: TComboBox
-      Left = 248
+      Left = 240
       Height = 23
       Hint = 'Default dots per inch'
       Top = 8
-      Width = 72
+      Width = 80
       ItemHeight = 15
       ItemIndex = 2
       Items.Strings = (
@@ -197,17 +196,16 @@ object MainForm: TMainForm
       Text = '48000'
     end
     object cbMethod: TComboBox
-      Left = 248
+      Left = 240
       Height = 23
       Hint = 'Optimisation method'
       Top = 32
-      Width = 147
+      Width = 155
       ItemHeight = 15
-      ItemIndex = 1
+      ItemIndex = 3
       Items.Strings = (
         'No optimization'
         'BFGS'
-        'Gradient descent'
         'Powell''s method'
         'BFGS + Powell''s method'
       )
@@ -215,10 +213,10 @@ object MainForm: TMainForm
       ShowHint = True
       Style = csDropDownList
       TabOrder = 10
-      Text = 'BFGS'
+      Text = 'BFGS + Powell''s method'
     end
     object chkCorrect: TCheckBox
-      Left = 248
+      Left = 240
       Height = 19
       Top = 56
       Width = 94
@@ -228,9 +226,9 @@ object MainForm: TMainForm
       TabOrder = 11
     end
     object chkBlend: TCheckBox
-      Left = 248
+      Left = 240
       Height = 19
-      Top = 72
+      Top = 74
       Width = 104
       Caption = 'Rebuild blended'
       TabOrder = 12

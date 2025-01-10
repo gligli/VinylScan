@@ -95,7 +95,7 @@ const
   CAnalyzeAreaWidth = (CAnalyzeAreaEnd - CAnalyzeAreaBegin) * 0.5;
   CAnalyzeAreaGroovesPerInch = 64;
 
-  CCorrectAngleCount = 8;
+  CCorrectAngleCount = 18;
   CCorrectArea1Begin = C45RpmInnerSize;
   CCorrectArea1End = C45RpmLastMusicGroove;
   CCorrectArea2Begin = C45RpmFirstMusicGroove;
@@ -111,7 +111,7 @@ var
 begin
   FOutputDPI := AOutputDPI;
   FObjective := NaN;
-  FMethod := mmGradientDescent;
+  FMethod := mmBFGS;
   SetLength(FInputScans, AFileNames.Count);
   SetLength(FPerSnanAngles, Length(FInputScans));
   SetLength(FPerSnanCrops, Length(FInputScans), 4);
@@ -418,10 +418,6 @@ begin
     begin
       Result := BFGSMinimize(@GradientAnalyze, x);
     end;
-    mmGradientDescent:
-    begin
-      Result := GradientDescentMinimize(@GradientAnalyze, x, 0.01, 1e-7);
-    end;
     mmPowell:
     begin
       Result := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-9, 1e-9, MaxInt, nil)[0];
@@ -501,7 +497,7 @@ begin
     r += ri;
 
     if (r >= rMid) and (r < rMid2) then
-      r := rMid2;
+      r += rMid2 - rMid;
 
   until r >= rEnd;
 
@@ -578,7 +574,7 @@ begin
           gimgx := FInputScans[iscan].GetPointD(py, px, isXGradient);
           gimgy := FInputScans[iscan].GetPointD(py, px, isYGradient);
 
-          ga := (gimgx * cs + gimgy * sn) * w;
+          ga := gimgx * cs + gimgy * sn;
           gr := r;
 
           ga *= -2.0 * mseInt;
@@ -586,6 +582,10 @@ begin
           grad[0] += ga;
           grad[1] += ga * gr;
         end;
+      end
+      else
+      begin
+        func += 1000.0;
       end;
 
       Inc(cnt);
@@ -596,7 +596,7 @@ begin
     r += ri;
 
     if (r >= rMid) and (r < rMid2) then
-      r := rMid2;
+      r += rMid2 - rMid;
 
   until r >= rEnd;
 
