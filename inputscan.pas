@@ -32,6 +32,7 @@ type
 
     FImage: TWordDynArray2;
 
+    procedure SetRevolutionFromDPI(ADPI: Integer);
     function GetPNGShortName: String;
     procedure GradientEvalConcentricGroove(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
     procedure GradientEvalCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
@@ -43,7 +44,7 @@ type
     procedure FindConcentricGroove;
     procedure FindGrooveStart;
   public
-    constructor Create(APointsPerRevolution: Integer = 36000; ADefaultDPI: Integer = 2400; ASilent: Boolean = False);
+    constructor Create(ADefaultDPI: Integer = 2400; ASilent: Boolean = False);
     destructor Destroy; override;
 
     procedure LoadPNG;
@@ -214,6 +215,12 @@ begin
   //WriteLn(arg[0]:12:3,arg[1]:12:3,arg[2]:12:3,func:12:3);
 end;
 
+procedure TInputScan.SetRevolutionFromDPI(ADPI: Integer);
+begin
+  FPointsPerRevolution := Ceil(Pi * C45RpmOuterSize * ADPI);
+  FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
+end;
+
 function TInputScan.GetPNGShortName: String;
 begin
   Result := ChangeFileExt(ExtractFileName(FPNGFileName), '');
@@ -357,13 +364,12 @@ begin
   Result := Length(FImage[0]);
 end;
 
-constructor TInputScan.Create(APointsPerRevolution: Integer; ADefaultDPI: Integer; ASilent: Boolean);
+constructor TInputScan.Create(ADefaultDPI: Integer; ASilent: Boolean);
 begin
   FDPI := ADefaultDPI;
-  FPointsPerRevolution := APointsPerRevolution;
-  FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
   FSilent := ASilent;
   FCenterQuality := NaN;
+  SetRevolutionFromDPI(FDPI);
 end;
 
 destructor TInputScan.Destroy;
@@ -405,6 +411,7 @@ begin
 
     FCenter.X := sz.X * 0.5;
     FCenter.Y := sz.Y * 0.5;
+    SetRevolutionFromDPI(FDPI);
 
   finally
     png.Free;

@@ -62,7 +62,7 @@ begin
   FPointsPerRevolution := Round(FSampleRate / C45RpmRevolutionsPerSecond);
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
 
-  FScan := TInputScan.Create(FPointsPerRevolution, ADPI);
+  FScan := TInputScan.Create(ADPI);
 end;
 
 destructor TScan2Track.Destroy;

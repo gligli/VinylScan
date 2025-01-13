@@ -95,7 +95,7 @@ const
   CAnalyzeAreaWidth = (CAnalyzeAreaEnd - CAnalyzeAreaBegin) * 0.5;
   CAnalyzeAreaGroovesPerInch = 64;
 
-  CCorrectAngleCount = 18;
+  CCorrectAngleCount = 8;
   CCorrectArea1Begin = C45RpmInnerSize;
   CCorrectArea1End = C45RpmLastMusicGroove;
   CCorrectArea2Begin = C45RpmFirstMusicGroove;
@@ -118,7 +118,7 @@ begin
 
   for i := 0 to AFileNames.Count - 1 do
   begin
-    FInputScans[i] := TInputScan.Create(36000, AOutputDPI, True);
+    FInputScans[i] := TInputScan.Create(AOutputDPI, True);
     FInputScans[i].PNGFileName := AFileNames[i];
   end;
 end;
@@ -641,9 +641,9 @@ var
 
       case iter mod 2 of
         0:
-          f := BFGSMinimize(@GradientCorrect, lx, 1e-6, @coords);
+          f := BFGSMinimize(@GradientCorrect, lx, 0.0, @coords);
         1:
-          f := PowellMinimize(@PowellCorrect, lx, 1.0, 1e-6, 0.0, MaxInt, @coords)[0];
+          f := PowellMinimize(@PowellCorrect, lx, 1.0, 0.0, 0.0, MaxInt, @coords)[0];
       end;
 
       f := Sqrt(f);
