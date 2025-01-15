@@ -83,7 +83,7 @@ var
     r, px, py, middleSmp, stdDev, upLimit, cxa, cma, sn, cs: Double;
     smpBuf: array[-CSampleDecoderMax-1 .. CSampleDecoderMax] of Double;
   begin
-    cxa := C45RpmMaxGrooveWidth * Scan.DPI / CSampleDecoderMax;
+    cxa := C45RpmRecordingGrooveWidth * Scan.DPI / CSampleDecoderMax;
     cma := FRadiansPerRevolutionPoint / CSampleDecoderMulti;
 
     Result := 0;
@@ -125,7 +125,7 @@ var
 
     Result *= (1.0 / CSampleDecoderMulti);
 
-    feedback := Result * C45RpmMaxGrooveWidth * Scan.DPI;
+    feedback := Result * C45RpmRecordingGrooveWidth * Scan.DPI;
   end;
 
   procedure StoreSample(fsmp: Double; pos: Integer);
@@ -171,7 +171,7 @@ begin
       ffSmp := fltSamples.FilterFilter(fsmp);
       StoreSample(ffSmp, iSample);
 
-      radius -= C45RpmMaxGrooveWidth * Scan.DPI / FPointsPerRevolution;
+      radius -= C45RpmRecordingGrooveWidth * Scan.DPI / FPointsPerRevolution;
       radius += feedback * fbRatio;
 
       cs := sinCosLut[iLut].X;

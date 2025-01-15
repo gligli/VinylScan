@@ -106,7 +106,7 @@ implementation
 const
   CAreaBegin = 0;
   CAreaEnd = (C45RpmInnerSize + C45RpmAdapterSize) * 0.5;
-  CRadiusXOffsets: array[TValueSign] of Double = (-C45RpmMaxGrooveWidth, 0, C45RpmMaxGrooveWidth);
+  CRadiusXOffsets: array[TValueSign] of Double = (-C45RpmLeadOutGrooveWidth, 0, C45RpmLeadOutGrooveWidth);
   CRadiusYFactors: array[TValueSign] of Double = (1, -2, 1);
 
 { TInputScan }
@@ -136,6 +136,7 @@ begin
       if (Sqrt(Sqr(ix) + Sqr(iy)) <= radiusOuter) and  InRangePointD(y, x) then
       begin
         func -= GetPointD(y, x, isImage);
+
         if Assigned(grad) then
         begin
           grad[0] -= GetPointD(y, x, isXGradient);
@@ -180,7 +181,7 @@ begin
     grad[2] := 0.0;
   end;
 
-  trackWidth := Floor(C45RpmMaxGrooveWidth * FDPI * 0.5);
+  trackWidth := Floor(C45RpmLeadOutGrooveWidth * FDPI * 0.5);
 
   for ilut := 0 to FPointsPerRevolution - 1  do
   begin
@@ -229,7 +230,7 @@ end;
 procedure TInputScan.FindConcentricGroove;
 var
   r, radiusInner, radiusOuter, radiusLimit: Integer;
-  f, best, bestr: Double;
+  f, f2, best, bestr: Double;
   xrc: TVector;
 begin
   BuildSinCosLUT(FPointsPerRevolution, FSinCosLUT);
@@ -258,10 +259,14 @@ begin
   end;
 
   xrc[0] := bestr;
-  FCenterQuality := -ASAMinimize(@GradientEvalConcentricGroove, xrc, [radiusInner, radiusLimit, radiusLimit], [radiusOuter, Width - radiusLimit, Height - radiusLimit]);
+  f := ASAMinimize(@GradientEvalConcentricGroove, xrc, [radiusInner, radiusLimit, radiusLimit], [radiusOuter, Width - radiusLimit, Height - radiusLimit]);
   FConcentricGrooveRadius := xrc[0];
   FCenter.X := xrc[1];
   FCenter.Y := xrc[2];
+
+  GradientEvalCenter([FCenter.X, FCenter.Y], f2, nil, nil);
+
+  FCenterQuality := -(5.0 * f + f2);
 end;
 
 procedure TInputScan.FindGrooveStart;
