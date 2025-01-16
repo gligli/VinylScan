@@ -291,7 +291,7 @@ begin
 
   BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
 
-  ri := FOutputDPI / (CAnalyzeAreaGroovesPerInch * (FPointsPerRevolution - 1));
+  ri := FOutputDPI / (CAnalyzeAreaGroovesPerInch * FPointsPerRevolution);
 
   r := CAnalyzeAreaBegin * 0.5 * FOutputDPI;
   pos := 0;
@@ -351,7 +351,7 @@ var
 
     BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
 
-    ri := FOutputDPI / (CAnalyzeAreaGroovesPerInch * (FPointsPerRevolution - 1));
+    ri := FOutputDPI / (CAnalyzeAreaGroovesPerInch * FPointsPerRevolution);
 
     r := CAnalyzeAreaBegin * 0.5 * FOutputDPI;
     pos := 0;
