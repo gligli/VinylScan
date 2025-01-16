@@ -37,6 +37,7 @@ type
 
     FOutputImage: TWordDynArray2;
 
+    function PrepareAnalyze: TDoubleDynArray;
     procedure GradientAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
     function PowellAnalyze(const arg: TVector; obj: Pointer): TScalar;
     function PrepareCorrect(coords: TCorrectCoords): TDoubleDynArray;
@@ -275,34 +276,78 @@ begin
   GradientAnalyze(arg, Result, nil, obj);
 end;
 
-procedure TScanCorrelator.GradientAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+function TScanCorrelator.PrepareAnalyze: TDoubleDynArray;
 var
-  gradData: TDoubleDynArray2;
-  imgData: TDoubleDynArray2;
-  imgResults: TDoubleDynArray;
-  paramCount: Integer;
+  i, pos, cnt: Integer;
+  ri, t, r, px, py, cx, cy, rri, sn, cs, gimgx, gimgy, gr, gt, gcx, gcy: Double;
+  sinCosLUT: TPointDDynArray;
+begin
+  cnt := Ceil(CAnalyzeAreaWidth * CAnalyzeAreaGroovesPerInch * FPointsPerRevolution);
+  SetLength(Result, cnt);
 
-  procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
-  var
-    i, pos: Integer;
-    ri, t, r, px, py, cx, cy, rri, sn, cs, p, gimgx, gimgy, gr, gt, gcx, gcy: Double;
-    sinCosLUT: TPointDDynArray;
+  t   := FPerSnanAngles[0];
+  cx  := FInputScans[0].Center.X;
+  cy  := FInputScans[0].Center.Y;
+
+  BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
+
+  ri := FOutputDPI / (CAnalyzeAreaGroovesPerInch * (FPointsPerRevolution - 1));
+
+  r := CAnalyzeAreaBegin * 0.5 * FOutputDPI;
+  pos := 0;
+  for i := 0 to High(Result) do
   begin
-    if not InRange(AIndex, 0, High(FInputScans)) then
-      Exit;
+    cs := sinCosLUT[pos].X;
+    sn := sinCosLUT[pos].Y;
 
-    if AIndex > 0 then
+    rri := r + ri * i;
+
+    px := cs * rri + cx;
+    py := sn * rri + cy;
+
+    if FInputScans[0].InRangePointD(py, px) then
     begin
-      t   := arg[High(FInputScans) * 0 + AIndex - 1];
-      cx  := arg[High(FInputScans) * 1 + AIndex - 1];
-      cy  := arg[High(FInputScans) * 2 + AIndex - 1];
+      Result[i] := FInputScans[0].GetPointD(py, px, isImage);
     end
     else
     begin
-      t   := FPerSnanAngles[AIndex];
-      cx  := FInputScans[AIndex].Center.X;
-      cy  := FInputScans[AIndex].Center.Y;
+      Result[i] := 1000.0;
     end;
+
+    Inc(pos);
+
+    if pos >= FPointsPerRevolution then
+      pos := 0;
+  end;
+end;
+
+procedure TScanCorrelator.GradientAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+var
+  preparedData: TDoubleDynArray absolute obj;
+  imgResults: TDoubleDynArray;
+
+  procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  var
+    i, pos, cnt: Integer;
+    ri, t, r, px, py, cx, cy, rri, sn, cs, mseInt, gInt, gimgx, gimgy, gr, gt, gcx, gcy: Double;
+    sinCosLUT: TPointDDynArray;
+  begin
+    if not InRange(AIndex, 1, High(FInputScans)) then
+      Exit;
+
+    imgResults[AIndex - 1] := 0.0;
+    if Assigned(grad) then
+    begin
+      grad[High(FInputScans) * 0 + AIndex - 1] := 0.0;
+      grad[High(FInputScans) * 1 + AIndex - 1] := 0.0;
+      grad[High(FInputScans) * 2 + AIndex - 1] := 0.0;
+    end;
+
+    cnt := Ceil(CAnalyzeAreaWidth * CAnalyzeAreaGroovesPerInch * FPointsPerRevolution);
+
+    t   := arg[High(FInputScans) * 0 + AIndex - 1];
+    cx  := arg[High(FInputScans) * 1 + AIndex - 1];
+    cy  := arg[High(FInputScans) * 2 + AIndex - 1];
 
     BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
 
@@ -310,7 +355,7 @@ var
 
     r := CAnalyzeAreaBegin * 0.5 * FOutputDPI;
     pos := 0;
-    for i := 0 to High(imgData[0]) do
+    for i := 0 to cnt - 1 do
     begin
       cs := sinCosLUT[pos].X;
       sn := sinCosLUT[pos].Y;
@@ -322,25 +367,30 @@ var
 
       if FInputScans[AIndex].InRangePointD(py, px) then
       begin
-        p := FInputScans[AIndex].GetPointD(py, px, isImage);
+        mseInt := preparedData[i] - FInputScans[AIndex].GetPointD(py, px, isImage);
 
-        imgData[AIndex, i] := p;
+        imgResults[AIndex - 1] += Sqr(mseInt);
 
-        if (AIndex > 0) and Assigned(grad) then
+        if Assigned(grad) then
         begin
           gimgx := FInputScans[AIndex].GetPointD(py, px, isXGradient);
           gimgy := FInputScans[AIndex].GetPointD(py, px, isYGradient);
 
+          gInt := -2.0 * mseInt;
           gr := rri;
 
-          gt := (gimgx * -sn + gimgy * cs) * gr;
-          gcx := gimgx;
-          gcy := gimgy;
+          gt := (gimgx * -sn + gimgy * cs) * gr * gInt;
+          gcx := gimgx * gInt;
+          gcy := gimgy * gInt;
 
-          gradData[High(FInputScans) * 0 + AIndex - 1, i] := gt;
-          gradData[High(FInputScans) * 1 + AIndex - 1, i] := gcx;
-          gradData[High(FInputScans) * 2 + AIndex - 1, i] := gcy;
+          grad[High(FInputScans) * 0 + AIndex - 1] += gt;
+          grad[High(FInputScans) * 1 + AIndex - 1] += gcx;
+          grad[High(FInputScans) * 2 + AIndex - 1] += gcy;
         end;
+      end
+      else
+      begin
+        imgResults[AIndex - 1] += 1000.0;
       end;
 
       Inc(pos);
@@ -348,38 +398,24 @@ var
       if pos >= FPointsPerRevolution then
         pos := 0;
     end;
+
+    imgResults[AIndex - 1] /= cnt;
+    if Assigned(grad) then
+    begin
+      grad[High(FInputScans) * 0 + AIndex - 1] /= cnt;
+      grad[High(FInputScans) * 1 + AIndex - 1] /= cnt;
+      grad[High(FInputScans) * 2 + AIndex - 1] /= cnt;
+    end;
   end;
 
-  procedure DoMSE(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
-  var
-    iArg: Integer;
-    gint: TDoubleDynArray;
-  begin
-    if not InRange(AIndex, 0, High(FInputScans) - 1) then
-      Exit;
-
-    imgResults[AIndex] := MSE(imgData[0], imgData[AIndex + 1], gint);
-
-    for iArg := 0 to paramCount - 1 do
-      grad[High(FInputScans) * iArg + AIndex + 1 - 1] := MSEGradient(gint, gradData[High(FInputScans) * iArg + AIndex + 1 - 1]);
-  end;
-
-var
-  cnt: Integer;
 begin
-  paramCount := iDiv0(Length(grad), High(FInputScans));
-
-  cnt := Ceil(CAnalyzeAreaWidth * CAnalyzeAreaGroovesPerInch * FPointsPerRevolution);
   SetLength(imgResults, High(FInputScans));
-  SetLength(imgData, Length(FInputScans), cnt);
-  SetLength(gradData, Length(grad), cnt);
 
-  ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FInputScans));
-  ProcThreadPool.DoParallelLocalProc(@DoMSE, 0, High(FInputScans) - 1);
+  ProcThreadPool.DoParallelLocalProc(@DoEval, 1, High(FInputScans));
 
-  func := Sum(imgResults);
+  func := Mean(imgResults);
 
-  Write('RMSE: ', Sqrt(DivDef(func, Length(imgResults), 1.0)):12:9,#13);
+  Write('RMSE: ', Sqrt(func):12:9,#13);
 end;
 
 function TScanCorrelator.Analyze(AMethod: TMinimizeMethod): Double;
@@ -387,6 +423,7 @@ var
   x: TVector;
   i: Integer;
   p: TPointD;
+  preparedData: TDoubleDynArray;
 begin
   Result := NaN;
 
@@ -397,6 +434,8 @@ begin
 
   if Length(FInputScans) <= 1 then
     AMethod := mmNone;
+
+  preparedData := PrepareAnalyze;
 
   for i := 0 to High(FInputScans) do
     WriteLn(FInputScans[i].PNGShortName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (before)');
@@ -412,15 +451,15 @@ begin
   case AMethod of
     mmNone:
     begin
-      Result := PowellAnalyze(x, Self);
+      Result := PowellAnalyze(x, Pointer(preparedData));
     end;
     mmBFGS:
     begin
-      Result := BFGSMinimize(@GradientAnalyze, x);
+      Result := BFGSMinimize(@GradientAnalyze, x, 1e-12, Pointer(preparedData));
     end;
     mmPowell:
     begin
-      Result := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-9, 1e-9, MaxInt, nil)[0];
+      Result := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-9, 1e-12, MaxInt, Pointer(preparedData))[0];
     end;
   end;
 
