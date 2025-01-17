@@ -11,6 +11,11 @@ uses
 type
   TInterpSource = (isImage, isXGradient, isYGradient);
 
+  TCropData = record
+    StartAngle, EndAngle: Double;
+    StartAngleMirror, EndAngleMirror: Double;
+  end;
+
   { TInputScan }
 
   TInputScan = class
@@ -28,6 +33,8 @@ type
     FGrooveStartAngle: Double;
     FGrooveStartPoint: TPointD;
 
+    FRelativeAngle: Double;
+    FCropData: TCropData;
     FCenterQuality: Double;
 
     FImage: TWordDynArray2;
@@ -36,6 +43,7 @@ type
     function GetPNGShortName: String;
     procedure GradientEvalConcentricGroove(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
     procedure GradientEvalCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+    function PowellCrop(const x: TVector; obj: Pointer): TScalar;
 
     function GetHeight: Integer;
     function GetWidth: Integer;
@@ -49,6 +57,7 @@ type
 
     procedure LoadPNG;
     procedure FindTrack;
+    procedure Crop;
 
     function InRangePointD(Y, X: Double): Boolean; inline;
     function GetPointD(Y, X: Double; Source: TInterpSource): Double; inline;
@@ -68,6 +77,8 @@ type
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
 
+    property RelativeAngle: Double read FRelativeAngle write FRelativeAngle;
+    property CropData: TCropData read FCropData write FCropData;
     property CenterQuality: Double read FCenterQuality;
 
     property Image: TWordDynArray2 read FImage;
@@ -109,6 +120,8 @@ const
   CRadiusXOffsets: array[TValueSign] of Double = (-C45RpmLeadOutGrooveWidth, 0, C45RpmLeadOutGrooveWidth);
   CRadiusYFactors: array[TValueSign] of Double = (1, -2, 1);
 
+  CCropAreaGroovesPerInch = 32;
+
 { TInputScan }
 
 procedure TInputScan.GradientEvalCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
@@ -147,6 +160,71 @@ begin
   end;
 
   //WriteLn(arg[0]:20:9,arg[1]:20:9,func:20:9);
+end;
+
+function TInputScan.PowellCrop(const x: TVector; obj: Pointer): TScalar;
+var
+  rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy, t, ri, rri, sn, cs, bt, px, py, p: Double;
+  iLut, pos, arrPos: Integer;
+  stdDevArr: TDoubleDynArray;
+  sinCosLUT: TPointDDynArray;
+begin
+  Result := 1000.0;
+
+  if not InRange(AngleTo02Pi(x[1] - x[0]), DegToRad(0.0), DegToRad(120.0)) then
+    Exit;
+
+  a0a := AngleTo02Pi(x[0]);
+  a0b := AngleTo02Pi(x[1]);
+  a1a := AngleTo02Pi(x[0] + Pi);
+  a1b := AngleTo02Pi(x[1] + Pi);
+
+  rBeg := C45RpmLastMusicGroove * 0.5 * FDPI;
+  rEnd := C45RpmFirstMusicGroove * 0.5 * FDPI;
+
+  t := FRelativeAngle;
+  cx := FCenter.X;
+  cy := FCenter.Y;
+
+  SetLength(stdDevArr, Ceil((rEnd - rBeg) / FDPI * CCropAreaGroovesPerInch) * FPointsPerRevolution);
+
+  ri := (rEnd - rBeg) / (CCropAreaGroovesPerInch * FPointsPerRevolution);
+
+  BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
+
+  iLut := 0;
+  pos := 0;
+  arrPos := 0;
+  repeat
+    bt := AngleTo02Pi(FRadiansPerRevolutionPoint * iLut + t);
+
+    cs := sinCosLUT[iLut].X;
+    sn := sinCosLUT[iLut].Y;
+
+    rri := rBeg + ri * pos;
+
+    px := cs * rri + cx;
+    py := sn * rri + cy;
+
+    Assert(pos < Length(stdDevArr));
+
+    if InRangePointD(py, px) and
+        not In02PiExtentsAngle(bt, a0a, a0b) and not In02PiExtentsAngle(bt, a1a, a1b) then
+    begin
+      p := GetPointD(py, px, isImage);
+      stdDevArr[arrPos] := p;
+      Inc(arrPos);
+    end;
+
+    Inc(iLut);
+    if iLut >= FPointsPerRevolution then
+      iLut := 0;
+
+    Inc(pos);
+  until rri >= rEnd;
+
+  if arrPos > 0 then
+    Result := -StdDev(PDouble(@stdDevArr[0]), arrPos);
 end;
 
 procedure TInputScan.FindCenter;
@@ -441,6 +519,23 @@ begin
     WriteLn('ConcentricGrooveRadius:', FConcentricGrooveRadius:12:3);
     WriteLn('GrooveStartPoint:', FGrooveStartPoint.X:12:3, ',', FGrooveStartPoint.Y:12:3);
   end;
+end;
+
+procedure TInputScan.Crop;
+var
+  x: TVector;
+begin
+  SetLength(x, 2);
+
+  x[0] := AngleTo02Pi(DegToRad(-30.0));
+  x[1] := AngleTo02Pi(DegToRad(30.0));
+
+  PowellMinimize(@PowellCrop, x, 1.0 / 360.0, 1e-6, 1e-6, MaxInt);
+
+  FCropData.StartAngle := AngleTo02Pi(x[0]);
+  FCropData.EndAngle := AngleTo02Pi(x[1]);
+  FCropData.StartAngleMirror := AngleTo02Pi(x[0] + Pi);
+  FCropData.EndAngleMirror := AngleTo02Pi(x[1] + Pi);
 end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;

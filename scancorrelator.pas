@@ -28,8 +28,6 @@ type
     FOutputDPI: Integer;
     FObjective: Double;
 
-    FPerSnanCrops: TDoubleDynArray2;
-    FPerSnanAngles: array of Double;
     FPerAngleX: TDoubleDynArray2;
 
     FPointsPerRevolution: Integer;
@@ -43,12 +41,11 @@ type
     function PrepareCorrect(coords: TCorrectCoords): TDoubleDynArray;
     procedure GradientCorrect(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
     function PowellCorrect(const arg: TVector; obj: Pointer): TScalar;
-    function PowellCrop(const x: TVector; obj: Pointer): TScalar;
 
     procedure AngleInit;
     function Analyze(AMethod: TMinimizeMethod): Double;
-    procedure Correct;
     procedure Crop;
+    procedure Correct;
     procedure Rebuild;
   public
     constructor Create(const AFileNames: TStrings; AOutputDPI: Integer = 2400);
@@ -104,8 +101,6 @@ const
   CCorrectAreaWidth = (CCorrectArea1End - CCorrectArea1Begin) * 0.5 + (CCorrectArea2End - CCorrectArea2Begin) * 0.5;
   CCorrectAreaGroovesPerInch = 300;
 
-  CCropAreaGroovesPerInch = 32;
-
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
   i: Integer;
@@ -114,8 +109,6 @@ begin
   FObjective := NaN;
   FMethod := mmBFGS;
   SetLength(FInputScans, AFileNames.Count);
-  SetLength(FPerSnanAngles, Length(FInputScans));
-  SetLength(FPerSnanCrops, Length(FInputScans), 4);
 
   for i := 0 to AFileNames.Count - 1 do
   begin
@@ -134,7 +127,7 @@ begin
   inherited Destroy;
 end;
 
-function CompareInputScans(Item1, Item2, UserParameter: Pointer): Integer;
+function CompareInputScansCenterQuality(Item1, Item2, UserParameter: Pointer): Integer;
 var
   s1: ^TInputScan absolute Item1;
   s2: ^TInputScan absolute Item2;
@@ -174,7 +167,7 @@ begin
 
   if Length(FInputScans) > 1 then
   begin
-    QuickSort(FInputScans[0], 0, High(FInputScans), SizeOf(TInputScan), @CompareInputScans);
+    QuickSort(FInputScans[0], 0, High(FInputScans), SizeOf(TInputScan), @CompareInputScansCenterQuality);
     Writeln('Best centering: ', FInputScans[0].PNGShortName);
   end;
 
@@ -248,7 +241,7 @@ var
       end;
     end;
 
-    FPerSnanAngles[AIndex] := bestAngle;
+    FInputScans[AIndex].RelativeAngle := bestAngle;
   end;
 
 var
@@ -285,7 +278,7 @@ begin
   cnt := Ceil(CAnalyzeAreaWidth * CAnalyzeAreaGroovesPerInch * FPointsPerRevolution);
   SetLength(Result, cnt);
 
-  t   := FPerSnanAngles[0];
+  t   := FInputScans[0].RelativeAngle;
   cx  := FInputScans[0].Center.X;
   cy  := FInputScans[0].Center.Y;
 
@@ -438,12 +431,12 @@ begin
   preparedData := PrepareAnalyze;
 
   for i := 0 to High(FInputScans) do
-    WriteLn(FInputScans[i].PNGShortName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (before)');
+    WriteLn(FInputScans[i].PNGShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (before)');
 
   SetLength(x, High(FInputScans) * 3);
   for i := 1 to High(FInputScans) do
   begin
-    x[High(FInputScans) * 0 + i - 1] := FPerSnanAngles[i];
+    x[High(FInputScans) * 0 + i - 1] := FInputScans[i].RelativeAngle;
     x[High(FInputScans) * 1 + i - 1] := FInputScans[i].Center.X;
     x[High(FInputScans) * 2 + i - 1] := FInputScans[i].Center.Y;
   end;
@@ -465,11 +458,11 @@ begin
 
   Assert(not IsNan(Result));
 
-  FPerSnanAngles[0] := 0.0;
+  FInputScans[0].RelativeAngle := 0.0;
 
   for i := 1 to High(FInputScans) do
   begin
-    FPerSnanAngles[i] := x[High(FInputScans) * 0 + i - 1];
+    FInputScans[i].RelativeAngle := x[High(FInputScans) * 0 + i - 1];
     p.X := x[High(FInputScans) * 1 + i - 1];
     p.Y := x[High(FInputScans) * 2 + i - 1];
     FInputScans[i].Center := p;
@@ -477,7 +470,7 @@ begin
 
   WriteLn;
   for i := 0 to High(FInputScans) do
-    WriteLn(FInputScans[i].PNGShortName, ', Angle: ', RadToDeg(FPerSnanAngles[i]):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (after)');
+    WriteLn(FInputScans[i].PNGShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (after)');
 end;
 
 function TScanCorrelator.PrepareCorrect(coords: TCorrectCoords): TDoubleDynArray;
@@ -504,7 +497,7 @@ begin
 
   // build sin / cos lookup table
 
-  BuildSinCosLUT(angleCnt, sinCosLUT, startAngle - FPerSnanAngles[coords.ScanIdx], endAngle - startAngle + angleInc);
+  BuildSinCosLUT(angleCnt, sinCosLUT, startAngle - FInputScans[coords.ScanIdx].RelativeAngle, endAngle - startAngle + angleInc);
 
   cnt := 0;
   r := CCorrectArea1Begin * 0.5 * FOutputDPI;
@@ -732,97 +725,46 @@ begin
   WriteLn('Worst RMSE: ', MaxValue(rmses):12:9);
 end;
 
-function TScanCorrelator.PowellCrop(const x: TVector; obj: Pointer): TScalar;
+function CompareInputScansCrop(Item1, Item2, UserParameter: Pointer): Integer;
 var
-  inputIdx: PtrInt absolute obj;
-  rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy, t, ri, rri, sn, cs, bt, px, py, p: Double;
-  iLut, pos, arrPos: Integer;
-  stdDevArr: TDoubleDynArray;
-  sinCosLUT: TPointDDynArray;
+  ref: TInputScan absolute UserParameter;
+  s1: ^TInputScan absolute Item1;
+  s2: ^TInputScan absolute Item2;
+  commonArea1, commonArea2: Double;
 begin
-  Result := 1000.0;
+  commonArea1 := Min(s1^.CropData.EndAngle + s1^.RelativeAngle, ref.CropData.EndAngle + ref.RelativeAngle) -
+                 Max(s1^.CropData.StartAngle + s1^.RelativeAngle, ref.CropData.StartAngle + ref.RelativeAngle);
 
-  if not InRange(AngleTo02Pi(x[1] - x[0]), DegToRad(0.0), DegToRad(120.0)) then
-    Exit;
+  commonArea2 := Min(s2^.CropData.EndAngle + s2^.RelativeAngle, ref.CropData.EndAngle + ref.RelativeAngle) -
+                 Max(s2^.CropData.StartAngle + s2^.RelativeAngle, ref.CropData.StartAngle + ref.RelativeAngle);
 
-  a0a := AngleTo02Pi(x[0]);
-  a0b := AngleTo02Pi(x[1]);
-  a1a := AngleTo02Pi(x[0] + Pi);
-  a1b := AngleTo02Pi(x[1] + Pi);
-
-  rBeg := C45RpmLastMusicGroove * 0.5 * FOutputDPI;
-  rEnd := C45RpmFirstMusicGroove * 0.5 * FOutputDPI;
-
-  t := FPerSnanAngles[inputIdx];
-  cx := FInputScans[inputIdx].Center.X;
-  cy := FInputScans[inputIdx].Center.Y;
-
-  SetLength(stdDevArr, Ceil((rEnd - rBeg) / FOutputDPI * CCropAreaGroovesPerInch) * FPointsPerRevolution);
-
-  ri := (rEnd - rBeg) / (CCropAreaGroovesPerInch * (FPointsPerRevolution - 1));
-
-  BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
-
-  iLut := 0;
-  pos := 0;
-  arrPos := 0;
-  repeat
-    bt := AngleTo02Pi(FRadiansPerRevolutionPoint * iLut + t);
-
-    cs := sinCosLUT[iLut].X;
-    sn := sinCosLUT[iLut].Y;
-
-    rri := rBeg + ri * pos;
-
-    px := cs * rri + cx;
-    py := sn * rri + cy;
-
-    Assert(pos < Length(stdDevArr));
-
-    if FInputScans[inputIdx].InRangePointD(py, px) and
-        not In02PiExtentsAngle(bt, a0a, a0b) and not In02PiExtentsAngle(bt, a1a, a1b) then
-    begin
-      p := FInputScans[inputIdx].GetPointD(py, px, isImage);
-      stdDevArr[arrPos] := p;
-      Inc(arrPos);
-    end;
-
-    Inc(iLut);
-    if iLut >= FPointsPerRevolution then
-      iLut := 0;
-
-    Inc(pos);
-  until rri >= rEnd;
-
-  if arrPos > 0 then
-    Result := -StdDev(PDouble(@stdDevArr[0]), arrPos);
-
-  Write(FInputScans[inputIdx].PNGShortName, ', begin:', RadToDeg(a0a):9:3, ', end:', RadToDeg(a0b):9:3, ', obj:', -Result:12:6, #13);
+  Result := CompareValue(commonArea2, commonArea1);
 end;
 
 procedure TScanCorrelator.Crop;
+
+  procedure DoCrop(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  begin
+    if not InRange(AIndex, 0, High(FInputScans)) then
+      Exit;
+
+    FInputScans[AIndex].Crop;
+  end;
+
 var
-  i: PtrInt;
-  x: TVector;
+  i: Integer;
 begin
   WriteLn('Crop');
 
-  SetLength(x, 2);
+  ProcThreadPool.DoParallelLocalProc(@DoCrop, 0, High(FInputScans));
+
+  if Length(FInputScans) > 1 then
+  begin
+    QuickSort(FInputScans[0], 1, High(FInputScans), SizeOf(TInputScan), @CompareInputScansCrop, FInputScans[0]);
+  end;
 
   for i := 0 to High(FInputScans) do
-  begin
-    x[0] := AngleTo02Pi(DegToRad(-30.0));
-    x[1] := AngleTo02Pi(DegToRad(30.0));
-
-    PowellMinimize(@PowellCrop, x, 1.0 / 360.0, 1e-6, 1e-6, MaxInt, Pointer(i));
-
-    FPerSnanCrops[i, 0] := AngleTo02Pi(x[0]);
-    FPerSnanCrops[i, 1] := AngleTo02Pi(x[1]);
-    FPerSnanCrops[i, 2] := AngleTo02Pi(x[0] + Pi);
-    FPerSnanCrops[i, 3] := AngleTo02Pi(x[1] + Pi);
-
-    WriteLn;
-  end;
+    WriteLn(FInputScans[i].PNGShortName, ', begin:', RadToDeg(FInputScans[i].CropData.StartAngle):9:3, ', end:', RadToDeg(FInputScans[i].CropData.EndAngle):9:3);
 end;
 
 procedure TScanCorrelator.Rebuild;
@@ -879,7 +821,7 @@ var
         acc := 0;
         for i := 0 to High(FInputScans) do
         begin
-          t  := FPerSnanAngles[i];
+          t  := FInputScans[i].RelativeAngle;
           cx := FInputScans[i].Center.X;
           cy := FInputScans[i].Center.Y;
 
@@ -896,8 +838,8 @@ var
           py := sn * rsk + cy;
 
           if FInputScans[i].InRangePointD(py, px) and
-              (not In02PiExtentsAngle(ct, FPerSnanCrops[i, 0], FPerSnanCrops[i, 1]) and
-               not In02PiExtentsAngle(ct, FPerSnanCrops[i, 2], FPerSnanCrops[i, 3]) or
+              (not In02PiExtentsAngle(ct, FInputScans[i].CropData.StartAngle, FInputScans[i].CropData.EndAngle) and
+               not In02PiExtentsAngle(ct, FInputScans[i].CropData.StartAngleMirror, FInputScans[i].CropData.EndAngleMirror) or
                (r < rLbl)) then
           begin
             acc += FInputScans[i].GetPointD(py, px, isImage);
@@ -993,10 +935,11 @@ begin
     until CompareValue(obj, prevObj, 1e-9) >= 0;
   end;
 
+  Crop;
+
   if FCorrectAngles then
     Correct;
 
-  Crop;
   Rebuild;
 end;
 

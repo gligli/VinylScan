@@ -125,6 +125,7 @@ function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: D
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; Epsilon: Double = 1e-9; Data: Pointer = nil): Double;
 function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 function ASAMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
+function ConjugateGradientMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 function PearsonCorrelationGradient(const a: TDoubleDynArray; const b: TDoubleDynArray; const gb: TDoubleDynArray): Double;
@@ -145,7 +146,7 @@ procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFun
 
 implementation
 
-uses utypes, ubfgs, minasa;
+uses utypes, ubfgs, minasa, mincg;
 
 procedure SpinEnter(Lock: PSpinLock); assembler;
 label spin_lock;
@@ -446,6 +447,20 @@ begin
     if state.NeedFG then
       Func(state.X, state.F, state.G, data);
   MinASAResults(state, X, rep);
+  Result := state.F;
+end;
+
+function ConjugateGradientMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double; Data: Pointer): Double;
+var
+  state: MinCGState;
+  rep: MinCGReport;
+begin
+  MinCGCreate(Length(X), X, state);
+  MinCGSetCond(state, 0.0, 0.0, Epsilon, 0);
+  while MinCGIteration(state) do
+    if state.NeedFG then
+      Func(state.X, state.F, state.G, data);
+  MinCGResults(state, X, rep);
   Result := state.F;
 end;
 
