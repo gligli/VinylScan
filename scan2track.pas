@@ -108,6 +108,7 @@ var
 
       upLimit := middleSmp + stdDev;
 
+      //upLimit := Infinity;
       //middleSmp := Mean(smpBuf);
       //middleSmp := (MinValue(smpBuf) + MaxValue(smpBuf)) * 0.5;
 
@@ -125,7 +126,7 @@ var
 
     Result *= (1.0 / CSampleDecoderMulti);
 
-    feedback := Result * C45RpmRecordingGrooveWidth * Scan.DPI;
+    feedback := Result * C45RpmRecordingGrooveWidth * Scan.DPI * C45RpmRevolutionsPerSecond;
   end;
 
   procedure StoreSample(fsmp: Double; pos: Integer);
@@ -158,7 +159,7 @@ begin
 
     pt := GetTickCount64;
 
-    fbRatio := CutoffToFeedbackRatio(CLowCutoffFreq, FSampleRate) * 2.0;
+    fbRatio := CutoffToFeedbackRatio(CLowCutoffFreq, FSampleRate);
     BuildSinCosLUT(FPointsPerRevolution, sinCosLut, Scan.GrooveStartAngle, -2.0 * Pi);
 
     iSample := 0;

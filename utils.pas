@@ -611,8 +611,12 @@ begin
 end;
 
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
+var
+  cosOmegaC: Double;
 begin
-  Result := (Cutoff * 2.0 / SampleRate) / sqrt(0.1024 + sqr(Cutoff * 2.0 / SampleRate));
+  cosOmegaC := Cos(2.0 * Pi * Cutoff / SampleRate);
+  Result := 2.0 - cosOmegaC - Sqrt(Sqr(2.0 - cosOmegaC) - 1);
+  Result := 1.0 - Result;
 end;
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray);
