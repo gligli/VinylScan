@@ -89,13 +89,13 @@ uses main;
 { TScanCorrelator }
 
 const
-  CAnalyzeAreaBegin = C45RpmInnerSize;
+  CAnalyzeAreaBegin = C45RpmInnerSize + 0.1;
   CAnalyzeAreaEnd = C45RpmLabelOuterSize;
   CAnalyzeAreaWidth = (CAnalyzeAreaEnd - CAnalyzeAreaBegin) * 0.5;
   CAnalyzeAreaGroovesPerInch = 64;
 
   CCorrectAngleCount = 8;
-  CCorrectArea1Begin = C45RpmInnerSize;
+  CCorrectArea1Begin = C45RpmInnerSize + 0.1;
   CCorrectArea1End = C45RpmLastMusicGroove;
   CCorrectArea2Begin = C45RpmFirstMusicGroove;
   CCorrectArea2End = C45RpmOuterSize;
@@ -325,11 +325,7 @@ var
 begin
   func := 0.0;
   if Assigned(grad) then
-  begin
-    grad[0] := 0.0;
-    grad[1] := 0.0;
-    grad[2] := 0.0;
-  end;
+    FillQWord(grad[0], Length(grad), 0);
 
   scanIdx := coords^.ScanIdx;
   cnt := Ceil(CAnalyzeAreaWidth * coords^.GroovesPerInch * FPointsPerRevolution);
@@ -368,13 +364,13 @@ begin
         gInt := -2.0 * mseInt;
         gr := rri;
 
-        gt := (gimgx * -sn + gimgy * cs) * gr * gInt;
-        gcx := gimgx * gInt;
-        gcy := gimgy * gInt;
+        gt := (gimgx * -sn + gimgy * cs) * gr;
+        gcx := gimgx;
+        gcy := gimgy;
 
-        grad[0] += gt;
-        grad[1] += gcx;
-        grad[2] += gcy;
+        grad[0] += gt * gInt;
+        grad[1] += gcx * gInt;
+        grad[2] += gcy * gInt;
       end;
     end
     else
@@ -390,11 +386,8 @@ begin
 
   func /= cnt;
   if Assigned(grad) then
-  begin
-    grad[0] /= cnt;
-    grad[1] /= cnt;
-    grad[2] /= cnt;
-  end;
+    for i := 0 to High(grad) do
+      grad[i] /= cnt;
 
   Write('RMSE: ', Sqrt(func):12:9,#13);
 end;
@@ -419,26 +412,31 @@ procedure TScanCorrelator.Analyze;
     coords.AngleIdx := -1;
     coords.ScanIdx := AIndex;
     coords.GroovesPerInch := CAnalyzeAreaGroovesPerInch;
-    coords.PreparedData := PrepareAnalyze(coords);
 
     f := 1000.0;
     iter := 0;
     repeat
       prevF := f;
 
+      coords.PreparedData := PrepareAnalyze(coords);
+
       case Method of
+        mmNone:
+        begin
+          f := PowellAnalyze(x, @coords);
+        end;
         mmBFGS:
         begin
-          f := BFGSMinimize(@GradientAnalyze, x, 0.0, @coords);
+          f := BFGSMinimize(@GradientAnalyze, x, 1e-9, @coords);
         end;
         mmPowell:
         begin
-          f := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-9, 1e-12, MaxInt, @coords)[0];
+          f := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-9, 1e-9, MaxInt, @coords)[0];
         end;
         mmAll:
         begin
-          BFGSMinimize(@GradientAnalyze, x, 0.0, @coords);
-          f := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-9, 1e-12, MaxInt, @coords)[0];
+          BFGSMinimize(@GradientAnalyze, x, 1e-9, @coords);
+          f := PowellMinimize(@PowellAnalyze, x, 1e-8, 1e-9, 1e-9, MaxInt, @coords)[0];
         end;
       end;
 
@@ -446,11 +444,10 @@ procedure TScanCorrelator.Analyze;
       Inc(iter);
 
       coords.GroovesPerInch *= cPhi;
-      coords.PreparedData := PrepareAnalyze(coords);
 
-      WriteLn(FInputScans[AIndex].PNGShortName, ', Iteration: ', iter:3,', RMSE: ', f:12:9, #13);
+      WriteLn(FInputScans[AIndex].PNGShortName, ', Iteration: ', iter:3, ', RMSE: ', f:12:9, #13);
 
-    until CompareValue(f, prevF, 1e-4) >= 0;
+    until SameValue(f, prevF, 1e-4) or (coords.GroovesPerInch > FOutputDPI);
 
     FInputScans[AIndex].RelativeAngle := x[0];
     p.X := x[1];
@@ -544,7 +541,7 @@ var
   coords: PCorrectCoords absolute obj;
   preparedData: TDoubleDynArray;
   cnt, iscan, ilut, radiusCnt, angleCnt: Integer;
-  mseInt, w, r, ri, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, ga, gr, angle, startAngle, endAngle, angleInc, angleExtents: Double;
+  mseInt, w, r, ri, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, gsk, gr, angle, startAngle, endAngle, angleInc, angleExtents: Double;
   sinCosLUT: TPointDDynArray;
 begin
   func := 0.0;
@@ -608,13 +605,13 @@ begin
           gimgx := FInputScans[iscan].GetPointD(py, px, isXGradient);
           gimgy := FInputScans[iscan].GetPointD(py, px, isYGradient);
 
-          ga := gimgx * cs + gimgy * sn;
+          gsk := gimgx * cs + gimgy * sn;
           gr := r;
 
-          ga *= -2.0 * mseInt;
+          gsk *= -2.0 * mseInt;
 
-          grad[0] += ga;
-          grad[1] += ga * gr;
+          grad[0] += gsk;
+          grad[1] += gsk * gr;
         end;
       end
       else
@@ -676,9 +673,9 @@ var
 
       case iter mod 2 of
         0:
-          f := BFGSMinimize(@GradientCorrect, lx, 0.0, @coords);
+          f := BFGSMinimize(@GradientCorrect, lx, 1e-9, @coords);
         1:
-          f := PowellMinimize(@PowellCorrect, lx, 1.0, 0.0, 0.0, MaxInt, @coords)[0];
+          f := PowellMinimize(@PowellCorrect, lx, 1.0, 0.0, 1e-9, MaxInt, @coords)[0];
       end;
 
       f := Sqrt(f);
