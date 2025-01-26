@@ -16,6 +16,7 @@ object MainForm: TMainForm
   Color = 4210752
   DoubleBuffered = False
   ParentDoubleBuffered = False
+  LCLVersion = '4.0.0.2'
   Scaled = False
   WindowState = wsMaximized
   OnCreate = FormCreate

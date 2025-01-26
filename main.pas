@@ -70,12 +70,9 @@ begin
     s2t.OutputWAVFileName := edOutputWAV.Text;
     s2t.Scan.PNGFileName := edInputPNG.Text;
 
-    s2t.Scan.LoadPNG;
+    s2t.LoadPNG;
 
     DrawImage(s2t.Scan.Image);
-
-    s2t.Scan.FindTrack;
-
     DrawExtents(s2t.Scan);
 
     s2t.EvalTrack;
@@ -253,7 +250,7 @@ end;
 
 procedure TMainForm.SetReduc(AImageWidth, AImageHeight: Integer);
 begin
-  FReducRatio := Floor(AImageWidth / Width);
+  FReducRatio := Max(1, Floor(AImageWidth / Width));
   FReducFactor := 1.0 / FReducRatio;
 end;
 

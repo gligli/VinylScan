@@ -34,9 +34,8 @@ type
     constructor Create(ASampleRate: Integer = 48000; ABitsPerSample: Integer = 16; ADPI: Integer = 2400);
     destructor Destroy; override;
 
+    procedure LoadPNG;
     procedure EvalTrack;
-
-    procedure Run;
 
     property OutputWAVFileName: String read FOutputWAVFileName write FOutputWAVFileName;
 
@@ -215,11 +214,10 @@ begin
   WriteLn('Done!');
 end;
 
-procedure TScan2Track.Run;
+procedure TScan2Track.LoadPNG;
 begin
   Scan.LoadPNG;
-  Scan.FindTrack;
-  EvalTrack;
+  Scan.FindTrack(FSampleRate);
 end;
 
 end.

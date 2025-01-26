@@ -40,6 +40,7 @@ type
     FImage: TWordDynArray2;
 
     procedure SetRevolutionFromDPI(ADPI: Integer);
+    procedure SetRevolutionFromSampleRate(ASampleRate: Integer);
     function GetPNGShortName: String;
     procedure GradientEvalConcentricGroove(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
     procedure GradientEvalCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
@@ -56,7 +57,7 @@ type
     destructor Destroy; override;
 
     procedure LoadPNG;
-    procedure FindTrack;
+    procedure FindTrack(AForcedSampleRate: Integer = -1);
     procedure Crop;
 
     function InRangePointD(Y, X: Double): Boolean; inline;
@@ -171,13 +172,13 @@ var
 begin
   Result := 1000.0;
 
-  if not InRange(AngleTo02Pi(x[1] - x[0]), DegToRad(0.0), DegToRad(120.0)) then
+  if not InRange(NormalizeAngle(x[1] - x[0]), DegToRad(0.0), DegToRad(120.0)) then
     Exit;
 
-  a0a := AngleTo02Pi(x[0]);
-  a0b := AngleTo02Pi(x[1]);
-  a1a := AngleTo02Pi(x[0] + Pi);
-  a1b := AngleTo02Pi(x[1] + Pi);
+  a0a := NormalizeAngle(x[0]);
+  a0b := NormalizeAngle(x[1]);
+  a1a := NormalizeAngle(x[0] + Pi);
+  a1b := NormalizeAngle(x[1] + Pi);
 
   rBeg := C45RpmLastMusicGroove * 0.5 * FDPI;
   rEnd := C45RpmFirstMusicGroove * 0.5 * FDPI;
@@ -196,7 +197,7 @@ begin
   pos := 0;
   arrPos := 0;
   repeat
-    bt := AngleTo02Pi(FRadiansPerRevolutionPoint * iLut + t);
+    bt := NormalizeAngle(FRadiansPerRevolutionPoint * iLut + t);
 
     cs := sinCosLUT[iLut].X;
     sn := sinCosLUT[iLut].Y;
@@ -209,7 +210,7 @@ begin
     Assert(pos < Length(stdDevArr));
 
     if InRangePointD(py, px) and
-        not In02PiExtentsAngle(bt, a0a, a0b) and not In02PiExtentsAngle(bt, a1a, a1b) then
+        not InNormalizedAngle(bt, a0a, a0b) and not InNormalizedAngle(bt, a1a, a1b) then
     begin
       p := GetPointD(py, px, isImage);
       stdDevArr[arrPos] := p;
@@ -300,6 +301,12 @@ begin
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
 end;
 
+procedure TInputScan.SetRevolutionFromSampleRate(ASampleRate: Integer);
+begin
+  FPointsPerRevolution := Ceil(ASampleRate / C45RpmRevolutionsPerSecond);
+  FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
+end;
+
 function TInputScan.GetPNGShortName: String;
 begin
   Result := ChangeFileExt(ExtractFileName(FPNGFileName), '');
@@ -337,7 +344,7 @@ begin
   end;
 
   xrc[0] := bestr;
-  f := ASAMinimize(@GradientEvalConcentricGroove, xrc, [radiusInner, radiusLimit, radiusLimit], [radiusOuter, Width - radiusLimit, Height - radiusLimit]);
+  f := ASAMinimize(@GradientEvalConcentricGroove, xrc, [radiusInner, radiusLimit, radiusLimit], [radiusOuter, Width - radiusLimit, Height - radiusLimit], 1e-9);
   FConcentricGrooveRadius := xrc[0];
   FCenter.X := xrc[1];
   FCenter.Y := xrc[2];
@@ -494,17 +501,20 @@ begin
 
     FCenter.X := sz.X * 0.5;
     FCenter.Y := sz.Y * 0.5;
-    SetRevolutionFromDPI(FDPI);
-
   finally
     png.Free;
     fs.Free;
   end;
 end;
 
-procedure TInputScan.FindTrack;
+procedure TInputScan.FindTrack(AForcedSampleRate: Integer);
 begin
   if not FSilent then WriteLn('FindTrack');
+
+  if AForcedSampleRate >= 0 then
+    SetRevolutionFromSampleRate(AForcedSampleRate)
+  else
+    SetRevolutionFromDPI(FDPI);
 
   FFirstGrooveRadius := C45RpmFirstMusicGroove * FDPI * 0.5;
 
@@ -527,15 +537,15 @@ var
 begin
   SetLength(x, 2);
 
-  x[0] := AngleTo02Pi(DegToRad(-30.0));
-  x[1] := AngleTo02Pi(DegToRad(30.0));
+  x[0] := NormalizeAngle(DegToRad(-30.0));
+  x[1] := NormalizeAngle(DegToRad(30.0));
 
   PowellMinimize(@PowellCrop, x, 1.0 / 360.0, 1e-6, 1e-6, MaxInt);
 
-  FCropData.StartAngle := AngleTo02Pi(x[0]);
-  FCropData.EndAngle := AngleTo02Pi(x[1]);
-  FCropData.StartAngleMirror := AngleTo02Pi(x[0] + Pi);
-  FCropData.EndAngleMirror := AngleTo02Pi(x[1] + Pi);
+  FCropData.StartAngle := NormalizeAngle(x[0]);
+  FCropData.EndAngle := NormalizeAngle(x[1]);
+  FCropData.StartAngleMirror := NormalizeAngle(x[0] + Pi);
+  FCropData.EndAngleMirror := NormalizeAngle(x[1] + Pi);
 end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;

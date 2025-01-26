@@ -133,8 +133,8 @@ function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray; var gint: TDoub
 function MSEGradient(const gint: TDoubleDynArray; const gb: TDoubleDynArray): Double;
 
 function Make16BitSample(smp: Double): SmallInt;
-function AngleTo02Pi(x: Double): Double;
-function In02PiExtentsAngle(x, xmin, xmax: Double): Boolean;
+function NormalizeAngle(x: Double): Double;
+function InNormalizedAngle(x, xmin, xmax: Double): Boolean;
 
 procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TPointDDynArray; AOriginAngle: Double = 0.0; AExtentsAngle: Double = 2.0 * Pi);
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
@@ -576,27 +576,27 @@ begin
   Result := EnsureRange(round(smp * High(SmallInt)), Low(SmallInt), High(SmallInt));
 end;
 
-function AngleTo02Pi(x: Double): Double;
+function NormalizeAngle(x: Double): Double;
 begin
-  while x < 0.0 do
+  while x < -Pi do
     x += 2.0 * Pi;
-  while x > 2.0 * Pi do
+  while x > Pi do
     x -= 2.0 * Pi;
 
-  Assert(InRange(x, 0, 2.0 * Pi));
+  Assert(InRange(x, -Pi, Pi));
 
   Result := x;
 end;
 
-function In02PiExtentsAngle(x, xmin, xmax: Double): Boolean;
+function InNormalizedAngle(x, xmin, xmax: Double): Boolean;
 begin
-  Assert(InRange(x, 0, 2.0 * Pi));
-  Assert(InRange(xmin, 0, 2.0 * Pi));
-  Assert(InRange(xmax, 0, 2.0 * Pi));
+  Assert(InRange(x, -Pi, Pi));
+  Assert(InRange(xmin, -Pi, Pi));
+  Assert(InRange(xmax, -Pi, Pi));
   if xmax >= xmin then
     Result := InRange(x, xmin, xmax)
   else
-    Result := InRange(x, 0, xmax) or InRange(x, xmin, 2.0 * Pi);
+    Result := InRange(x, -Pi, xmax) or InRange(x, xmin, Pi);
 end;
 
 procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TPointDDynArray; AOriginAngle: Double; AExtentsAngle: Double);
