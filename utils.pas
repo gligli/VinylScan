@@ -126,6 +126,8 @@ function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray
 function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 function ASAMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 function ConjugateGradientMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
+function NonSmoothMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
+function NonSmoothBoundsMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 function PearsonCorrelationGradient(const a: TDoubleDynArray; const b: TDoubleDynArray; const gb: TDoubleDynArray): Double;
@@ -146,7 +148,7 @@ procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFun
 
 implementation
 
-uses utypes, ubfgs, minasa, mincg;
+uses utypes, ubfgs, XALGLIB;
 
 procedure SpinEnter(Lock: PSpinLock); assembler;
 label spin_lock;
@@ -424,10 +426,20 @@ begin
   end;
 end;
 
+threadvar
+  GASAFunc: TGradientEvalFunc;
+  GASARes: Double;
+
+  procedure ASAFunc(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+  begin
+    GASAFunc(arg, func, grad, obj);
+    GASARes := func;
+  end;
+
 function ASAMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double; Data: Pointer): Double;
 var
-  state: MinASAState;
-  rep: MinASAReport;
+  state: Tminasastate;
+  rep: Tminasareport;
   lb, ub: TDoubleDynArray;
   i: Integer;
 begin
@@ -441,27 +453,104 @@ begin
     X[i] := EnsureRange(X[i], lb[i], ub[i]); // ensure feasible X
   end;
 
-  MinASACreate(Length(X), X, lb, ub, state);
-  MinASASetCond(state, 0.0, 0.0, Epsilon, 0);
-  while MinASAIteration(state) do
-    if state.NeedFG then
-      Func(state.X, state.F, state.G, data);
-  MinASAResults(state, X, rep);
-  Result := state.F;
+  GASAFunc := Func;
+  try
+    minasacreate(Length(X), X, lb, ub, state);
+    minasasetcond(state, 0.0, 0.0, Epsilon, 0);
+    minasaoptimize(state, @ASAFunc, nil, Data);
+    minasaresults(state, X, rep);
+  finally
+    GASAFunc := nil;
+  end;
+
+  Result := GASARes;
 end;
+
+threadvar
+  GCGFunc: TGradientEvalFunc;
+  GCGRes: Double;
+
+  procedure CGFunc(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+  begin
+    GCGFunc(arg, func, grad, obj);
+    GCGRes := func;
+  end;
 
 function ConjugateGradientMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double; Data: Pointer): Double;
 var
-  state: MinCGState;
-  rep: MinCGReport;
+  state: Tmincgstate;
+  rep: Tmincgreport;
 begin
-  MinCGCreate(Length(X), X, state);
-  MinCGSetCond(state, 0.0, 0.0, Epsilon, 0);
-  while MinCGIteration(state) do
-    if state.NeedFG then
-      Func(state.X, state.F, state.G, data);
-  MinCGResults(state, X, rep);
-  Result := state.F;
+  GCGFunc := Func;
+  try
+    MinCGCreate(Length(X), X, state);
+    MinCGSetCond(state, 0.0, 0.0, Epsilon, 0);
+    mincgoptimize(state, @CGFunc, nil, Data);
+    MinCGResults(state, X, rep);
+  finally
+    GCGFunc := nil;
+  end;
+
+  Result := GCGRes;
+end;
+
+threadvar
+  GNSFunc: TGradientEvalFunc;
+  GNSRes: Double;
+
+  procedure NSFunc(const arg: TVector; fi: TVector; jac: TMatrix; obj: Pointer);
+  begin
+    GNSFunc(arg, fi[0], jac[0], obj);
+    GNSRes := fi[0];
+  end;
+
+function NonSmoothMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double; Data: Pointer): Double;
+var
+  state: Tminnsstate;
+  rep: Tminnsreport;
+begin
+  GNSFunc := Func;
+  try
+    minnscreate(Length(X), X, state);
+    minnssetcond(state, Epsilon, 0);
+    minnsoptimize(state, @NSFunc, nil, Data);
+    minnsresults(state, X, rep);
+  finally
+    GNSFunc := nil;
+  end;
+
+  Result := GNSRes;
+end;
+
+function NonSmoothBoundsMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double; Data: Pointer): Double;
+var
+  state: Tminnsstate;
+  rep: Tminnsreport;
+  lb, ub: TDoubleDynArray;
+  i: Integer;
+begin
+  SetLength(lb, Length(X));
+  SetLength(ub, Length(X));
+  for i := 0 to High(X) do
+  begin
+    lb[i] := LowBound[i];
+    ub[i] := UpBound[i];
+
+    X[i] := EnsureRange(X[i], lb[i], ub[i]); // ensure feasible X
+  end;
+
+  GNSFunc := Func;
+  try
+    minnscreate(Length(X), X, state);
+    minnssetbc(state, lb, ub);
+    minnssetcond(state, Epsilon, 0);
+    minnsoptimize(state, @NSFunc, nil, Data);
+    minnsresults(state, X, rep);
+  finally
+    GNSFunc := nil;
+  end;
+
+  Result := GNSRes;
 end;
 
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;

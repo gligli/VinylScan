@@ -240,7 +240,7 @@ begin
   x[1] := FCenter.Y;
 
   if (x[0] <> rOut) and (x[1] <> rOut) then
-    FCenterQuality := -BFGSMinimize(@GradientEvalCenter, x, 1e-6);
+    FCenterQuality := -NonSmoothMinimize(@GradientEvalCenter, x, 1e-3);
 
   FCenter.X := x[0];
   FCenter.Y := x[1];
@@ -344,7 +344,7 @@ begin
   end;
 
   xrc[0] := bestr;
-  f := ASAMinimize(@GradientEvalConcentricGroove, xrc, [radiusInner, radiusLimit, radiusLimit], [radiusOuter, Width - radiusLimit, Height - radiusLimit], 1e-9);
+  f := NonSmoothBoundsMinimize(@GradientEvalConcentricGroove, xrc, [radiusInner, radiusLimit, radiusLimit], [radiusOuter, Width - radiusLimit, Height - radiusLimit], 1e-3);
   FConcentricGrooveRadius := xrc[0];
   FCenter.X := xrc[1];
   FCenter.Y := xrc[2];
