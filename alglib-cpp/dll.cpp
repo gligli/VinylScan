@@ -21,26 +21,6 @@ extern "C"
     ns_f = func;
   };
 
-  __declspec(dllexport) double alglib_NonSmoothMinimize(void* Func, int n, double* X, double Epsilon, void* Data)
-  {
-    minnsstate state;
-    minnsreport rep;
-    real_1d_array x;
-
-    ns_cb = (void  (*)(int n, double* x, double* fi, double** jac, void* ptr)) Func;
-    ns_f = fp_nan;
-    x.attach_to_ptr(n, X);
-
-    minnscreate(x, state);
-    minnssetcond(state, Epsilon, 0);
-    minnsoptimize(state, ns_jac, ns_frep, Data);
-    minnsresults(state, x, rep);
-
-    ns_cb = NULL;
-
-    return ns_f;
-  }
-
   __declspec(dllexport) double alglib_NonSmoothBoundedMinimize(void* Func, int n, double* X, double* LowBound, double* UpBound, double Epsilon, void* Data)
   {
     minnsstate state;
@@ -49,21 +29,34 @@ extern "C"
     real_1d_array lb;
     real_1d_array ub;
 
-    ns_cb = (void  (*)(int n, double* x, double* fi, double** jac, void* ptr)) Func;
+    ns_cb = (void (*)(int n, double* x, double* fi, double** jac, void* ptr)) Func;
     ns_f = fp_nan;
     x.attach_to_ptr(n, X);
-    lb.attach_to_ptr(n, LowBound);
-    ub.attach_to_ptr(n, UpBound);
+
+    if (LowBound && UpBound)
+    {
+      lb.attach_to_ptr(n, LowBound);
+      ub.attach_to_ptr(n, UpBound);
+    }
 
     minnscreate(x, state);
-    minnssetbc(state, lb, ub);
+    if (LowBound && UpBound)
+      minnssetbc(state, lb, ub);
     minnssetcond(state, Epsilon, 0);
+    minnssetxrep(state, true);
     minnsoptimize(state, ns_jac, ns_frep, Data);
     minnsresults(state, x, rep);
 
     ns_cb = NULL;
+    for (int i = 0; i < n; ++i)
+      X[i] = x[i];
 
     return ns_f;
   }
 
- }
+  __declspec(dllexport) double alglib_NonSmoothMinimize(void* Func, int n, double* X, double Epsilon, void* Data)
+  {
+    return alglib_NonSmoothBoundedMinimize(Func, n, X, NULL, NULL, Epsilon, Data);
+  }
+
+}
