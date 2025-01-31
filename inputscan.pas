@@ -344,7 +344,7 @@ begin
   end;
 
   xrc[0] := bestr;
-  f := NonSmoothBoundsMinimize(@GradientEvalConcentricGroove, xrc, [radiusInner, radiusLimit, radiusLimit], [radiusOuter, Width - radiusLimit, Height - radiusLimit], 1e-3);
+  f := NonSmoothBoundedMinimize(@GradientEvalConcentricGroove, xrc, [radiusInner, radiusLimit, radiusLimit], [radiusOuter, Width - radiusLimit, Height - radiusLimit], 1e-3);
   FConcentricGrooveRadius := xrc[0];
   FCenter.X := xrc[1];
   FCenter.Y := xrc[2];

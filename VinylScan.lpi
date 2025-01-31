@@ -25,7 +25,7 @@
           </Target>
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir)"/>
-            <OtherUnitFiles Value="alglib;LazFiltersIIR"/>
+            <OtherUnitFiles Value="LazFiltersIIR"/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)-$(BuildMode)"/>
           </SearchPaths>
           <Parsing>
@@ -59,7 +59,7 @@
           </Target>
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir)"/>
-            <OtherUnitFiles Value="alglib;LazFiltersIIR"/>
+            <OtherUnitFiles Value="LazFiltersIIR"/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)-WPO"/>
           </SearchPaths>
           <Parsing>
@@ -99,7 +99,7 @@
           </Target>
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir)"/>
-            <OtherUnitFiles Value="alglib;LazFiltersIIR"/>
+            <OtherUnitFiles Value="LazFiltersIIR"/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)-WPO"/>
           </SearchPaths>
           <Parsing>
@@ -139,9 +139,6 @@
       <FormatVersion Value="2"/>
     </RunParams>
     <RequiredPackages>
-      <Item>
-        <PackageName Value="lmoptimum"/>
-      </Item>
       <Item>
         <PackageName Value="MultiThreadProcsLaz"/>
       </Item>
@@ -191,7 +188,7 @@
     </Target>
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir)"/>
-      <OtherUnitFiles Value="alglib;LazFiltersIIR"/>
+      <OtherUnitFiles Value="LazFiltersIIR"/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)-$(BuildMode)"/>
     </SearchPaths>
     <Parsing>

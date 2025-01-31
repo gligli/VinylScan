@@ -92,15 +92,15 @@ const
   CAnalyzeAreaBegin = C45RpmInnerSize + 0.1;
   CAnalyzeAreaEnd = C45RpmLabelOuterSize;
   CAnalyzeAreaWidth = (CAnalyzeAreaEnd - CAnalyzeAreaBegin) * 0.5;
-  CAnalyzeAreaGroovesPerInch = 16;
+  CAnalyzeAreaGroovesPerInch = 64;
 
-  CCorrectAngleCount = 18;
+  CCorrectAngleCount = 8;
   CCorrectArea1Begin = C45RpmInnerSize + 0.1;
   CCorrectArea1End = C45RpmLastMusicGroove;
   CCorrectArea2Begin = C45RpmFirstMusicGroove;
   CCorrectArea2End = C45RpmOuterSize;
   CCorrectAreaWidth = (CCorrectArea1End - CCorrectArea1Begin) * 0.5 + (CCorrectArea2End - CCorrectArea2Begin) * 0.5;
-  CCorrectAreaGroovesPerInch = 16;
+  CCorrectAreaGroovesPerInch = 64;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
