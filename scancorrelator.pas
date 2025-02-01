@@ -92,15 +92,15 @@ const
   CAnalyzeAreaBegin = C45RpmInnerSize + 0.1;
   CAnalyzeAreaEnd = C45RpmLabelOuterSize;
   CAnalyzeAreaWidth = (CAnalyzeAreaEnd - CAnalyzeAreaBegin) * 0.5;
-  CAnalyzeAreaGroovesPerInch = 64;
+  CAnalyzeAreaGroovesPerInch = 100;
 
   CCorrectAngleCount = 8;
-  CCorrectArea1Begin = C45RpmInnerSize + 0.1;
+  CCorrectArea1Begin = C45RpmLabelOuterSize;
   CCorrectArea1End = C45RpmLastMusicGroove;
   CCorrectArea2Begin = C45RpmFirstMusicGroove;
   CCorrectArea2End = C45RpmOuterSize;
   CCorrectAreaWidth = (CCorrectArea1End - CCorrectArea1Begin) * 0.5 + (CCorrectArea2End - CCorrectArea2Begin) * 0.5;
-  CCorrectAreaGroovesPerInch = 64;
+  CCorrectAreaGroovesPerInch = 300;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
@@ -159,7 +159,7 @@ begin
       Assert(FInputScans[i].DPI = FOutputDPI, 'InputScans mixed DPIs!');
   end;
 
-  FPointsPerRevolution := Ceil(Pi * C45RpmLabelOuterSize * FOutputDPI);
+  FPointsPerRevolution := Ceil(Pi * C45RpmOuterSize * FOutputDPI);
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
 
   WriteLn('DPI:', FOutputDPI:6);
@@ -419,7 +419,7 @@ const
 
     f := 1000.0;
     iter := 0;
-    repeat
+    //repeat
       prevF := f;
 
       coords.PreparedData := PrepareAnalyze(coords);
@@ -451,7 +451,7 @@ const
 
       WriteLn(FInputScans[AIndex].PNGShortName, ', Iteration: ', iter:3, ', RMSE: ', f:12:9, #13);
 
-    until SameValue(f, prevF, 1e-4) or (coords.GroovesPerInch > FOutputDPI);
+    //until SameValue(f, prevF, 1e-4) or (coords.GroovesPerInch > FOutputDPI);
 
     FInputScans[AIndex].RelativeAngle := x[0];
     p.X := x[1];
@@ -482,7 +482,7 @@ var
   iScan, ilut, cnt, radiusCnt, angleCnt, v, best: Integer;
   t, ts, te, r, ri, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, angle, startAngle, endAngle, angleInc, angleExtents: Double;
   sinCosLUT: TPointDDynArray;
-  scan, curScan: TInputScan;
+  scan: TInputScan;
 begin
   angle := (coords.AngleIdx / CCorrectAngleCount) * 2.0 * Pi;
   angleExtents := 2.0 * Pi / CCorrectAngleCount;
@@ -497,7 +497,6 @@ begin
 
   // devise best scan
 
-  curScan := FInputScans[coords.ScanIdx];
   best := MaxInt;
   coords.BaseScanIdx := -1;
   for iScan := 0 to High(FInputScans) do
@@ -507,9 +506,9 @@ begin
 
     scan := FInputScans[iScan];
 
-    t := NormalizeAngle(angle + scan.RelativeAngle - curScan.RelativeAngle);
-    ts := NormalizeAngle(startAngle + scan.RelativeAngle - curScan.RelativeAngle);
-    te := NormalizeAngle(endAngle + scan.RelativeAngle - curScan.RelativeAngle);
+    t := NormalizeAngle(angle + scan.RelativeAngle);
+    ts := NormalizeAngle(startAngle + scan.RelativeAngle);
+    te := NormalizeAngle(endAngle + scan.RelativeAngle);
 
     v := Ord(InNormalizedAngle(t, scan.CropData.StartAngle, scan.CropData.EndAngle)) +
         Ord(InNormalizedAngle(ts, scan.CropData.StartAngle, scan.CropData.EndAngle)) +
@@ -700,7 +699,7 @@ var
     SetLength(x, 2);
     f := 1000.0;
     iter := 0;
-    repeat
+    //repeat
       prevF := f;
 
       PrepareCorrect(coords);
@@ -718,7 +717,7 @@ var
       Write(', RMSE:', f:12:6);
       WriteLn(', ', x[0]:12:6, ', ', x[1]:12:6);
 
-    until SameValue(f, prevF, 1e-4) or (coords.GroovesPerInch > FOutputDPI);
+    //until SameValue(f, prevF, 1e-4) or (coords.GroovesPerInch > FOutputDPI);
 
     FPerAngleX[AIndex] := x;
     rmses[AIndex] := f;

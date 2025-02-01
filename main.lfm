@@ -1,8 +1,8 @@
 object MainForm: TMainForm
   Left = -8
-  Height = 759
+  Height = 798
   Top = -8
-  Width = 976
+  Width = 992
   HorzScrollBar.Increment = 240
   HorzScrollBar.Page = 640
   HorzScrollBar.Tracking = True
@@ -11,8 +11,8 @@ object MainForm: TMainForm
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 830
-  ClientWidth = 1370
+  ClientHeight = 775
+  ClientWidth = 992
   Color = 4210752
   DoubleBuffered = False
   OnCreate = FormCreate
@@ -92,19 +92,19 @@ object MainForm: TMainForm
       WordWrap = False
     end
     object btScansCorrelator: TButton
-      Left = 240
+      Left = 248
       Height = 25
       Top = 96
-      Width = 155
+      Width = 147
       Caption = 'Scans correlator'
       TabOrder = 13
       OnClick = btScansCorrelatorClick
     end
     object btScan2Track: TButton
-      Left = 240
+      Left = 248
       Height = 25
       Top = 151
-      Width = 155
+      Width = 147
       Caption = 'Scan to track'
       TabOrder = 14
       OnClick = btScan2TrackClick
@@ -122,11 +122,11 @@ object MainForm: TMainForm
       OnClick = btTestClick
     end
     object cbDPI: TComboBox
-      Left = 240
+      Left = 248
       Height = 23
       Hint = 'Default dots per inch'
       Top = 8
-      Width = 80
+      Width = 72
       ItemHeight = 15
       ItemIndex = 2
       Items.Strings = (
@@ -196,27 +196,27 @@ object MainForm: TMainForm
       Text = '48000'
     end
     object cbMethod: TComboBox
-      Left = 240
+      Left = 248
       Height = 23
       Hint = 'Optimisation method'
       Top = 32
-      Width = 155
+      Width = 147
       ItemHeight = 15
-      ItemIndex = 3
+      ItemIndex = 1
       Items.Strings = (
         'No optimization'
-        'BFGS'
+        'Non-smooth solver'
         'Powell''s method'
-        'BFGS + Powell''s method'
+        'Non-smooth + Powell''s'
       )
       ParentShowHint = False
       ShowHint = True
       Style = csDropDownList
       TabOrder = 10
-      Text = 'BFGS + Powell''s method'
+      Text = 'Non-smooth solver'
     end
     object chkCorrect: TCheckBox
-      Left = 240
+      Left = 248
       Height = 19
       Top = 56
       Width = 94
@@ -226,7 +226,7 @@ object MainForm: TMainForm
       TabOrder = 11
     end
     object chkBlend: TCheckBox
-      Left = 240
+      Left = 248
       Height = 19
       Top = 74
       Width = 104

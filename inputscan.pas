@@ -351,7 +351,7 @@ begin
 
   GradientEvalCenter([FCenter.X, FCenter.Y], f2, nil, nil);
 
-  FCenterQuality := -(5.0 * f + f2);
+  FCenterQuality := -(7.0 * f + f2);
 end;
 
 procedure TInputScan.FindGrooveStart;
