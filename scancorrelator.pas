@@ -36,6 +36,8 @@ type
 
     FOutputImage: TWordDynArray2;
 
+    procedure CorrectAnglesFromCoords(const coords: TCorrectCoords; out startAngle, endAngle, angleInc: Double);
+
     function PrepareAnalyze(coords: TCorrectCoords): TDoubleDynArray;
     procedure GradientAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
     function PowellAnalyze(const arg: TVector; obj: Pointer): TScalar;
@@ -477,18 +479,26 @@ begin
     WriteLn(FInputScans[i].PNGShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (after)');
 end;
 
-procedure TScanCorrelator.PrepareCorrect(var coords: TCorrectCoords);
+procedure TScanCorrelator.CorrectAnglesFromCoords(const coords:TCorrectCoords;
+ out startAngle,endAngle,angleInc:Double);
 var
-  iScan, ilut, cnt, radiusCnt, angleCnt, v, best: Integer;
-  t, ts, te, r, ri, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, angle, startAngle, endAngle, angleInc, angleExtents: Double;
-  sinCosLUT: TPointDDynArray;
-  scan: TInputScan;
+  angle, angleExtents: Double;
 begin
   angle := (coords.AngleIdx / CCorrectAngleCount) * 2.0 * Pi;
   angleExtents := 2.0 * Pi / CCorrectAngleCount;
   startAngle := angle - angleExtents;
   endAngle := angle + angleExtents;
   angleInc := FRadiansPerRevolutionPoint;
+end;
+
+procedure TScanCorrelator.PrepareCorrect(var coords: TCorrectCoords);
+var
+  iAngle, iScan, ilut, cnt, radiusCnt, angleCnt, v, best: Integer;
+  t, r, ri, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, startAngle, endAngle, angleInc: Double;
+  sinCosLUT: TPointDDynArray;
+  scan: TInputScan;
+begin
+  CorrectAnglesFromCoords(coords, startAngle, endAngle, angleInc);
 
   radiusCnt := Ceil(CCorrectAreaWidth * coords.GroovesPerInch);
   angleCnt := Ceil((endAngle - startAngle + angleInc) / angleInc);
@@ -506,16 +516,14 @@ begin
 
     scan := FInputScans[iScan];
 
-    t := NormalizeAngle(angle + scan.RelativeAngle);
-    ts := NormalizeAngle(startAngle + scan.RelativeAngle);
-    te := NormalizeAngle(endAngle + scan.RelativeAngle);
+    v := 0;
+    for iAngle := round(RadToDeg(startAngle)) to round(RadToDeg(endAngle)) do
+    begin
+      t := NormalizeAngle(DegToRad(iAngle) + scan.RelativeAngle);
 
-    v := Ord(InNormalizedAngle(t, scan.CropData.StartAngle, scan.CropData.EndAngle)) +
-        Ord(InNormalizedAngle(ts, scan.CropData.StartAngle, scan.CropData.EndAngle)) +
-        Ord(InNormalizedAngle(te, scan.CropData.StartAngle, scan.CropData.EndAngle)) +
-        Ord(InNormalizedAngle(t,  scan.CropData.StartAngleMirror, scan.CropData.EndAngleMirror)) +
-        Ord(InNormalizedAngle(ts, scan.CropData.StartAngleMirror, scan.CropData.EndAngleMirror)) +
-        Ord(InNormalizedAngle(te, scan.CropData.StartAngleMirror, scan.CropData.EndAngleMirror));
+      v += Ord(InNormalizedAngle(t, scan.CropData.StartAngle, scan.CropData.EndAngle)) +
+           Ord(InNormalizedAngle(t, scan.CropData.StartAngleMirror, scan.CropData.EndAngleMirror));
+    end;
 
     if v <= best then
     begin
@@ -523,6 +531,8 @@ begin
       coords.BaseScanIdx := iScan;
     end;
   end;
+
+  WriteLn(coords.ScanIdx:4, coords.AngleIdx:4, coords.BaseScanIdx:4, best:8);
 
   // build sin / cos lookup table
 
@@ -574,7 +584,7 @@ var
   coords: PCorrectCoords absolute obj;
   preparedData: TDoubleDynArray;
   i, cnt, iscan, ilut, radiusCnt, angleCnt: Integer;
-  mseInt, w, t, r, ri, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, gsk, angle, startAngle, endAngle, angleInc, angleExtents: Double;
+  mseInt, w, t, r, ri, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, gsk, startAngle, endAngle, angleInc: Double;
   sinCosLUT: TPointDDynArray;
 begin
   func := 0.0;
@@ -584,11 +594,7 @@ begin
   skc := arg[0];
   skm := arg[1];
 
-  angle := (coords^.AngleIdx / CCorrectAngleCount) * 2.0 * Pi;
-  angleExtents := 2.0 * Pi / CCorrectAngleCount;
-  startAngle := angle - angleExtents;
-  endAngle := angle + angleExtents;
-  angleInc := FRadiansPerRevolutionPoint;
+  CorrectAnglesFromCoords(coords^, startAngle, endAngle, angleInc);
 
   radiusCnt := Ceil(CCorrectAreaWidth * coords^.GroovesPerInch);
   angleCnt := Ceil((endAngle - startAngle + angleInc) / angleInc);
