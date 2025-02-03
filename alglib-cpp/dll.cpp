@@ -21,7 +21,7 @@ extern "C"
     ns_f = func;
   };
 
-  __declspec(dllexport) double alglib_NonSmoothBoundedMinimize(void* Func, int n, double* X, double* LowBound, double* UpBound, double Epsilon, void* Data)
+  __declspec(dllexport) double alglib_NonSmoothBoundedMinimize(void* Func, int n, double* X, double* LowBound, double* UpBound, double Epsilon, double Radius, double Penalty, void* Data)
   {
     minnsstate state;
     minnsreport rep;
@@ -40,6 +40,7 @@ extern "C"
     }
 
     minnscreate(x, state);
+    minnssetalgoags(state, Radius, Penalty);
     if (LowBound && UpBound)
       minnssetbc(state, lb, ub);
     minnssetcond(state, Epsilon, 0);
@@ -52,11 +53,6 @@ extern "C"
       X[i] = x[i];
 
     return ns_f;
-  }
-
-  __declspec(dllexport) double alglib_NonSmoothMinimize(void* Func, int n, double* X, double Epsilon, void* Data)
-  {
-    return alglib_NonSmoothBoundedMinimize(Func, n, X, NULL, NULL, Epsilon, Data);
   }
 
 }

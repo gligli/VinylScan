@@ -145,8 +145,7 @@ procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFun
 
 implementation
 
-function alglib_NonSmoothMinimize(Func: Pointer; n: Integer; X: PDouble; Epsilon: Double; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
-function alglib_NonSmoothBoundedMinimize(Func: Pointer; n: Integer; X, LowBound, UpBound: PDouble; Epsilon: Double; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
+function alglib_NonSmoothBoundedMinimize(Func: Pointer; n: Integer; X, LowBound, UpBound: PDouble; Epsilon, Radius, Penalty: Double; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
 
 procedure SpinEnter(Lock: PSpinLock); assembler;
 label spin_lock;
@@ -417,7 +416,7 @@ function NonSmoothMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsi
 begin
   GNSFunc := Func;
   try
-    Result := alglib_NonSmoothMinimize(@NSFunc, Length(X), @X[0], Epsilon, Data);
+    Result := alglib_NonSmoothBoundedMinimize(@NSFunc, Length(X), @X[0], nil, nil, Epsilon, 0.1, 50.0, Data);
   finally
     GNSFunc := nil;
   end;
@@ -427,7 +426,7 @@ function NonSmoothBoundedMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArra
 begin
   GNSFunc := Func;
   try
-    Result := alglib_NonSmoothBoundedMinimize(@NSFunc, Length(X), @X[0], @LowBound[0], @UpBound[0], Epsilon, Data);
+    Result := alglib_NonSmoothBoundedMinimize(@NSFunc, Length(X), @X[0], @LowBound[0], @UpBound[0], Epsilon, 0.1, 50.0, Data);
   finally
     GNSFunc := nil;
   end;
