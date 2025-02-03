@@ -94,12 +94,12 @@ const
   CAnalyzeAreaBegin = C45RpmInnerSize + 0.1;
   CAnalyzeAreaEnd = C45RpmLabelOuterSize;
   CAnalyzeAreaWidth = (CAnalyzeAreaEnd - CAnalyzeAreaBegin) * 0.5;
-  CAnalyzeAreaGroovesPerInch = 100;
+  CAnalyzeAreaGroovesPerInch = 300;
 
   CCorrectAngleCount = 8;
-  CCorrectArea1Begin = C45RpmLabelOuterSize;
+  CCorrectArea1Begin = C45RpmLabelOuterSize - 0.1;
   CCorrectArea1End = C45RpmLastMusicGroove;
-  CCorrectArea2Begin = C45RpmFirstMusicGroove;
+  CCorrectArea2Begin = C45RpmLastMusicGroove;
   CCorrectArea2End = C45RpmOuterSize;
   CCorrectAreaWidth = (CCorrectArea1End - CCorrectArea1Begin) * 0.5 + (CCorrectArea2End - CCorrectArea2Begin) * 0.5;
   CCorrectAreaGroovesPerInch = 300;
@@ -683,7 +683,6 @@ end;
 procedure TScanCorrelator.Correct;
 const
   CEpsX = 1e-6;
-  CScale = 1e-3;
 var
   rmses: TDoubleDynArray;
   coordsArray: array of TCorrectCoords;
@@ -710,7 +709,7 @@ var
 
       PrepareCorrect(coords);
 
-      f := NonSmoothMinimize(@GradientCorrect, x, CEpsX, @coords);
+      f := NonSmoothBoundedMinimize(@GradientCorrect, x, [-Infinity, -0.01], [Infinity, 0.01], CEpsX, @coords);
 
       f := Sqrt(f);
       Inc(iter);
@@ -806,18 +805,6 @@ begin
   WriteLn('Worst RMSE: ', MaxValue(rmses):12:9);
 end;
 
-function CompareInputScansCrop(Item1, Item2, UserParameter: Pointer): Integer;
-var
-  s1: ^TInputScan absolute Item1;
-  s2: ^TInputScan absolute Item2;
-  center1, center2: Double;
-begin
-  center1 := s1^.RelativeAngle;
-  center2 := s2^.RelativeAngle;
-
-  Result := CompareValue(center2, center1);
-end;
-
 procedure TScanCorrelator.Crop;
 
   procedure DoCrop(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
@@ -834,11 +821,6 @@ begin
   WriteLn('Crop');
 
   ProcThreadPool.DoParallelLocalProc(@DoCrop, 0, High(FInputScans));
-
-  if Length(FInputScans) > 1 then
-  begin
-    QuickSort(FInputScans[0], 0, High(FInputScans), SizeOf(TInputScan), @CompareInputScansCrop);
-  end;
 
   for i := 0 to High(FInputScans) do
     WriteLn(FInputScans[i].PNGShortName, ', begin:', RadToDeg(FInputScans[i].CropData.StartAngle):9:3, ', end:', RadToDeg(FInputScans[i].CropData.EndAngle):9:3);
