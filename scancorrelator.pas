@@ -97,11 +97,9 @@ const
   CAnalyzeAreaGroovesPerInch = 300;
 
   CCorrectAngleCount = 8;
-  CCorrectArea1Begin = C45RpmLabelOuterSize - 0.1;
-  CCorrectArea1End = C45RpmLastMusicGroove;
-  CCorrectArea2Begin = C45RpmLastMusicGroove;
-  CCorrectArea2End = C45RpmOuterSize;
-  CCorrectAreaWidth = (CCorrectArea1End - CCorrectArea1Begin) * 0.5 + (CCorrectArea2End - CCorrectArea2Begin) * 0.5;
+  CCorrectAreaBegin = C45RpmLabelOuterSize - 0.1;
+  CCorrectAreaEnd = C45RpmOuterSize;
+  CCorrectAreaWidth = (CCorrectAreaEnd - CCorrectAreaBegin) * 0.5;
   CCorrectAreaGroovesPerInch = 300;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
@@ -321,7 +319,7 @@ procedure TScanCorrelator.GradientAnalyze(const arg: TVector; var func: Double; 
 var
   coords: PCorrectCoords absolute obj;
 
-  i, pos, cnt, scanIdx: Integer;
+  iRadius, iArg, pos, cnt, scanIdx: Integer;
   ri, t, r, px, py, cx, cy, rri, sn, cs, mseInt, gInt, gimgx, gimgy, gr, gt, gcx, gcy: Double;
   sinCosLUT: TPointDDynArray;
 begin
@@ -342,19 +340,19 @@ begin
 
   r := CAnalyzeAreaBegin * 0.5 * FOutputDPI;
   pos := 0;
-  for i := 0 to cnt - 1 do
+  for iRadius := 0 to cnt - 1 do
   begin
     cs := sinCosLUT[pos].X;
     sn := sinCosLUT[pos].Y;
 
-    rri := r + ri * i;
+    rri := r + ri * iRadius;
 
     px := cs * rri + cx;
     py := sn * rri + cy;
 
     if FInputScans[scanIdx].InRangePointD(py, px) then
     begin
-      mseInt := coords^.PreparedData[i] - FInputScans[scanIdx].GetPointD(py, px, isImage);
+      mseInt := coords^.PreparedData[iRadius] - FInputScans[scanIdx].GetPointD(py, px, isImage);
 
       func += Sqr(mseInt);
 
@@ -388,8 +386,8 @@ begin
 
   func /= cnt;
   if Assigned(grad) then
-    for i := 0 to High(grad) do
-      grad[i] /= cnt;
+    for iArg := 0 to High(grad) do
+      grad[iArg] /= cnt;
 
   Write('RMSE: ', Sqrt(func):12:9,#13);
 end;
@@ -493,8 +491,8 @@ end;
 
 procedure TScanCorrelator.PrepareCorrect(var coords: TCorrectCoords);
 var
-  iAngle, iScan, ilut, cnt, radiusCnt, angleCnt, v, best: Integer;
-  t, r, ri, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, startAngle, endAngle, angleInc: Double;
+  iRadius, iAngle, iScan, cnt, radiusCnt, angleCnt, v, best: Integer;
+  t, rBeg, ri, rri, sn, cs, px, py, cx, cy, startAngle, endAngle, angleInc: Double;
   sinCosLUT: TPointDDynArray;
   scan: TInputScan;
 begin
@@ -542,22 +540,22 @@ begin
 
   BuildSinCosLUT(angleCnt, sinCosLUT, startAngle + t, endAngle - startAngle + angleInc);
 
+  // parse image arcs
+
   cnt := 0;
-  r := CCorrectArea1Begin * 0.5 * FOutputDPI;
-  rMid := CCorrectArea1End * 0.5 * FOutputDPI;
-  rMid2 := CCorrectArea2Begin * 0.5 * FOutputDPI;
-  rEnd := CCorrectArea2End * 0.5 * FOutputDPI;
+  rBeg := CCorrectAreaBegin * 0.5 * FOutputDPI;
   ri := FOutputDPI / coords.GroovesPerInch;
-  repeat
-    // parse image arc
+  for iRadius := 0 to radiusCnt - 1 do
+  begin
+    rri := rBeg + ri * iRadius;
 
-    for ilut := 0 to High(sinCosLUT) do
+    for iAngle := 0 to angleCnt - 1 do
     begin
-      cs := sinCosLUT[ilut].X;
-      sn := sinCosLUT[ilut].Y;
+      cs := sinCosLUT[iAngle].X;
+      sn := sinCosLUT[iAngle].Y;
 
-      px := cs * r + cx;
-      py := sn * r + cy;
+      px := cs * rri + cx;
+      py := sn * rri + cy;
 
       if FInputScans[coords.BaseScanIdx].InRangePointD(py, px) then
         coords.PreparedData[cnt] := FInputScans[coords.BaseScanIdx].GetPointD(py, px, isImage)
@@ -566,15 +564,7 @@ begin
 
       Inc(cnt);
     end;
-
-    // move forward
-
-    r += ri;
-
-    if (r >= rMid) and (r < rMid2) then
-      r += rMid2 - rMid;
-
-  until r >= rEnd;
+  end;
 
   Assert(cnt = radiusCnt * angleCnt);
 end;
@@ -583,8 +573,8 @@ procedure TScanCorrelator.GradientCorrect(const arg: TVector; var func: Double; 
 var
   coords: PCorrectCoords absolute obj;
   preparedData: TDoubleDynArray;
-  i, cnt, iscan, ilut, radiusCnt, angleCnt: Integer;
-  mseInt, w, t, r, ri, rEnd, rMid, rMid2, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, gsk, startAngle, endAngle, angleInc: Double;
+  iArg, cnt, iRadius, iScan, iAngle, radiusCnt, angleCnt: Integer;
+  mseInt, w, t, ri, rri, rBeg, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, gsk, startAngle, endAngle, angleInc: Double;
   sinCosLUT: TPointDDynArray;
 begin
   func := 0.0;
@@ -599,55 +589,55 @@ begin
   radiusCnt := Ceil(CCorrectAreaWidth * coords^.GroovesPerInch);
   angleCnt := Ceil((endAngle - startAngle + angleInc) / angleInc);
 
-  iscan := coords^.ScanIdx;
+  iScan := coords^.ScanIdx;
   preparedData := coords^.PreparedData;
 
-  t  := FInputScans[iscan].RelativeAngle;
-  cx := FInputScans[iscan].Center.X;
-  cy := FInputScans[iscan].Center.Y;
+  t  := FInputScans[iScan].RelativeAngle;
+  cx := FInputScans[iScan].Center.X;
+  cy := FInputScans[iScan].Center.Y;
 
   // build sin / cos lookup table
 
   BuildSinCosLUT(angleCnt, sinCosLUT, startAngle + t, endAngle - startAngle + angleInc);
 
+  // parse image arcs
+
   cnt := 0;
-  r := CCorrectArea1Begin * 0.5 * FOutputDPI;
-  rMid := CCorrectArea1End * 0.5 * FOutputDPI;
-  rMid2 := CCorrectArea2Begin * 0.5 * FOutputDPI;
-  rEnd := CCorrectArea2End * 0.5 * FOutputDPI;
+  rBeg := CCorrectAreaBegin * 0.5 * FOutputDPI;
   ri := FOutputDPI / coords^.GroovesPerInch;
-  repeat
-    rsk := r + (r * skm + skc);
+  for iRadius := 0 to radiusCnt - 1 do
+  begin
+    rri := rBeg + ri * iRadius;
 
-    // parse image arc
+    rsk := rri + (rri * skm + skc);
 
-    for ilut := 0 to High(sinCosLUT) do
+    for iAngle := 0 to High(sinCosLUT) do
     begin
-      cs := sinCosLUT[ilut].X;
-      sn := sinCosLUT[ilut].Y;
+      cs := sinCosLUT[iAngle].X;
+      sn := sinCosLUT[iAngle].Y;
 
       px := cs * rsk + cx;
       py := sn * rsk + cy;
 
-      if FInputScans[iscan].InRangePointD(py, px) then
+      if FInputScans[iScan].InRangePointD(py, px) then
       begin
-        w := 2.0 - 4.0 * abs(ilut / angleCnt - 0.5);
+        w := 2.0 - 4.0 * abs(iAngle / angleCnt - 0.5);
 
-        mseInt := (preparedData[cnt] - FInputScans[iscan].GetPointD(py, px, isImage)) * w;
+        mseInt := (preparedData[cnt] - FInputScans[iScan].GetPointD(py, px, isImage)) * w;
 
         func += Sqr(mseInt);
 
         if Assigned(grad) then
         begin
-          gimgx := FInputScans[iscan].GetPointD(py, px, isXGradient);
-          gimgy := FInputScans[iscan].GetPointD(py, px, isYGradient);
+          gimgx := FInputScans[iScan].GetPointD(py, px, isXGradient);
+          gimgy := FInputScans[iScan].GetPointD(py, px, isYGradient);
 
           gsk := gimgx * cs + gimgy * sn;
 
           gsk *= -2.0 * mseInt;
 
           grad[0] += gsk;
-          grad[1] += gsk * r;
+          grad[1] += gsk * rri;
         end;
       end
       else
@@ -657,22 +647,14 @@ begin
 
       Inc(cnt);
     end;
-
-    // move forward
-
-    r += ri;
-
-    if (r >= rMid) and (r < rMid2) then
-      r += rMid2 - rMid;
-
-  until r >= rEnd;
+  end;
 
   Assert(cnt = radiusCnt * angleCnt);
 
   func /= cnt;
   if Assigned(grad) then
-    for i := 0 to High(grad) do
-      grad[i] /= cnt;
+    for iArg := 0 to High(grad) do
+      grad[iArg] /= cnt;
 end;
 
 function TScanCorrelator.PowellCorrect(const arg: TVector; obj: Pointer): TScalar;
