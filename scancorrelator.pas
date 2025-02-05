@@ -507,11 +507,8 @@ begin
 
   best := MaxInt;
   coords.BaseScanIdx := -1;
-  for iScan := 0 to High(FInputScans) do
+  for iScan := 0 to coords.ScanIdx - 1 do
   begin
-    if iScan = coords.ScanIdx then
-      Continue;
-
     scan := FInputScans[iScan];
 
     v := 0;
@@ -713,7 +710,7 @@ var
 
 var
   iangle, iscan, ias, iasbase, ix: Integer;
-  pax, pax2: TDoubleDynArray2;
+  pax: TDoubleDynArray2;
 begin
   WriteLn('Correct');
 
@@ -731,7 +728,6 @@ begin
   // cumulate
 
   SetLength(pax, Length(FPerAngleX), Length(FPerAngleX[0]));
-  SetLength(pax2, Length(FPerAngleX), Length(FPerAngleX[0]));
 
   for ias := 0 to High(pax) do
   begin
@@ -743,10 +739,6 @@ begin
   for iscan := 1 to High(FInputScans) do
     for iangle := 0 to CCorrectAngleCount - 1 do
     begin
-      for ias := 0 to High(pax) do
-        for ix := 0 to High(FPerAngleX[ias]) do
-          pax2[ias, ix] := pax[ias, ix];
-
       ias := (iscan - 1) * CCorrectAngleCount + iangle;
 
       WriteLn(ias:4);
@@ -758,14 +750,11 @@ begin
 
         WriteLn(ias:4, iasbase:4);
 
-        if (iasbase < 0) or IsNan(pax2[iasbase, 0]) then
+        if iasbase < 0 then
           Break;
 
         for ix := 0 to High(FPerAngleX[ias]) do
-        begin
-          FPerAngleX[ias, ix] += pax2[iasbase, ix];
-          pax2[iasbase, ix] := NaN;
-        end;
+          FPerAngleX[ias, ix] += pax[iasbase, ix];
       end;
     end;
 
