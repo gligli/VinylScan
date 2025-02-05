@@ -428,21 +428,25 @@ begin
     end;
     isXGradient:
     begin
-      Result := GetPt(Y, X - 3.0 * CH) * (1 / CH) * (-1/60);
-      Result += GetPt(Y, X - 2.0 * CH) * (1 / CH) * (3/20);
-      Result += GetPt(Y, X - 1.0 * CH) * (1 / CH) * (-3/4);
-      Result += GetPt(Y, X + 1.0 * CH) * (1 / CH) * (3/4);
-      Result += GetPt(Y, X + 2.0 * CH) * (1 / CH) * (-3/20);
-      Result += GetPt(Y, X + 3.0 * CH) * (1 / CH) * (1/60);
+      Result := GetPt(Y, X - 4.0 * CH) * (1 / CH) * (1/280);
+      Result += GetPt(Y, X - 3.0 * CH) * (1 / CH) * (-4/105);
+      Result += GetPt(Y, X - 2.0 * CH) * (1 / CH) * (1/5);
+      Result += GetPt(Y, X - 1.0 * CH) * (1 / CH) * (-4/5);
+      Result += GetPt(Y, X + 1.0 * CH) * (1 / CH) * (4/5);
+      Result += GetPt(Y, X + 2.0 * CH) * (1 / CH) * (-1/5);
+      Result += GetPt(Y, X + 3.0 * CH) * (1 / CH) * (4/105);
+      Result += GetPt(Y, X + 4.0 * CH) * (1 / CH) * (-1/280);
     end;
     isYGradient:
     begin
-      Result := GetPt(Y - 3.0 * CH, X) * (1 / CH) * (-1/60);
-      Result += GetPt(Y - 2.0 * CH, X) * (1 / CH) * (3/20);
-      Result += GetPt(Y - 1.0 * CH, X) * (1 / CH) * (-3/4);
-      Result += GetPt(Y + 1.0 * CH, X) * (1 / CH) * (3/4);
-      Result += GetPt(Y + 2.0 * CH, X) * (1 / CH) * (-3/20);
-      Result += GetPt(Y + 3.0 * CH, X) * (1 / CH) * (1/60);
+      Result := GetPt(Y - 4.0 * CH, X) * (1 / CH) * (1/280);
+      Result += GetPt(Y - 3.0 * CH, X) * (1 / CH) * (-4/105);
+      Result += GetPt(Y - 2.0 * CH, X) * (1 / CH) * (1/5);
+      Result += GetPt(Y - 1.0 * CH, X) * (1 / CH) * (-4/5);
+      Result += GetPt(Y + 1.0 * CH, X) * (1 / CH) * (4/5);
+      Result += GetPt(Y + 2.0 * CH, X) * (1 / CH) * (-1/5);
+      Result += GetPt(Y + 3.0 * CH, X) * (1 / CH) * (4/105);
+      Result += GetPt(Y + 4.0 * CH, X) * (1 / CH) * (-1/280);
     end;
   end;
 
@@ -550,7 +554,7 @@ end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
 begin
-  Result := InRange(Y, 4, Height - 6) and InRange(X, 4, Width - 6);
+  Result := InRange(Y, 5, Height - 7) and InRange(X, 5, Width - 7);
 end;
 
 { TScanImage }
