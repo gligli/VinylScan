@@ -94,13 +94,13 @@ const
   CAnalyzeAreaBegin = C45RpmInnerSize + 0.1;
   CAnalyzeAreaEnd = C45RpmLabelOuterSize;
   CAnalyzeAreaWidth = (CAnalyzeAreaEnd - CAnalyzeAreaBegin) * 0.5;
-  CAnalyzeAreaGroovesPerInch = 300;
+  CAnalyzeAreaGroovesPerInch = 32;
 
-  CCorrectAngleCount = 8;
-  CCorrectAreaBegin = C45RpmLabelOuterSize - 0.1;
+  CCorrectAngleCount = 16;
+  CCorrectAreaBegin = C45RpmInnerSize + 0.1;
   CCorrectAreaEnd = C45RpmOuterSize;
   CCorrectAreaWidth = (CCorrectAreaEnd - CCorrectAreaBegin) * 0.5;
-  CCorrectAreaGroovesPerInch = 300;
+  CCorrectAreaGroovesPerInch = 32;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
@@ -201,12 +201,12 @@ var
         px := cx + cs * iRadius;
         py := cy + sn * iRadius;
         if scn.InRangePointD(py, px) then
-          arr[Result + 0] := scn.GetPointD(py, px, isImage);
+          arr[Result + 0] := scn.GetPointD(py, px, isImage, imLinear);
 
         px := cx - cs * iRadius;
         py := cy - sn * iRadius;
         if scn.InRangePointD(py, px) then
-          arr[Result + 1] := scn.GetPointD(py, px, isImage);
+          arr[Result + 1] := scn.GetPointD(py, px, isImage, imLinear);
 
         Inc(Result, 2);
       end;
@@ -301,7 +301,7 @@ begin
 
     if FInputScans[0].InRangePointD(py, px) then
     begin
-      Result[i] := FInputScans[0].GetPointD(py, px, isImage);
+      Result[i] := FInputScans[0].GetPointD(py, px, isImage, imLinear);
     end
     else
     begin
@@ -352,14 +352,14 @@ begin
 
     if FInputScans[scanIdx].InRangePointD(py, px) then
     begin
-      mseInt := coords^.PreparedData[iRadius] - FInputScans[scanIdx].GetPointD(py, px, isImage);
+      mseInt := coords^.PreparedData[iRadius] - FInputScans[scanIdx].GetPointD(py, px, isImage, imLinear);
 
       func += Sqr(mseInt);
 
       if Assigned(grad) then
       begin
-        gimgx := FInputScans[scanIdx].GetPointD(py, px, isXGradient);
-        gimgy := FInputScans[scanIdx].GetPointD(py, px, isYGradient);
+        gimgx := FInputScans[scanIdx].GetPointD(py, px, isXGradient, imLinear);
+        gimgy := FInputScans[scanIdx].GetPointD(py, px, isYGradient, imLinear);
 
         gInt := -2.0 * mseInt;
         gr := rri;
@@ -419,7 +419,7 @@ const
 
     f := 1000.0;
     iter := 0;
-    //repeat
+    repeat
       prevF := f;
 
       coords.PreparedData := PrepareAnalyze(coords);
@@ -451,7 +451,7 @@ const
 
       WriteLn(FInputScans[AIndex].PNGShortName, ', Iteration: ', iter:3, ', RMSE: ', f:12:9, #13);
 
-    //until SameValue(f, prevF, 1e-4) or (coords.GroovesPerInch > FOutputDPI);
+    until SameValue(f, prevF, 1e-4) or (coords.GroovesPerInch > FOutputDPI);
 
     FInputScans[AIndex].RelativeAngle := x[0];
     p.X := x[1];
@@ -555,7 +555,7 @@ begin
       py := sn * rri + cy;
 
       if FInputScans[coords.BaseScanIdx].InRangePointD(py, px) then
-        coords.PreparedData[cnt] := FInputScans[coords.BaseScanIdx].GetPointD(py, px, isImage)
+        coords.PreparedData[cnt] := FInputScans[coords.BaseScanIdx].GetPointD(py, px, isImage, imLinear)
       else
         coords.PreparedData[cnt] := 1000.0;
 
@@ -620,14 +620,14 @@ begin
       begin
         w := 2.0 - 4.0 * abs(iAngle / angleCnt - 0.5);
 
-        mseInt := (preparedData[cnt] - FInputScans[iScan].GetPointD(py, px, isImage)) * w;
+        mseInt := (preparedData[cnt] - FInputScans[iScan].GetPointD(py, px, isImage, imLinear)) * w;
 
         func += Sqr(mseInt);
 
         if Assigned(grad) then
         begin
-          gimgx := FInputScans[iScan].GetPointD(py, px, isXGradient);
-          gimgy := FInputScans[iScan].GetPointD(py, px, isYGradient);
+          gimgx := FInputScans[iScan].GetPointD(py, px, isXGradient, imLinear);
+          gimgy := FInputScans[iScan].GetPointD(py, px, isYGradient, imLinear);
 
           gsk := gimgx * cs + gimgy * sn;
 
@@ -683,7 +683,7 @@ var
     SetLength(x, 2);
     f := 1000.0;
     iter := 0;
-    //repeat
+    repeat
       prevF := f;
 
       PrepareCorrect(coords);
@@ -701,7 +701,7 @@ var
       Write(', RMSE:', f:12:6);
       WriteLn(', ', x[0]:12:6, ', ', x[1]:12:6);
 
-    //until SameValue(f, prevF, 1e-4) or (coords.GroovesPerInch > FOutputDPI);
+    until SameValue(f, prevF, 1e-4) or (coords.GroovesPerInch > FOutputDPI);
 
     FPerAngleX[AIndex] := x;
     rmses[AIndex] := f;
@@ -874,7 +874,7 @@ var
                not InNormalizedAngle(ct, FInputScans[i].CropData.StartAngleMirror, FInputScans[i].CropData.EndAngleMirror) or
                (r < rLbl)) then
           begin
-            acc += FInputScans[i].GetPointD(py, px, isImage);
+            acc += FInputScans[i].GetPointD(py, px, isImage, imHermite);
             Inc(cnt);
             if not FRebuildBlended then
               Break;
