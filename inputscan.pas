@@ -10,6 +10,7 @@ uses
 
 type
   TInterpSource = (isImage, isXGradient, isYGradient);
+  TInterpMode = (imPoint, imLinear, imHermite);
 
   TCropData = record
     StartAngle, EndAngle: Double;
@@ -61,7 +62,7 @@ type
     procedure Crop;
 
     function InRangePointD(Y, X: Double): Boolean; inline;
-    function GetPointD(Y, X: Double; Source: TInterpSource): Double; inline;
+    function GetPointD(Y, X: Double; Source: TInterpSource; Mode: TInterpMode): Double; inline;
 
     property PNGFileName: String read FPNGFileName write FPNGFileName;
     property PNGShortName: String read GetPNGShortName;
@@ -149,12 +150,12 @@ begin
 
       if (Sqrt(Sqr(ix) + Sqr(iy)) <= radiusOuter) and  InRangePointD(y, x) then
       begin
-        func -= GetPointD(y, x, isImage);
+        func -= Ord(GetPointD(y, x, isImage, imLinear) >= ($d0 / $ff));
 
         if Assigned(grad) then
         begin
-          grad[0] -= GetPointD(y, x, isXGradient);
-          grad[1] -= GetPointD(y, x, isYGradient);
+          grad[0] -= GetPointD(y, x, isXGradient, imLinear);
+          grad[1] -= GetPointD(y, x, isYGradient, imLinear);
         end;
       end;
     end;
@@ -212,7 +213,7 @@ begin
     if InRangePointD(py, px) and
         not InNormalizedAngle(bt, a0a, a0b) and not InNormalizedAngle(bt, a1a, a1b) then
     begin
-      p := GetPointD(py, px, isImage);
+      p := GetPointD(py, px, isImage, imLinear);
       stdDevArr[arrPos] := p;
       Inc(arrPos);
     end;
@@ -277,12 +278,12 @@ begin
 
         if InRangePointD(y, x) then
         begin
-          func += GetPointD(y, x, isImage) * CRadiusYFactors[vs];
+          func += GetPointD(y, x, isImage, imLinear) * CRadiusYFactors[vs];
 
           if Assigned(grad) then
           begin
-            gimgx := GetPointD(y, x, isXGradient) * CRadiusYFactors[vs];
-            gimgy := GetPointD(y, x, isYGradient) * CRadiusYFactors[vs];
+            gimgx := GetPointD(y, x, isXGradient, imLinear) * CRadiusYFactors[vs];
+            gimgy := GetPointD(y, x, isYGradient, imLinear) * CRadiusYFactors[vs];
 
             grad[0] += (gimgx * cs + gimgy * sn);
             grad[1] += gimgx;
@@ -374,7 +375,7 @@ begin
 
     if InRangePointD(y, x) then
     begin
-      v := v * 0.99 + GetPointD(y, x, isImage) * 0.01;
+      v := v * 0.99 + GetPointD(y, x, isImage, imLinear) * 0.01;
 
       if v > best then
       begin
@@ -398,55 +399,70 @@ begin
   Result := Length(FImage);
 end;
 
-function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource): Double;
+function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource; Mode: TInterpMode): Double;
 
-  function GetPt(AY, AX: Single): Single; inline;
-  var
-    ix, iy: Integer;
-    y0, y1, y2, y3: Single;
+  function GetSample(AY, AX: Integer): Double; inline;
   begin
-    ix := trunc(AX);
-    iy := trunc(AY);
+    Result := 0;
 
-    y0 := herp(FImage[iy - 1, ix - 1], FImage[iy - 1, ix + 0], FImage[iy - 1, ix + 1], FImage[iy - 1, ix + 2], AX - ix);
-    y1 := herp(FImage[iy + 0, ix - 1], FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], FImage[iy + 0, ix + 2], AX - ix);
-    y2 := herp(FImage[iy + 1, ix - 1], FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], FImage[iy + 1, ix + 2], AX - ix);
-    y3 := herp(FImage[iy + 2, ix - 1], FImage[iy + 2, ix + 0], FImage[iy + 2, ix + 1], FImage[iy + 2, ix + 2], AX - ix);
-
-    Result := herp(y0, y1, y2, y3, AY - iy);
+    case Source of
+      isImage:
+      begin
+        Result := FImage[AY, AX];
+      end;
+      isXGradient:
+      begin
+        Result := FImage[AY, AX - 4] * (1/280);
+        Result += FImage[AY, AX - 3] * (-4/105);
+        Result += FImage[AY, AX - 2] * (1/5);
+        Result += FImage[AY, AX - 1] * (-4/5);
+        Result += FImage[AY, AX + 1] * (4/5);
+        Result += FImage[AY, AX + 2] * (-1/5);
+        Result += FImage[AY, AX + 3] * (4/105);
+        Result += FImage[AY, AX + 4] * (-1/280);
+      end;
+      isYGradient:
+      begin
+        Result := FImage[AY - 4, AX] * (1/280);
+        Result += FImage[AY - 3, AX] * (-4/105);
+        Result += FImage[AY - 2, AX] * (1/5);
+        Result += FImage[AY - 1, AX] * (-4/5);
+        Result += FImage[AY + 1, AX] * (4/5);
+        Result += FImage[AY + 2, AX] * (-1/5);
+        Result += FImage[AY + 3, AX] * (4/105);
+        Result += FImage[AY + 4, AX] * (-1/280);
+      end;
+    end;
   end;
 
-const
-  CH = 1.0;
+var
+  ix, iy: Integer;
+  y0, y1, y2, y3: Double;
 begin
   Result := 0;
+  ix := trunc(X);
+  iy := trunc(Y);
 
-  case Source of
-    isImage:
+  case Mode of
+    imPoint:
     begin
-      Result := GetPt(Y, X);
+      Result := GetSample(iy, ix);
     end;
-    isXGradient:
+    imLinear:
     begin
-      Result := GetPt(Y, X - 4.0 * CH) * (1 / CH) * (1/280);
-      Result += GetPt(Y, X - 3.0 * CH) * (1 / CH) * (-4/105);
-      Result += GetPt(Y, X - 2.0 * CH) * (1 / CH) * (1/5);
-      Result += GetPt(Y, X - 1.0 * CH) * (1 / CH) * (-4/5);
-      Result += GetPt(Y, X + 1.0 * CH) * (1 / CH) * (4/5);
-      Result += GetPt(Y, X + 2.0 * CH) * (1 / CH) * (-1/5);
-      Result += GetPt(Y, X + 3.0 * CH) * (1 / CH) * (4/105);
-      Result += GetPt(Y, X + 4.0 * CH) * (1 / CH) * (-1/280);
+      y1 := lerp(GetSample(iy + 0, ix + 0), GetSample(iy + 0, ix + 1), X - ix);
+      y2 := lerp(GetSample(iy + 1, ix + 0), GetSample(iy + 1, ix + 1), X - ix);
+
+      Result := lerp(y1, y2, Y - iy);
     end;
-    isYGradient:
+    imHermite:
     begin
-      Result := GetPt(Y - 4.0 * CH, X) * (1 / CH) * (1/280);
-      Result += GetPt(Y - 3.0 * CH, X) * (1 / CH) * (-4/105);
-      Result += GetPt(Y - 2.0 * CH, X) * (1 / CH) * (1/5);
-      Result += GetPt(Y - 1.0 * CH, X) * (1 / CH) * (-4/5);
-      Result += GetPt(Y + 1.0 * CH, X) * (1 / CH) * (4/5);
-      Result += GetPt(Y + 2.0 * CH, X) * (1 / CH) * (-1/5);
-      Result += GetPt(Y + 3.0 * CH, X) * (1 / CH) * (4/105);
-      Result += GetPt(Y + 4.0 * CH, X) * (1 / CH) * (-1/280);
+      y0 := herp(GetSample(iy - 1, ix - 1), GetSample(iy - 1, ix + 0), GetSample(iy - 1, ix + 1), GetSample(iy - 1, ix + 2), X - ix);
+      y1 := herp(GetSample(iy + 0, ix - 1), GetSample(iy + 0, ix + 0), GetSample(iy + 0, ix + 1), GetSample(iy + 0, ix + 2), X - ix);
+      y2 := herp(GetSample(iy + 1, ix - 1), GetSample(iy + 1, ix + 0), GetSample(iy + 1, ix + 1), GetSample(iy + 1, ix + 2), X - ix);
+      y3 := herp(GetSample(iy + 2, ix - 1), GetSample(iy + 2, ix + 0), GetSample(iy + 2, ix + 1), GetSample(iy + 2, ix + 2), X - ix);
+
+      Result := herp(y0, y1, y2, y3, Y - iy);
     end;
   end;
 
