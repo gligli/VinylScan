@@ -416,7 +416,7 @@ function NonSmoothMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsi
 begin
   GNSFunc := Func;
   try
-    Result := alglib_NonSmoothBoundedMinimize(@NSFunc, Length(X), @X[0], nil, nil, Epsilon, 0.1, 50.0, Data);
+    Result := alglib_NonSmoothBoundedMinimize(@NSFunc, Length(X), @X[0], nil, nil, Epsilon, 1.0, 0.0, Data);
   finally
     GNSFunc := nil;
   end;
@@ -426,7 +426,7 @@ function NonSmoothBoundedMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArra
 begin
   GNSFunc := Func;
   try
-    Result := alglib_NonSmoothBoundedMinimize(@NSFunc, Length(X), @X[0], @LowBound[0], @UpBound[0], Epsilon, 0.1, 50.0, Data);
+    Result := alglib_NonSmoothBoundedMinimize(@NSFunc, Length(X), @X[0], @LowBound[0], @UpBound[0], Epsilon, 1.0, 50.0, Data);
   finally
     GNSFunc := nil;
   end;
