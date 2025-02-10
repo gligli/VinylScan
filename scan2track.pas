@@ -144,7 +144,7 @@ var
   iSample, iLut: Integer;
   pbuf: TPointFList;
   t, pt: QWord;
-  sinCosLut: TPointDDynArray;
+  sinCosLut: TSinCosDynArray;
 begin
   WriteLn('EvalTrack');
 
@@ -165,7 +165,9 @@ begin
     iLut := 0;
     radius := Scan.FirstGrooveRadius;
     repeat
-      angle := Scan.GrooveStartAngle - FRadiansPerRevolutionPoint * iLut;
+      angle := sinCosLut[iLut].Angle;
+      cs := sinCosLut[iLut].Cos;
+      sn := sinCosLut[iLut].Sin;
 
       fsmp := DecodeSample(radius, angle, feedback);
       ffSmp := fltSamples.FilterFilter(fsmp);
@@ -173,9 +175,6 @@ begin
 
       radius -= C45RpmRecordingGrooveWidth * Scan.DPI / FPointsPerRevolution;
       radius += feedback * fbRatio;
-
-      cs := sinCosLut[iLut].X;
-      sn := sinCosLut[iLut].Y;
 
       px := cs * radius + Scan.Center.X;
       py := sn * radius + Scan.Center.Y;

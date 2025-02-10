@@ -26,7 +26,7 @@ type
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
     FSilent: Boolean;
-    FSinCosLUT: TPointDDynArray;
+    FSinCosLUT: TSinCosDynArray;
 
     FCenter: TPointD;
     FConcentricGrooveRadius: Double;
@@ -169,7 +169,7 @@ var
   rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy, t, ri, rri, sn, cs, bt, px, py, p: Double;
   iLut, pos, arrPos: Integer;
   stdDevArr: TDoubleDynArray;
-  sinCosLUT: TPointDDynArray;
+  sinCosLUT: TSinCosDynArray;
 begin
   Result := 1000.0;
 
@@ -198,10 +198,9 @@ begin
   pos := 0;
   arrPos := 0;
   repeat
-    bt := NormalizeAngle(FRadiansPerRevolutionPoint * iLut + t);
-
-    cs := sinCosLUT[iLut].X;
-    sn := sinCosLUT[iLut].Y;
+    bt := sinCosLUT[iLut].Angle;
+    cs := sinCosLUT[iLut].Cos;
+    sn := sinCosLUT[iLut].Sin;
 
     rri := rBeg + ri * pos;
 
@@ -265,8 +264,8 @@ begin
 
   for ilut := 0 to FPointsPerRevolution - 1  do
   begin
-    cs := FSinCosLUT[ilut].X;
-    sn := FSinCosLUT[ilut].Y;
+    cs := FSinCosLUT[ilut].Cos;
+    sn := FSinCosLUT[ilut].Sin;
 
     for iradius := -trackWidth to trackWidth do
       for vs := Low(TValueSign) to High(TValueSign) do

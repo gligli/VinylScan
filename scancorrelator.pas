@@ -274,7 +274,7 @@ function TScanCorrelator.PrepareAnalyze(coords: TCorrectCoords): TDoubleDynArray
 var
   i, pos, cnt: Integer;
   ri, t, r, px, py, cx, cy, rri, sn, cs: Double;
-  sinCosLUT: TPointDDynArray;
+  sinCosLUT: TSinCosDynArray;
 begin
   cnt := Ceil(CAnalyzeAreaWidth * coords.GroovesPerInch * FPointsPerRevolution);
   SetLength(Result, cnt);
@@ -291,8 +291,8 @@ begin
   pos := 0;
   for i := 0 to High(Result) do
   begin
-    cs := sinCosLUT[pos].X;
-    sn := sinCosLUT[pos].Y;
+    cs := sinCosLUT[pos].Cos;
+    sn := sinCosLUT[pos].Sin;
 
     rri := r + ri * i;
 
@@ -321,7 +321,7 @@ var
 
   iRadius, iArg, pos, cnt, scanIdx: Integer;
   ri, t, r, px, py, cx, cy, rri, sn, cs, mseInt, gInt, gimgx, gimgy, gr, gt, gcx, gcy: Double;
-  sinCosLUT: TPointDDynArray;
+  sinCosLUT: TSinCosDynArray;
 begin
   func := 0.0;
   if Assigned(grad) then
@@ -330,9 +330,9 @@ begin
   scanIdx := coords^.ScanIdx;
   cnt := Ceil(CAnalyzeAreaWidth * coords^.GroovesPerInch * FPointsPerRevolution);
 
-  t   := arg[0];
-  cx  := arg[1];
-  cy  := arg[2];
+  t := arg[0];
+  cx := arg[1];
+  cy := arg[2];
 
   BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
 
@@ -342,8 +342,8 @@ begin
   pos := 0;
   for iRadius := 0 to cnt - 1 do
   begin
-    cs := sinCosLUT[pos].X;
-    sn := sinCosLUT[pos].Y;
+    cs := sinCosLUT[pos].Cos;
+    sn := sinCosLUT[pos].Sin;
 
     rri := r + ri * iRadius;
 
@@ -493,7 +493,7 @@ procedure TScanCorrelator.PrepareCorrect(var coords: TCorrectCoords);
 var
   iRadius, iAngle, iScan, cnt, radiusCnt, angleCnt, v, best: Integer;
   t, rBeg, ri, rri, sn, cs, px, py, cx, cy, startAngle, endAngle, angleInc: Double;
-  sinCosLUT: TPointDDynArray;
+  sinCosLUT: TSinCosDynArray;
   scan: TInputScan;
 begin
   CorrectAnglesFromCoords(coords, startAngle, endAngle, angleInc);
@@ -531,9 +531,11 @@ begin
 
   // build sin / cos lookup table
 
-  t  := FInputScans[coords.BaseScanIdx].RelativeAngle;
-  cx := FInputScans[coords.BaseScanIdx].Center.X;
-  cy := FInputScans[coords.BaseScanIdx].Center.Y;
+  scan := FInputScans[coords.BaseScanIdx];
+
+  t  := scan.RelativeAngle;
+  cx := scan.Center.X;
+  cy := scan.Center.Y;
 
   BuildSinCosLUT(angleCnt, sinCosLUT, startAngle + t, endAngle - startAngle + angleInc);
 
@@ -548,14 +550,14 @@ begin
 
     for iAngle := 0 to angleCnt - 1 do
     begin
-      cs := sinCosLUT[iAngle].X;
-      sn := sinCosLUT[iAngle].Y;
+      cs := sinCosLUT[iAngle].Cos;
+      sn := sinCosLUT[iAngle].Sin;
 
       px := cs * rri + cx;
       py := sn * rri + cy;
 
-      if FInputScans[coords.BaseScanIdx].InRangePointD(py, px) then
-        coords.PreparedData[cnt] := FInputScans[coords.BaseScanIdx].GetPointD(py, px, isImage, imLinear)
+      if scan.InRangePointD(py, px) then
+        coords.PreparedData[cnt] := scan.GetPointD(py, px, isImage, imLinear)
       else
         coords.PreparedData[cnt] := 1000.0;
 
@@ -572,7 +574,8 @@ var
   preparedData: TDoubleDynArray;
   iArg, cnt, iRadius, iScan, iAngle, radiusCnt, angleCnt: Integer;
   mseInt, w, t, ri, rri, rBeg, sn, cs, px, py, cx, cy, skc, skm, rsk, gimgx, gimgy, gsk, startAngle, endAngle, angleInc: Double;
-  sinCosLUT: TPointDDynArray;
+  sinCosLUT: TSinCosDynArray;
+  scan: TInputScan;
 begin
   func := 0.0;
   if Assigned(grad) then
@@ -588,10 +591,11 @@ begin
 
   iScan := coords^.ScanIdx;
   preparedData := coords^.PreparedData;
+  scan := FInputScans[iScan];
 
-  t  := FInputScans[iScan].RelativeAngle;
-  cx := FInputScans[iScan].Center.X;
-  cy := FInputScans[iScan].Center.Y;
+  t  := scan.RelativeAngle;
+  cx := scan.Center.X;
+  cy := scan.Center.Y;
 
   // build sin / cos lookup table
 
@@ -606,28 +610,28 @@ begin
   begin
     rri := rBeg + ri * iRadius;
 
-    rsk := rri + (rri * skm + skc);
+    rsk := rri * skm + skc;
 
     for iAngle := 0 to High(sinCosLUT) do
     begin
-      cs := sinCosLUT[iAngle].X;
-      sn := sinCosLUT[iAngle].Y;
+      cs := sinCosLUT[iAngle].Cos;
+      sn := sinCosLUT[iAngle].Sin;
 
       px := cs * rsk + cx;
       py := sn * rsk + cy;
 
-      if FInputScans[iScan].InRangePointD(py, px) then
+      if scan.InRangePointD(py, px) then
       begin
         w := 2.0 - 4.0 * abs(iAngle / angleCnt - 0.5);
 
-        mseInt := (preparedData[cnt] - FInputScans[iScan].GetPointD(py, px, isImage, imLinear)) * w;
+        mseInt := (preparedData[cnt] - scan.GetPointD(py, px, isImage, imLinear)) * w;
 
         func += Sqr(mseInt);
 
         if Assigned(grad) then
         begin
-          gimgx := FInputScans[iScan].GetPointD(py, px, isXGradient, imLinear);
-          gimgy := FInputScans[iScan].GetPointD(py, px, isYGradient, imLinear);
+          gimgx := scan.GetPointD(py, px, isXGradient, imLinear);
+          gimgy := scan.GetPointD(py, px, isYGradient, imLinear);
 
           gsk := gimgx * cs + gimgy * sn;
 
@@ -681,6 +685,9 @@ var
     coords.GroovesPerInch := CCorrectAreaGroovesPerInch;
 
     SetLength(x, 2);
+    x[0] := 0.0;
+    x[1] := 1.0;
+
     f := 1000.0;
     iter := 0;
     repeat
@@ -688,7 +695,7 @@ var
 
       PrepareCorrect(coords);
 
-      f := NonSmoothBoundedMinimize(@GradientCorrect, x, [-Infinity, -0.01], [Infinity, 0.01], CEpsX, @coords);
+      f := NonSmoothMinimize(@GradientCorrect, x, CEpsX, @coords);
 
       f := Sqrt(f);
       Inc(iter);
@@ -730,31 +737,24 @@ begin
   SetLength(pax, Length(FPerAngleX), Length(FPerAngleX[0]));
 
   for ias := 0 to High(pax) do
-  begin
     for ix := 0 to High(FPerAngleX[ias]) do
       pax[ias, ix] := FPerAngleX[ias, ix];
-    WriteLn(coordsArray[ias].ScanIdx:4, coordsArray[ias].AngleIdx:4, coordsArray[ias].BaseScanIdx:4);
-  end;
 
   for iscan := 1 to High(FInputScans) do
     for iangle := 0 to CCorrectAngleCount - 1 do
     begin
       ias := (iscan - 1) * CCorrectAngleCount + iangle;
 
-      WriteLn(ias:4);
-
       iasbase := ias;
       while True do
       begin
         iasbase := (coordsArray[iasbase].BaseScanIdx - 1) * CCorrectAngleCount + iangle;
 
-        WriteLn(ias:4, iasbase:4);
-
         if iasbase < 0 then
           Break;
 
-        for ix := 0 to High(FPerAngleX[ias]) do
-          FPerAngleX[ias, ix] += pax[iasbase, ix];
+        FPerAngleX[ias, 0] += pax[iasbase, 0];
+        FPerAngleX[ias, 1] *= pax[iasbase, 1];
       end;
     end;
 
@@ -811,7 +811,8 @@ var
   begin
     if (Length(FPerAngleX) = 0) or (scanIdx <= 0) then
     begin
-      FillQWord(x[0], Length(x), 0);
+      x[0] := 0.0;
+      x[1] := 1.0;
       Exit;
     end;
 
@@ -861,7 +862,7 @@ var
 
           skc := x[0];
           skm := x[1];
-          rsk := r + (r * skm + skc);
+          rsk := r * skm + skc;
 
           ct := NormalizeAngle(bt + t);
 

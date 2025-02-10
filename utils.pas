@@ -22,6 +22,10 @@ type
     L, T, R, B: Double;
   end;
 
+  TSinCos = record
+    Sin, Cos, Angle: Double;
+  end;
+
   TMinimizeMethod = (mmNone, mmBFGS, mmPowell, mmAll);
 
   TPointDDynArray = array of TPointD;
@@ -31,6 +35,7 @@ type
   TSingleDynArray2 = array of TSingleDynArray;
   TDoubleDynArray2 = array of TDoubleDynArray;
   TDoubleDynArray3 = array of TDoubleDynArray2;
+  TSinCosDynArray = array of TSinCos;
 
   TPointFList = specialize TFPGList<TPointF>;
 
@@ -135,7 +140,7 @@ function Make16BitSample(smp: Double): SmallInt;
 function NormalizeAngle(x: Double): Double;
 function InNormalizedAngle(x, xmin, xmax: Double): Boolean;
 
-procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TPointDDynArray; AOriginAngle: Double = 0.0; AExtentsAngle: Double = 2.0 * Pi);
+procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TSinCosDynArray; AOriginAngle: Double = 0.0; AExtentsAngle: Double = 2.0 * Pi);
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray); overload;
@@ -567,7 +572,7 @@ begin
     Result := InRange(x, -Pi, xmax) or InRange(x, xmin, Pi);
 end;
 
-procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TPointDDynArray; AOriginAngle: Double; AExtentsAngle: Double);
+procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TSinCosDynArray; AOriginAngle: Double; AExtentsAngle: Double);
 var
   i: Integer;
   rprp: Double;
@@ -575,7 +580,10 @@ begin
   SetLength(ASinCosLUT, APointCount);
   rprp := AExtentsAngle / APointCount;
   for i := 0 to APointCount - 1 do
-    SinCos(AOriginAngle + i * rprp, ASinCosLUT[i].Y, ASinCosLUT[i].X);
+  begin
+    ASinCosLUT[i].Angle := NormalizeAngle(AOriginAngle + i * rprp);
+    SinCos(ASinCosLUT[i].Angle, ASinCosLUT[i].Sin, ASinCosLUT[i].Cos);
+  end;
 end;
 
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
