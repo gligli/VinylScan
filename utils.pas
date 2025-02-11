@@ -72,16 +72,20 @@ type
 
 const
   C45RpmRevolutionsPerSecond = 45.0 / 60.0;
+
+  C45RpmLeadInGroovesPerInch = 16.0;
+  C45RpmMinGroovesPerInch = 2.0;
+
+  C45RpmRecordingGrooveWidth = 0.0022;
+  C45RpmLeadOutGrooveWidth = 0.006;
+
   C45RpmOuterSize = 6.875;
   C45RpmInnerSize = 1.504;
   C45RpmLabelOuterSize = 3.5;
-  C45RpmConcentricGroove = 3.875;
+  C45RpmMinConcentricGroove = 3.875 - C45RpmLeadOutGrooveWidth - 0.078;
+  C45RpmMaxConcentricGroove = 3.875 + C45RpmLeadOutGrooveWidth;
   C45RpmFirstMusicGroove = 6.625;
   C45RpmLastMusicGroove = 4.25;
-  C45RpmLeadInGroovesPerInch = 16.0;
-  C45RpmMinGroovesPerInch = 2.0;
-  C45RpmRecordingGrooveWidth = 0.0022;
-  C45RpmLeadOutGrooveWidth = 0.006;
   C45RpmAdapterSize = 1.496;
 
   CLowCutoffFreq = 20.0;
@@ -421,7 +425,7 @@ function NonSmoothMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsi
 begin
   GNSFunc := Func;
   try
-    Result := alglib_NonSmoothBoundedMinimize(@NSFunc, Length(X), @X[0], nil, nil, Epsilon, 1.0, 0.0, Data);
+    Result := alglib_NonSmoothBoundedMinimize(@NSFunc, Length(X), @X[0], nil, nil, Epsilon, 1e-3, 0.0, Data);
   finally
     GNSFunc := nil;
   end;
@@ -431,7 +435,7 @@ function NonSmoothBoundedMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArra
 begin
   GNSFunc := Func;
   try
-    Result := alglib_NonSmoothBoundedMinimize(@NSFunc, Length(X), @X[0], @LowBound[0], @UpBound[0], Epsilon, 1.0, 50.0, Data);
+    Result := alglib_NonSmoothBoundedMinimize(@NSFunc, Length(X), @X[0], @LowBound[0], @UpBound[0], Epsilon, 1e-3, 50.0, Data);
   finally
     GNSFunc := nil;
   end;

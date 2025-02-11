@@ -150,7 +150,7 @@ begin
 
       if (Sqrt(Sqr(ix) + Sqr(iy)) <= radiusOuter) and  InRangePointD(y, x) then
       begin
-        func -= Ord(GetPointD(y, x, isImage, imLinear) >= ($d0 / $ff));
+        func -= GetPointD(y, x, isImage, imLinear);
 
         if Assigned(grad) then
         begin
@@ -323,8 +323,8 @@ begin
   SetLength(xrc, 3);
 
   radiusLimit := Round(C45RpmFirstMusicGroove * 0.5 * FDPI);
-  radiusInner := Round((C45RpmConcentricGroove + C45RpmLabelOuterSize) * 0.5 * FDPI * 0.5);
-  radiusOuter := Round((C45RpmConcentricGroove + C45RpmLastMusicGroove) * 0.5 * FDPI * 0.5);
+  radiusInner := Round(C45RpmMinConcentricGroove * FDPI * 0.5);
+  radiusOuter := Round(C45RpmMaxConcentricGroove * FDPI * 0.5);
 
   xrc[1] := FCenter.X;
   xrc[2] := FCenter.Y;

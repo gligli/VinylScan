@@ -94,13 +94,13 @@ const
   CAnalyzeAreaBegin = C45RpmInnerSize + 0.1;
   CAnalyzeAreaEnd = C45RpmLabelOuterSize;
   CAnalyzeAreaWidth = (CAnalyzeAreaEnd - CAnalyzeAreaBegin) * 0.5;
-  CAnalyzeAreaGroovesPerInch = 32;
+  CAnalyzeAreaGroovesPerInch = 64;
 
   CCorrectAngleCount = 16;
   CCorrectAreaBegin = C45RpmInnerSize + 0.1;
   CCorrectAreaEnd = C45RpmOuterSize;
   CCorrectAreaWidth = (CCorrectAreaEnd - CCorrectAreaBegin) * 0.5;
-  CCorrectAreaGroovesPerInch = 32;
+  CCorrectAreaGroovesPerInch = 64;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
