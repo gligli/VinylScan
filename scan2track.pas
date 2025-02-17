@@ -10,9 +10,7 @@ uses
 
 const
   CSampleDecoderBits = 8;
-  CSampleDecoderMulti = 4;
-
-  CSampleDecoderMax = (1 shl (CSampleDecoderBits - 1)) - 1;
+  CSampleDecoderMax = 1 shl (CSampleDecoderBits - 2);
 
 type
 
@@ -73,52 +71,45 @@ end;
 
 procedure TScan2Track.EvalTrack;
 var
-  fltSamples: TFilterIIRHPBessel;
+  fltMiddle: TFilterIIRLPBessel;
   samples: TSmallIntDynArray;
 
-  function DecodeSample(radius, angle: Double): Double;
+  function DecodeSample(radius, angleSin, angleCos: Double): Double;
   var
-    imulti, ismp, upCnt, upAcc: Integer;
-    r, px, py, middleSmp, cxa, cma, sn, cs: Double;
+    ismp, upCnt, upAcc: Integer;
+    r, px, py, middleSmp, cxa: Double;
     smpBuf: array[-CSampleDecoderMax-1 .. CSampleDecoderMax] of Double;
   begin
     cxa := C45RpmRecordingGrooveWidth * Scan.DPI / CSampleDecoderMax;
-    cma := FRadiansPerRevolutionPoint / CSampleDecoderMulti;
 
-    Result := 0;
-    for imulti := 0 to CSampleDecoderMulti - 1 do
+    for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
     begin
-      SinCos(angle + imulti * cma, sn, cs);
+      r := radius + ismp * cxa;
 
-      for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
-      begin
-        r := radius + ismp * cxa;
+      px := angleCos * r + Scan.Center.X;
+      py := angleSin * r + Scan.Center.Y;
 
-        px := cs * r + Scan.Center.X;
-        py := sn * r + Scan.Center.Y;
-
-        if Scan.InRangePointD(py, px) then
-          smpBuf[ismp] := Scan.GetPointD(py, px, isImage, imHermite)
-        else
-          smpBuf[ismp] := 0.0;
-      end;
-
-      middleSmp := Mean(smpBuf);
-      //middleSmp := (MinValue(smpBuf) + MaxValue(smpBuf)) * 0.5;
-
-      upAcc := 0;
-      upCnt := 0;
-      for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
-        if smpBuf[ismp] >= middleSmp then
-        begin
-          upAcc += ismp;
-          Inc(upCnt);
-        end;
-
-      Result += DivDef(upAcc, CSampleDecoderMax * upCnt, 0.0);
+      if Scan.InRangePointD(py, px) then
+        smpBuf[ismp] := Scan.GetPointD(py, px, isImage, imHermite)
+      else
+        smpBuf[ismp] := 0.0;
     end;
 
-    Result *= (1.0 / CSampleDecoderMulti);
+    //middleSmp := Mean(smpBuf);
+    middleSmp := (MinValue(smpBuf) + MaxValue(smpBuf)) * 0.5;
+
+    middleSmp := fltMiddle.FilterFilter(middleSmp);
+
+    upAcc := 0;
+    upCnt := 0;
+    for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
+      if smpBuf[ismp] >= middleSmp then
+      begin
+        upAcc += ismp;
+        Inc(upCnt);
+      end;
+
+    Result := DivDef(upAcc, CSampleDecoderMax * upCnt, 0.0);
   end;
 
   procedure StoreSample(fsmp: Double; pos: Integer);
@@ -133,7 +124,7 @@ var
   end;
 
 var
-  angle, radius, sn, cs, px, py, fbRatio, fsmp, ffSmp: Double;
+  radius, sn, cs, px, py, fbRatio, fsmp, ffSmp: Double;
   iSample, iLut: Integer;
   pbuf: TPointFList;
   t, pt: QWord;
@@ -142,12 +133,12 @@ begin
   WriteLn('EvalTrack');
 
   SetLength(samples, FSampleRate);
-  fltSamples := TFilterIIRHPBessel.Create(nil);
+  fltMiddle := TFilterIIRLPBessel.Create(nil);
   pbuf := TPointFList.Create;
   try
-    fltSamples.FreqCut1 := CLowCutoffFreq;
-    fltSamples.SampleRate := FSampleRate;
-    fltSamples.Order := 4;
+    fltMiddle.FreqCut1 := CLowCutoffFreq;
+    fltMiddle.SampleRate := FSampleRate;
+    fltMiddle.Order := 4;
 
     pt := GetTickCount64;
 
@@ -158,13 +149,11 @@ begin
     iLut := 0;
     radius := Scan.FirstGrooveRadius;
     repeat
-      angle := sinCosLut[iLut].Angle;
       cs := sinCosLut[iLut].Cos;
       sn := sinCosLut[iLut].Sin;
 
-      fsmp := DecodeSample(radius, angle);
-      ffSmp := fltSamples.FilterFilter(fsmp);
-      StoreSample(ffSmp, iSample);
+      fsmp := DecodeSample(radius, sn, cs);
+      StoreSample(fSmp, iSample);
 
       radius -= C45RpmRecordingGrooveWidth * Scan.DPI / FPointsPerRevolution;
       radius += fsmp * fbRatio;
@@ -196,11 +185,13 @@ begin
 
     until not InRange(radius, Scan.ConcentricGrooveRadius, C45RpmOuterSize * 0.5 * Scan.DPI);
 
+    main.MainForm.DrawPoints(pbuf, clLime);
+
     SetLength(samples, iSample);
     CreateWAV(1, 16, FSampleRate, FOutputWAVFileName, samples);
   finally
     pbuf.Free;
-    fltSamples.Free;
+    fltMiddle.Free;
   end;
 
   WriteLn('Done!');
