@@ -1,8 +1,8 @@
 object MainForm: TMainForm
   Left = -8
-  Height = 798
+  Height = 876
   Top = -8
-  Width = 992
+  Width = 1024
   HorzScrollBar.Increment = 240
   HorzScrollBar.Page = 640
   HorzScrollBar.Tracking = True
@@ -11,8 +11,8 @@ object MainForm: TMainForm
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 775
-  ClientWidth = 992
+  ClientHeight = 853
+  ClientWidth = 1024
   Color = 4210752
   DoubleBuffered = False
   OnCreate = FormCreate
@@ -202,7 +202,7 @@ object MainForm: TMainForm
       Top = 32
       Width = 147
       ItemHeight = 15
-      ItemIndex = 1
+      ItemIndex = 2
       Items.Strings = (
         'No optimization'
         'Non-smooth solver'
@@ -213,7 +213,7 @@ object MainForm: TMainForm
       ShowHint = True
       Style = csDropDownList
       TabOrder = 10
-      Text = 'Non-smooth solver'
+      Text = 'Powell''s method'
     end
     object chkCorrect: TCheckBox
       Left = 248
@@ -231,6 +231,8 @@ object MainForm: TMainForm
       Top = 74
       Width = 104
       Caption = 'Rebuild blended'
+      Checked = True
+      State = cbChecked
       TabOrder = 12
     end
   end
