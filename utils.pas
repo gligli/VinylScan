@@ -26,7 +26,7 @@ type
     Sin, Cos, Angle: Double;
   end;
 
-  TMinimizeMethod = (mmNone, mmBFGS, mmPowell, mmAll);
+  TMinimizeMethod = (mmNone, mmNS, mmPowell, mmAll);
 
   TPointDDynArray = array of TPointD;
   TPointDDynArray2 = array of TPointDDynArray;
