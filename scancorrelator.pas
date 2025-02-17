@@ -94,7 +94,7 @@ const
   CAnalyzeAreaWidth = (CAnalyzeAreaEnd - CAnalyzeAreaBegin) * 0.5;
   CAnalyzeAreaGroovesPerInch = 300;
 
-  CCorrectAngleCount = 16;
+  CCorrectAngleCount = 36;
   CCorrectArea1Begin = C45RpmInnerSize + 0.1;
   CCorrectArea1End = C45RpmLastMusicGroove;
   CCorrectArea2Begin = C45RpmLastMusicGroove;
