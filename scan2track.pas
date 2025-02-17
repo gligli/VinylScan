@@ -76,10 +76,10 @@ var
   fltSamples: TFilterIIRHPBessel;
   samples: TSmallIntDynArray;
 
-  function DecodeSample(radius, angle: Double; out feedback: Double): Double;
+  function DecodeSample(radius, angle: Double): Double;
   var
     imulti, ismp, upCnt, upAcc: Integer;
-    r, px, py, middleSmp, stdDev, upLimit, cxa, cma, sn, cs: Double;
+    r, px, py, middleSmp, cxa, cma, sn, cs: Double;
     smpBuf: array[-CSampleDecoderMax-1 .. CSampleDecoderMax] of Double;
   begin
     cxa := C45RpmRecordingGrooveWidth * Scan.DPI / CSampleDecoderMax;
@@ -103,18 +103,13 @@ var
           smpBuf[ismp] := 0.0;
       end;
 
-      MeanAndStdDev(smpBuf, middleSmp, stdDev);
-
-      upLimit := middleSmp + stdDev;
-
-      //upLimit := Infinity;
-      //middleSmp := Mean(smpBuf);
+      middleSmp := Mean(smpBuf);
       //middleSmp := (MinValue(smpBuf) + MaxValue(smpBuf)) * 0.5;
 
       upAcc := 0;
       upCnt := 0;
       for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
-        if InRange(smpBuf[ismp], middleSmp, upLimit) then
+        if smpBuf[ismp] >= middleSmp then
         begin
           upAcc += ismp;
           Inc(upCnt);
@@ -124,8 +119,6 @@ var
     end;
 
     Result *= (1.0 / CSampleDecoderMulti);
-
-    feedback := Result * C45RpmRecordingGrooveWidth * Scan.DPI * C45RpmRevolutionsPerSecond;
   end;
 
   procedure StoreSample(fsmp: Double; pos: Integer);
@@ -140,7 +133,7 @@ var
   end;
 
 var
-  angle, radius, sn, cs, px, py, feedback, fbRatio, fsmp, ffSmp: Double;
+  angle, radius, sn, cs, px, py, fbRatio, fsmp, ffSmp: Double;
   iSample, iLut: Integer;
   pbuf: TPointFList;
   t, pt: QWord;
@@ -158,7 +151,7 @@ begin
 
     pt := GetTickCount64;
 
-    fbRatio := CutoffToFeedbackRatio(CLowCutoffFreq, FSampleRate);
+    fbRatio := 0.01;
     BuildSinCosLUT(FPointsPerRevolution, sinCosLut, Scan.GrooveStartAngle, -2.0 * Pi);
 
     iSample := 0;
@@ -169,12 +162,12 @@ begin
       cs := sinCosLut[iLut].Cos;
       sn := sinCosLut[iLut].Sin;
 
-      fsmp := DecodeSample(radius, angle, feedback);
+      fsmp := DecodeSample(radius, angle);
       ffSmp := fltSamples.FilterFilter(fsmp);
       StoreSample(ffSmp, iSample);
 
       radius -= C45RpmRecordingGrooveWidth * Scan.DPI / FPointsPerRevolution;
-      radius += feedback * fbRatio;
+      radius += fsmp * fbRatio;
 
       px := cs * radius + Scan.Center.X;
       py := sn * radius + Scan.Center.Y;
