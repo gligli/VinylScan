@@ -122,12 +122,12 @@ procedure FromRGB(col: Integer; out r, g, b: Byte); inline; overload;
 function ToLuma(r, g, b: Integer): Integer; inline;
 function ToBW(col: Integer): Integer;
 
-function lerp(x, y, alpha: Double): Double; inline;
+function lerp(x, y, alpha: Double): Double; overload; inline;
+function lerp(x, y: Word; alpha: Double): Double; overload; inline;
 function ilerp(x, y, alpha, maxAlpha: Integer): Integer; inline;
 function revlerp(x, r, alpha: Double): Double; inline;
 function herp(y0, y1, y2, y3, alpha: Double): Double; overload; inline;
-function herp(y0, y1, y2, y3, alpha: Single): Single; overload; inline;
-function herp(y0, y1, y2, y3: Word; alpha: Single): Single; overload; inline;
+function herp(y0, y1, y2, y3: Word; alpha: Double): Double; overload; inline;
 function cerp(y0, y1, y2, y3, alpha: Double): Double; inline;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
@@ -270,6 +270,11 @@ begin
   Result := x + (y - x) * alpha;
 end;
 
+function lerp(x, y: Word; alpha: Double): Double; inline;
+begin
+  Result := x + (y - x) * alpha;
+end;
+
 function ilerp(x, y, alpha, maxAlpha: Integer): Integer; inline;
 begin
   Result := x + ((y - x) * alpha) div maxAlpha;
@@ -296,26 +301,10 @@ begin
     Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
 end;
 
-function herp(y0, y1, y2, y3, alpha: Single): Single;
+function herp(y0, y1, y2, y3: Word; alpha: Double): Double;
 var
-  alpha2, alpha3: Single;
-  a0, a1, a2, a3: Single;
-begin
-    alpha2 := alpha * alpha;
-    alpha3 := alpha2 * alpha;
-
-    a3 := 0.5 * (-1 * y0 + +3 * y1 + -3 * y2 + +1 * y3);
-    a2 := 0.5 * (+2 * y0 + -5 * y1 + +4 * y2 + -1 * y3);
-    a1 := 0.5 * (-1 * y0 + +0 * y1 + +1 * y2 + +0 * y3);
-    a0 := y1;
-
-    Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
-end;
-
-function herp(y0, y1, y2, y3: Word; alpha: Single): Single;
-var
-  alpha2, alpha3: Single;
-  a0, a1, a2, a3: Single;
+  alpha2, alpha3: Double;
+  a0, a1, a2, a3: Double;
 begin
     alpha2 := alpha * alpha;
     alpha3 := alpha2 * alpha;

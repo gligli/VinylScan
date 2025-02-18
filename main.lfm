@@ -1,8 +1,8 @@
 object MainForm: TMainForm
   Left = -8
-  Height = 876
+  Height = 915
   Top = -8
-  Width = 1024
+  Width = 1040
   HorzScrollBar.Increment = 240
   HorzScrollBar.Page = 640
   HorzScrollBar.Tracking = True
@@ -11,8 +11,8 @@ object MainForm: TMainForm
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 853
-  ClientWidth = 1024
+  ClientHeight = 892
+  ClientWidth = 1040
   Color = 4210752
   DoubleBuffered = False
   OnCreate = FormCreate
@@ -81,9 +81,14 @@ object MainForm: TMainForm
       Top = 8
       Width = 200
       Lines.Strings = (
-        'data\think600_6.png'
-        'data\think600_7.png'
-        'data\think600_8.png'
+        'data\think600_2_0.png'
+        'data\think600_2_1.png'
+        'data\think600_2_2.png'
+        'data\think600_2_3.png'
+        'data\think600_2_4.png'
+        'data\think600_2_5.png'
+        'data\think600_2_6.png'
+        'data\think600_2_7.png'
       )
       ParentShowHint = False
       ScrollBars = ssBoth

@@ -114,8 +114,6 @@ type
 implementation
 
 const
-  CAreaBegin = 0;
-  CAreaEnd = (C45RpmInnerSize + C45RpmAdapterSize) * 0.5;
   CRadiusXOffsets: array[TValueSign] of Double = (-C45RpmLeadOutGrooveWidth, 0, C45RpmLeadOutGrooveWidth);
   CRadiusYFactors: array[TValueSign] of Double = (1, -2, 1);
 
@@ -384,7 +382,7 @@ begin
   Result := Length(FImage);
 end;
 
-function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource; Mode: TInterpMode): Double;
+function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource; Mode: TInterpMode): Double; inline;
 
   function GetSample(AY, AX: Integer): Double; inline;
   begin
@@ -435,17 +433,35 @@ begin
     end;
     imLinear:
     begin
-      y1 := lerp(GetSample(iy + 0, ix + 0), GetSample(iy + 0, ix + 1), X - ix);
-      y2 := lerp(GetSample(iy + 1, ix + 0), GetSample(iy + 1, ix + 1), X - ix);
+      if Source = isImage then
+      begin
+        y1 := lerp(FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], X - ix);
+        y2 := lerp(FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], X - ix);
+      end
+      else
+      begin
+        y1 := lerp(GetSample(iy + 0, ix + 0), GetSample(iy + 0, ix + 1), X - ix);
+        y2 := lerp(GetSample(iy + 1, ix + 0), GetSample(iy + 1, ix + 1), X - ix);
+      end;
 
       Result := lerp(y1, y2, Y - iy);
     end;
     imHermite:
     begin
-      y0 := herp(GetSample(iy - 1, ix - 1), GetSample(iy - 1, ix + 0), GetSample(iy - 1, ix + 1), GetSample(iy - 1, ix + 2), X - ix);
-      y1 := herp(GetSample(iy + 0, ix - 1), GetSample(iy + 0, ix + 0), GetSample(iy + 0, ix + 1), GetSample(iy + 0, ix + 2), X - ix);
-      y2 := herp(GetSample(iy + 1, ix - 1), GetSample(iy + 1, ix + 0), GetSample(iy + 1, ix + 1), GetSample(iy + 1, ix + 2), X - ix);
-      y3 := herp(GetSample(iy + 2, ix - 1), GetSample(iy + 2, ix + 0), GetSample(iy + 2, ix + 1), GetSample(iy + 2, ix + 2), X - ix);
+      if Source = isImage then
+      begin
+        y0 := herp(FImage[iy - 1, ix - 1], FImage[iy - 1, ix + 0], FImage[iy - 1, ix + 1], FImage[iy - 1, ix + 2], X - ix);
+        y1 := herp(FImage[iy + 0, ix - 1], FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], FImage[iy + 0, ix + 2], X - ix);
+        y2 := herp(FImage[iy + 1, ix - 1], FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], FImage[iy + 1, ix + 2], X - ix);
+        y3 := herp(FImage[iy + 2, ix - 1], FImage[iy + 2, ix + 0], FImage[iy + 2, ix + 1], FImage[iy + 2, ix + 2], X - ix);
+      end
+      else
+      begin
+        y0 := herp(GetSample(iy - 1, ix - 1), GetSample(iy - 1, ix + 0), GetSample(iy - 1, ix + 1), GetSample(iy - 1, ix + 2), X - ix);
+        y1 := herp(GetSample(iy + 0, ix - 1), GetSample(iy + 0, ix + 0), GetSample(iy + 0, ix + 1), GetSample(iy + 0, ix + 2), X - ix);
+        y2 := herp(GetSample(iy + 1, ix - 1), GetSample(iy + 1, ix + 0), GetSample(iy + 1, ix + 1), GetSample(iy + 1, ix + 2), X - ix);
+        y3 := herp(GetSample(iy + 2, ix - 1), GetSample(iy + 2, ix + 0), GetSample(iy + 2, ix + 1), GetSample(iy + 2, ix + 2), X - ix);
+      end;
 
       Result := herp(y0, y1, y2, y3, Y - iy);
     end;
