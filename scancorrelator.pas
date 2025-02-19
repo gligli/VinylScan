@@ -95,12 +95,9 @@ const
   CAnalyzeAreaGroovesPerInch = 300;
 
   CCorrectAngleCount = 36;
-  CCorrectArea1Begin = C45RpmInnerSize + 0.1;
-  CCorrectArea1End = C45RpmLastMusicGroove;
-  CCorrectArea2Begin = C45RpmLastMusicGroove;
-  CCorrectArea2End = C45RpmOuterSize;
-  CCorrectAreaWidth = (CCorrectArea1End - CCorrectArea1Begin) * 0.5 + (CCorrectArea2End - CCorrectArea2Begin) * 0.5;
-  CCorrectAreaGroovesPerInch = 300;
+  CCorrectAreaBegin = C45RpmInnerSize + 0.1;
+  CCorrectAreaEnd = C45RpmOuterSize;
+  CCorrectAreaWidth = (CCorrectAreaEnd - CCorrectAreaBegin) * 0.5;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
@@ -473,14 +470,14 @@ begin
   endAngle := angle + angleExtents;
   angleInc := FRadiansPerRevolutionPoint;
 
-  radiusCnt := Ceil(CCorrectAreaWidth * CCorrectAreaGroovesPerInch);
+  radiusCnt := Ceil(CCorrectAreaWidth * FOutputDPI);
   angleCnt := Ceil((endAngle - startAngle + angleInc) / angleInc);
 end;
 
 procedure TScanCorrelator.PrepareCorrect(var coords: TCorrectCoords);
 var
   iRadius, iAngle, iScan, cnt, radiusCnt, angleCnt, v, best: Integer;
-  t, rBeg, rMid, rMid2, r, ri, sn, cs, px, py, cx, cy, startAngle, endAngle, angleInc: Double;
+  t, rBeg, r, sn, cs, px, py, cx, cy, startAngle, endAngle, angleInc: Double;
   sinCosLUT: TSinCosDynArray;
   scan: TInputScan;
 begin
@@ -527,14 +524,10 @@ begin
   // parse image arcs
 
   cnt := 0;
-  rBeg := CCorrectArea1Begin * 0.5 * FOutputDPI;
-  rMid := CCorrectArea1End * 0.5 * FOutputDPI;
-  rMid2 := CCorrectArea2Begin * 0.5 * FOutputDPI;
-  ri := FOutputDPI / CCorrectAreaGroovesPerInch;
+  rBeg := CCorrectAreaBegin * 0.5 * FOutputDPI;
   for iRadius := 0 to radiusCnt - 1 do
   begin
-    r := rBeg + iRadius * ri;
-    r += IfThen(r > rMid, rMid2 - rMid);
+    r := rBeg + iRadius;
 
     for iAngle := 0 to angleCnt - 1 do
     begin
@@ -561,7 +554,7 @@ var
   coords: PCorrectCoords absolute obj;
   preparedData: TDoubleDynArray;
   cnt, iRadius, iScan, iAngle, radiusCnt, angleCnt: Integer;
-  t, r, ri, rBeg, rMid, rMid2, sn, cs, px, py, cx, cy, rsk, startAngle, endAngle, angleInc: Double;
+  t, r, rBeg, sn, cs, px, py, cx, cy, rsk, startAngle, endAngle, angleInc: Double;
   sinCosLUT: TSinCosDynArray;
   intRes: TDoubleDynArray;
   scan: TInputScan;
@@ -587,14 +580,10 @@ begin
   SetLength(intRes, radiusCnt * angleCnt);
 
   cnt := 0;
-  rBeg := CCorrectArea1Begin * 0.5 * FOutputDPI;
-  rMid := CCorrectArea1End * 0.5 * FOutputDPI;
-  rMid2 := CCorrectArea2Begin * 0.5 * FOutputDPI;
-  ri := FOutputDPI / CCorrectAreaGroovesPerInch;
+  rBeg := CCorrectAreaBegin * 0.5 * FOutputDPI;
   for iRadius := 0 to radiusCnt - 1 do
   begin
-    r := rBeg + iRadius * ri;
-    r += IfThen(r > rMid, rMid2 - rMid);
+    r := rBeg + iRadius;
 
     rsk := r + r * arg[1] + arg[0];
 
@@ -627,9 +616,9 @@ end;
 procedure TScanCorrelator.Correct;
 const
   CConstCorrectExtents = 0.01; // inches
-  CConstCorrectHalfCount = 32;
+  CConstCorrectHalfCount = 64;
   CMulCorrectExtents = 0.01;
-  CMulCorrectHalfCount = 50;
+  CMulCorrectHalfCount = 100;
 var
   correls: TDoubleDynArray;
   coordsArray: array of TCorrectCoords;
@@ -652,24 +641,36 @@ var
     PrepareCorrect(coords);
 
     best := Infinity;
-    for iConst := -CConstCorrectHalfCount to CConstCorrectHalfCount do
-      for iMul := -CMulCorrectHalfCount to CMulCorrectHalfCount do
+
+    for iMul := -CMulCorrectHalfCount to CMulCorrectHalfCount do
+    begin
+      skc := x[0];
+      skm := iMul * CMulCorrectExtents / CMulCorrectHalfCount;
+
+      f := PowellCorrect([skc, skm], @coords);
+
+      if f < best then
       begin
-        skc := iConst * CConstCorrectExtents / CConstCorrectHalfCount * FOutputDPI;
-        skm := iMul * CMulCorrectExtents / CMulCorrectHalfCount;
-
-        f := PowellCorrect([skc, skm], @coords);
-
-        if f < best then
-        begin
-          best := f;
-
-          x[0] := skc;
-          x[1] := skm;
-        end;
+        best := f;
+        x[1] := skm;
       end;
+    end;
 
-    WriteLn(FInputScans[coords.ScanIdx].PNGShortName, ', Angle:', (coords.AngleIdx / CCorrectAngleCount) * 360.0:9:3, ', Correlation:', -best:12:6, ', ', x[0]:12:6, ', ', x[1]:12:6);
+    for iConst := -CConstCorrectHalfCount to CConstCorrectHalfCount do
+    begin
+      skc := iConst * CConstCorrectExtents / CConstCorrectHalfCount * FOutputDPI;
+      skm := x[1];
+
+      f := PowellCorrect([skc, skm], @coords);
+
+      if f < best then
+      begin
+        best := f;
+        x[0] := skc;
+      end;
+    end;
+
+    Write(FInputScans[coords.ScanIdx].PNGShortName, ', Angle:', (coords.AngleIdx / CCorrectAngleCount) * 360.0:9:3, ', Correlation:', -best:12:6, ', ', x[0]:12:6, ', ', x[1]:12:6, #13);
 
     FPerAngleX[AIndex] := x;
     correls[AIndex] := -best;
