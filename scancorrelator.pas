@@ -622,6 +622,7 @@ const
 var
   correls: TDoubleDynArray;
   coordsArray: array of TCorrectCoords;
+  doneCount: Integer;
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
@@ -670,7 +671,8 @@ var
       end;
     end;
 
-    Write(FInputScans[coords.ScanIdx].PNGShortName, ', Angle:', (coords.AngleIdx / CCorrectAngleCount) * 360.0:9:3, ', Correlation:', -best:12:6, ', ', x[0]:12:6, ', ', x[1]:12:6, #13);
+    //Write(FInputScans[coords.ScanIdx].PNGShortName, ', Angle:', (coords.AngleIdx / CCorrectAngleCount) * 360.0:9:3, ', Correlation:', -best:12:6, ', ', x[0]:12:6, ', ', x[1]:12:6, #13);
+    Write(InterlockedIncrement(doneCount):4, ' / ', Length(FPerAngleX), #13);
 
     FPerAngleX[AIndex] := x;
     correls[AIndex] := -best;
@@ -692,6 +694,7 @@ begin
 
   // compute
 
+  doneCount := 0;
   ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FPerAngleX));
 
   // cumulate
@@ -761,6 +764,8 @@ end;
 
 procedure TScanCorrelator.Rebuild;
 const
+  CLabelDepthBits = 4;
+  CLabelDepthMaxValue = (1 shl CLabelDepthBits) - 1;
   CTauToAngleIdx = CCorrectAngleCount / (2.0 * Pi);
 var
   center, rBeg, rEnd, rLbl: Double;
@@ -843,10 +848,14 @@ var
 
         acc := DivDef(acc, cnt, 1.0);
 
-        FOutputImage[AIndex, ox] := EnsureRange(Round(acc * High(Word)), 0, High(Word));
+        if r >= rLbl then
+          FOutputImage[AIndex, ox] := EnsureRange(Round(acc * High(Word)), 0, High(Word))
+        else
+          FOutputImage[AIndex, ox] := EnsureRange(Round(acc * CLabelDepthMaxValue), 0, CLabelDepthMaxValue) * High(Word) div CLabelDepthMaxValue; // lower bit depth for label
       end
       else
       begin
+        // dark outside the disc, inner inside
         FOutputImage[AIndex, ox] := IfThen(r >= rLbl, Round(0.25 * High(Word)), Round(1.0 * High(Word)));
       end;
     end;
