@@ -1,6 +1,6 @@
 unit scan2track;
 
-{$mode ObjFPC}{$H+}
+{$include 'compileroptions.inc'}
 
 interface
 
@@ -9,7 +9,7 @@ uses
   utils, fgl, inputscan, FilterIIRLPBessel, FilterIIRHPBessel;
 
 const
-  CSampleDecoderBits = 8;
+  CSampleDecoderBits = 12;
   CSampleDecoderMax = 1 shl (CSampleDecoderBits - 2);
 
 type
@@ -71,17 +71,32 @@ end;
 
 procedure TScan2Track.EvalTrack;
 var
+  fltSample: TFilterIIRHPBessel;
   fltMiddle: TFilterIIRLPBessel;
   samples: TSmallIntDynArray;
 
   function DecodeSample(radius, angleSin, angleCos: Double): Double;
+  const
+    CMaxOffset = round(C45RpmRecordingGrooveWidth * 19200 {dpi});
+  type
+    THerpCoeffs = array[0 .. 3, 0 .. 3] of Integer;
   var
-    ismp, upCnt, upAcc: Integer;
-    r, px, py, middleSmp, cxa: Double;
-    smpBuf: array[-CSampleDecoderMax-1 .. CSampleDecoderMax] of Double;
+    j, ismp, ix, iy, icx, icy, cx, cy, upCnt, upAcc, a1, a2, a3, y0, y1, y2, y3, sample, sampleMin, sampleMax, sampleMiddle: Integer;
+    r, px, py, cxa, f1, f2, f3: Double;
+    phc: ^THerpCoeffs;
+    coeffs: array[-CMaxOffset .. CMaxOffset, -CMaxOffset .. CMaxOffset] of THerpCoeffs;
+    emptys: array[-CMaxOffset .. CMaxOffset, -CMaxOffset .. CMaxOffset] of Boolean;
+    smpBuf: array[-CSampleDecoderMax-1 .. CSampleDecoderMax] of Integer;
   begin
+    FillChar(emptys, SizeOf(emptys), 1);
+
     cxa := C45RpmRecordingGrooveWidth * Scan.DPI / CSampleDecoderMax;
 
+    cx := Trunc(angleCos * radius + Scan.Center.X);
+    cy := Trunc(angleSin * radius + Scan.Center.Y);
+
+    sampleMin := High(Integer);
+    sampleMax := Low(Integer);
     for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
     begin
       r := radius + ismp * cxa;
@@ -90,20 +105,64 @@ var
       py := angleSin * r + Scan.Center.Y;
 
       if Scan.InRangePointD(py, px) then
-        smpBuf[ismp] := Scan.GetPointD(py, px, isImage, imHermite)
+      begin
+        ix := Trunc(px);
+        iy := Trunc(py);
+
+        icx := ix - cx;
+        icy := iy - cy;
+
+        phc := @coeffs[icy, icx];
+
+        if emptys[icy, icx] then
+        begin
+          for j := 0 to 3 do
+          begin
+            phc^[j, 0] := Scan.Image[iy + j - 1, ix - 1];
+            phc^[j, 1] := Scan.Image[iy + j - 1, ix + 0];
+            phc^[j, 2] := Scan.Image[iy + j - 1, ix + 1];
+            phc^[j, 3] := Scan.Image[iy + j - 1, ix + 2];
+
+            herpCoeffs(phc^[j, 0], phc^[j, 1] , phc^[j, 2], phc^[j, 3]);
+
+            phc^[j, 0] := phc^[j, 0] shl 15;
+          end;
+
+          emptys[icy, icx] := False;
+        end;
+
+        f1 := px - ix;
+        f2 := Sqr(f1);
+        f3 := f2 * f1;
+
+        a1 := round(f1 * (High(SmallInt) + 1));
+        a2 := round(f2 * (High(SmallInt) + 1));
+        a3 := round(f3 * (High(SmallInt) + 1));
+
+        y0 := phc^[0, 0] + phc^[0, 1] * a1 + phc^[0, 2] * a2 + phc^[0, 3] * a3;
+        y1 := phc^[1, 0] + phc^[1, 1] * a1 + phc^[1, 2] * a2 + phc^[1, 3] * a3;
+        y2 := phc^[2, 0] + phc^[2, 1] * a1 + phc^[2, 2] * a2 + phc^[2, 3] * a3;
+        y3 := phc^[3, 0] + phc^[3, 1] * a1 + phc^[3, 2] * a2 + phc^[3, 3] * a3;
+
+        sample := herp(y0, y1, y2, y3, py - iy);
+      end
       else
-        smpBuf[ismp] := 0.0;
+      begin
+        sample := 0;
+      end;
+
+      sampleMin := Min(sampleMin, sample);
+      sampleMax := Max(sampleMax, sample);
+
+      smpBuf[ismp] := sample;
     end;
 
-    //middleSmp := Mean(smpBuf);
-    middleSmp := (MinValue(smpBuf) + MaxValue(smpBuf)) * 0.5;
-
-    middleSmp := fltMiddle.FilterFilter(middleSmp);
+    sampleMiddle := Round(fltMiddle.FilterFilter((sampleMin + sampleMax) * 0.5));
 
     upAcc := 0;
     upCnt := 0;
     for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
-      if smpBuf[ismp] >= middleSmp then
+      if smpBuf[ismp] >= sampleMiddle then
       begin
         upAcc += ismp;
         Inc(upCnt);
@@ -133,12 +192,17 @@ begin
   WriteLn('EvalTrack');
 
   SetLength(samples, FSampleRate);
+  fltSample := TFilterIIRHPBessel.Create(nil);
   fltMiddle := TFilterIIRLPBessel.Create(nil);
   pbuf := TPointFList.Create;
   try
     fltMiddle.FreqCut1 := CLowCutoffFreq;
     fltMiddle.SampleRate := FSampleRate;
     fltMiddle.Order := 4;
+
+    fltSample.FreqCut1 := CLowCutoffFreq;
+    fltSample.SampleRate := FSampleRate;
+    fltSample.Order := 4;
 
     pt := GetTickCount64;
 
@@ -153,7 +217,9 @@ begin
       sn := sinCosLut[iLut].Sin;
 
       fsmp := DecodeSample(radius, sn, cs);
-      StoreSample(fSmp, iSample);
+
+      ffSmp := fltSample.FilterFilter(fsmp);
+      StoreSample(ffSmp, iSample);
 
       radius -= C45RpmRecordingGrooveWidth * Scan.DPI / FPointsPerRevolution;
       radius += fsmp * fbRatio;
@@ -192,6 +258,7 @@ begin
   finally
     pbuf.Free;
     fltMiddle.Free;
+    fltSample.Free;
   end;
 
   WriteLn('Done!');
