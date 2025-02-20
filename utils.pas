@@ -37,6 +37,11 @@ type
 
   TPointFList = specialize TFPGList<TPointF>;
 
+  THerpCoeff4 = array[0 .. 3] of Integer;
+  THerpCoeff44 = array[0 .. 3, 0 .. 3] of Integer;
+  PHerpCoeff4 = ^THerpCoeff4;
+  PHerpCoeff44 = ^THerpCoeff44;
+
   TGRSEvalFunc = function(arg: Double; obj: Pointer): Double of object;
   TGradientEvalFunc = procedure(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer) of object;
   TCompareFunction = function(Item1, Item2, UserParameter: Pointer): Integer;
@@ -125,11 +130,11 @@ function lerp(x, y: Word; alpha: Double): Double; overload;
 function ilerp(x, y, alpha, maxAlpha: Integer): Integer;
 function revlerp(x, r, alpha: Double): Double;
 function herp(y0, y1, y2, y3, alpha: Double): Double; overload;
-function herp(y0, y1, y2, y3: Integer; alpha: Double): Integer; overload;
 function herp(y0, y1, y2, y3: Word; alpha: Double): Double; overload;
+function herp(y: PHerpCoeff4; alpha: Double): Integer; overload;
 function cerp(y0, y1, y2, y3, alpha: Double): Double;
-procedure herpCoeffs(var y0, y1, y2, y3: Integer);
-function herpFromCoeffs(y0, y1, y2, y3, alpha: Double): Double;
+procedure herpCoeffs(y: PHerpCoeff4);
+procedure herpFromCoeffs(coeffs: PHerpCoeff44; res: PHerpCoeff4; alpha: Double);
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; Epsilon: Double = 1e-9; Data: Pointer = nil): Double;
@@ -302,7 +307,7 @@ begin
   Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
 end;
 
-function herp(y0, y1, y2, y3: Integer; alpha: Double): Integer;
+function herp(y: PHerpCoeff4; alpha: Double): Integer;
 var
   alpha2, alpha3: Double;
   ia1, ia2, ia3: Integer;
@@ -315,10 +320,10 @@ begin
   ia2 := Round(alpha2 * (High(SmallInt) + 1));
   ia3 := Round(alpha3 * (High(SmallInt) + 1));
 
-  a3 := (-1 * y0 + +3 * y1 + -3 * y2 + +1 * y3) shr 16;
-  a2 := (+2 * y0 + -5 * y1 + +4 * y2 + -1 * y3) shr 16;
-  a1 := (-1 * y0 + +0 * y1 + +1 * y2 + +0 * y3) shr 16;
-  a0 := y1;
+  a3 := (-1 * y^[0] + +3 * y^[1] + -3 * y^[2] + +1 * y^[3]) shr 16;
+  a2 := (+2 * y^[0] + -5 * y^[1] + +4 * y^[2] + -1 * y^[3]) shr 16;
+  a1 := (-1 * y^[0] + +0 * y^[1] + +1 * y^[2] + +0 * y^[3]) shr 16;
+  a0 := y^[1];
 
   Result := a3 * ia3 + a2 * ia2 + a1 * ia1 + a0;
 end;
@@ -355,29 +360,38 @@ begin
   Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
 end;
 
-procedure herpCoeffs(var y0, y1, y2, y3: Integer);
+procedure herpCoeffs(y: PHerpCoeff4);
 var
   a0, a1, a2, a3: Integer;
 begin
-  a3 := (-1 * y0 + +3 * y1 + -3 * y2 + +1 * y3) div 2;
-  a2 := (+2 * y0 + -5 * y1 + +4 * y2 + -1 * y3) div 2;
-  a1 := (-1 * y0 + +0 * y1 + +1 * y2 + +0 * y3) div 2;
-  a0 := y1;
+  a3 := (-1 * y^[0] + +3 * y^[1] + -3 * y^[2] + +1 * y^[3]) shr 1;
+  a2 := (+2 * y^[0] + -5 * y^[1] + +4 * y^[2] + -1 * y^[3]) shr 1;
+  a1 := (-1 * y^[0] + +0 * y^[1] + +1 * y^[2] + +0 * y^[3]) shr 1;
+  a0 := y^[1];
 
-  y3 := a3;
-  y2 := a2;
-  y1 := a1;
-  y0 := a0;
+  y^[3] := a3;
+  y^[2] := a2;
+  y^[1] := a1;
+  y^[0] := a0;
 end;
 
-function herpFromCoeffs(y0, y1, y2, y3, alpha: Double): Double;
+procedure herpFromCoeffs(coeffs: PHerpCoeff44; res: PHerpCoeff4; alpha: Double);
 var
-  alpha2, alpha3: Double;
+  f1, f2, f3: Double;
+  a1, a2, a3: Integer;
 begin
-  alpha2 := alpha * alpha;
-  alpha3 := alpha2 * alpha;
+  f1 := alpha;
+  f2 := Sqr(f1);
+  f3 := f2 * f1;
 
-  Result := y3 * alpha3 + y2 * alpha2 + y1 * alpha + y0;
+  a1 := round(f1 * (High(SmallInt) + 1));
+  a2 := round(f2 * (High(SmallInt) + 1));
+  a3 := round(f3 * (High(SmallInt) + 1));
+
+  res^[0] := coeffs^[0, 0] + coeffs^[0, 1] * a1 + coeffs^[0, 2] * a2 + coeffs^[0, 3] * a3;
+  res^[1] := coeffs^[1, 0] + coeffs^[1, 1] * a1 + coeffs^[1, 2] * a2 + coeffs^[1, 3] * a3;
+  res^[2] := coeffs^[2, 0] + coeffs^[2, 1] * a1 + coeffs^[2, 2] * a2 + coeffs^[2, 3] * a3;
+  res^[3] := coeffs^[3, 0] + coeffs^[3, 1] * a1 + coeffs^[3, 2] * a2 + coeffs^[3, 3] * a3;
 end;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double;

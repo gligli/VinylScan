@@ -78,13 +78,12 @@ var
   function DecodeSample(radius, angleSin, angleCos: Double): Double;
   const
     CMaxOffset = round(C45RpmRecordingGrooveWidth * 19200 {dpi});
-  type
-    THerpCoeffs = array[0 .. 3, 0 .. 3] of Integer;
   var
-    j, ismp, ix, iy, icx, icy, cx, cy, upCnt, upAcc, a1, a2, a3, y0, y1, y2, y3, sample, sampleMin, sampleMax, sampleMiddle: Integer;
-    r, px, py, cxa, f1, f2, f3: Double;
-    phc: ^THerpCoeffs;
-    coeffs: array[-CMaxOffset .. CMaxOffset, -CMaxOffset .. CMaxOffset] of THerpCoeffs;
+    j, ismp, ix, iy, icx, icy, cx, cy, upCnt, upAcc, sample, sampleMin, sampleMax, sampleMiddle: Integer;
+    r, px, py, cxa: Double;
+    phc: PHerpCoeff44;
+    y: THerpCoeff4;
+    coeffs: array[-CMaxOffset .. CMaxOffset, -CMaxOffset .. CMaxOffset] of THerpCoeff44;
     emptys: array[-CMaxOffset .. CMaxOffset, -CMaxOffset .. CMaxOffset] of Boolean;
     smpBuf: array[-CSampleDecoderMax-1 .. CSampleDecoderMax] of Integer;
   begin
@@ -123,7 +122,7 @@ var
             phc^[j, 2] := Scan.Image[iy + j - 1, ix + 1];
             phc^[j, 3] := Scan.Image[iy + j - 1, ix + 2];
 
-            herpCoeffs(phc^[j, 0], phc^[j, 1] , phc^[j, 2], phc^[j, 3]);
+            herpCoeffs(@phc^[j]);
 
             phc^[j, 0] := phc^[j, 0] shl 15;
           end;
@@ -131,20 +130,9 @@ var
           emptys[icy, icx] := False;
         end;
 
-        f1 := px - ix;
-        f2 := Sqr(f1);
-        f3 := f2 * f1;
+        herpFromCoeffs(phc, @y, px - ix);
 
-        a1 := round(f1 * (High(SmallInt) + 1));
-        a2 := round(f2 * (High(SmallInt) + 1));
-        a3 := round(f3 * (High(SmallInt) + 1));
-
-        y0 := phc^[0, 0] + phc^[0, 1] * a1 + phc^[0, 2] * a2 + phc^[0, 3] * a3;
-        y1 := phc^[1, 0] + phc^[1, 1] * a1 + phc^[1, 2] * a2 + phc^[1, 3] * a3;
-        y2 := phc^[2, 0] + phc^[2, 1] * a1 + phc^[2, 2] * a2 + phc^[2, 3] * a3;
-        y3 := phc^[3, 0] + phc^[3, 1] * a1 + phc^[3, 2] * a2 + phc^[3, 3] * a3;
-
-        sample := herp(y0, y1, y2, y3, py - iy);
+        sample := herp(@y, py - iy);
       end
       else
       begin
