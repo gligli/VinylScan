@@ -1,9 +1,7 @@
 unit utils;
 
-{$mode ObjFPC}{$H+}
-{$ModeSwitch advancedrecords}
-{$TYPEDADDRESS ON}
-{$CODEALIGN LOCALMIN=16}
+{$include 'compileroptions.inc'}
+{$R-}
 
 interface
 
@@ -122,13 +120,16 @@ procedure FromRGB(col: Integer; out r, g, b: Byte); inline; overload;
 function ToLuma(r, g, b: Integer): Integer; inline;
 function ToBW(col: Integer): Integer;
 
-function lerp(x, y, alpha: Double): Double; overload; inline;
-function lerp(x, y: Word; alpha: Double): Double; overload; inline;
-function ilerp(x, y, alpha, maxAlpha: Integer): Integer; inline;
-function revlerp(x, r, alpha: Double): Double; inline;
-function herp(y0, y1, y2, y3, alpha: Double): Double; overload; inline;
-function herp(y0, y1, y2, y3: Word; alpha: Double): Double; overload; inline;
-function cerp(y0, y1, y2, y3, alpha: Double): Double; inline;
+function lerp(x, y, alpha: Double): Double; overload;
+function lerp(x, y: Word; alpha: Double): Double; overload;
+function ilerp(x, y, alpha, maxAlpha: Integer): Integer;
+function revlerp(x, r, alpha: Double): Double;
+function herp(y0, y1, y2, y3, alpha: Double): Double; overload;
+function herp(y0, y1, y2, y3: Integer; alpha: Double): Integer; overload;
+function herp(y0, y1, y2, y3: Word; alpha: Double): Double; overload;
+function cerp(y0, y1, y2, y3, alpha: Double): Double;
+procedure herpCoeffs(var y0, y1, y2, y3: Integer);
+function herpFromCoeffs(y0, y1, y2, y3, alpha: Double): Double;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; Epsilon: Double = 1e-9; Data: Pointer = nil): Double;
@@ -265,12 +266,12 @@ begin
 end;
 
 
-function lerp(x, y, alpha: Double): Double; inline;
+function lerp(x, y, alpha: Double): Double;
 begin
   Result := x + (y - x) * alpha;
 end;
 
-function lerp(x, y: Word; alpha: Double): Double; inline;
+function lerp(x, y: Word; alpha: Double): Double;
 begin
   Result := x + (y - x) * alpha;
 end;
@@ -280,7 +281,7 @@ begin
   Result := x + ((y - x) * alpha) div maxAlpha;
 end;
 
-function revlerp(x, r, alpha: Double): Double; inline;
+function revlerp(x, r, alpha: Double): Double;
 begin
   Result := x + (r - x) / alpha;
 end;
@@ -290,15 +291,36 @@ var
   alpha2, alpha3: Double;
   a0, a1, a2, a3: Double;
 begin
-    alpha2 := alpha * alpha;
-    alpha3 := alpha2 * alpha;
+  alpha2 := alpha * alpha;
+  alpha3 := alpha2 * alpha;
 
-    a3 := 0.5 * (-1 * y0 + +3 * y1 + -3 * y2 + +1 * y3);
-    a2 := 0.5 * (+2 * y0 + -5 * y1 + +4 * y2 + -1 * y3);
-    a1 := 0.5 * (-1 * y0 + +0 * y1 + +1 * y2 + +0 * y3);
-    a0 := y1;
+  a3 := 0.5 * (-1 * y0 + +3 * y1 + -3 * y2 + +1 * y3);
+  a2 := 0.5 * (+2 * y0 + -5 * y1 + +4 * y2 + -1 * y3);
+  a1 := 0.5 * (-1 * y0 + +0 * y1 + +1 * y2 + +0 * y3);
+  a0 := y1;
 
-    Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
+  Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
+end;
+
+function herp(y0, y1, y2, y3: Integer; alpha: Double): Integer;
+var
+  alpha2, alpha3: Double;
+  ia1, ia2, ia3: Integer;
+  a0, a1, a2, a3: Integer;
+begin
+  alpha2 := alpha * alpha;
+  alpha3 := alpha2 * alpha;
+
+  ia1 := Round(alpha * (High(SmallInt) + 1));
+  ia2 := Round(alpha2 * (High(SmallInt) + 1));
+  ia3 := Round(alpha3 * (High(SmallInt) + 1));
+
+  a3 := (-1 * y0 + +3 * y1 + -3 * y2 + +1 * y3) shr 16;
+  a2 := (+2 * y0 + -5 * y1 + +4 * y2 + -1 * y3) shr 16;
+  a1 := (-1 * y0 + +0 * y1 + +1 * y2 + +0 * y3) shr 16;
+  a0 := y1;
+
+  Result := a3 * ia3 + a2 * ia2 + a1 * ia1 + a0;
 end;
 
 function herp(y0, y1, y2, y3: Word; alpha: Double): Double;
@@ -306,15 +328,15 @@ var
   alpha2, alpha3: Double;
   a0, a1, a2, a3: Double;
 begin
-    alpha2 := alpha * alpha;
-    alpha3 := alpha2 * alpha;
+  alpha2 := alpha * alpha;
+  alpha3 := alpha2 * alpha;
 
-    a3 := 0.5 * (-1 * y0 + +3 * y1 + -3 * y2 + +1 * y3);
-    a2 := 0.5 * (+2 * y0 + -5 * y1 + +4 * y2 + -1 * y3);
-    a1 := 0.5 * (-1 * y0 + +0 * y1 + +1 * y2 + +0 * y3);
-    a0 := y1;
+  a3 := 0.5 * (-1 * y0 + +3 * y1 + -3 * y2 + +1 * y3);
+  a2 := 0.5 * (+2 * y0 + -5 * y1 + +4 * y2 + -1 * y3);
+  a1 := 0.5 * (-1 * y0 + +0 * y1 + +1 * y2 + +0 * y3);
+  a0 := y1;
 
-    Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
+  Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
 end;
 
 function cerp(y0, y1, y2, y3, alpha: Double): Double;
@@ -322,15 +344,40 @@ var
   alpha2, alpha3: Double;
   a0, a1, a2, a3: Double;
 begin
-    alpha2 := alpha * alpha;
-    alpha3 := alpha2 * alpha;
+  alpha2 := alpha * alpha;
+  alpha3 := alpha2 * alpha;
 
-    a3 := y3 - y2 - y0 + y1;
-    a2 := y0 - y1 - a3;
-    a1 := y2 - y0;
-    a0 := y1;
+  a3 := y3 - y2 - y0 + y1;
+  a2 := y0 - y1 - a3;
+  a1 := y2 - y0;
+  a0 := y1;
 
-    Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
+  Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
+end;
+
+procedure herpCoeffs(var y0, y1, y2, y3: Integer);
+var
+  a0, a1, a2, a3: Integer;
+begin
+  a3 := (-1 * y0 + +3 * y1 + -3 * y2 + +1 * y3) div 2;
+  a2 := (+2 * y0 + -5 * y1 + +4 * y2 + -1 * y3) div 2;
+  a1 := (-1 * y0 + +0 * y1 + +1 * y2 + +0 * y3) div 2;
+  a0 := y1;
+
+  y3 := a3;
+  y2 := a2;
+  y1 := a1;
+  y0 := a0;
+end;
+
+function herpFromCoeffs(y0, y1, y2, y3, alpha: Double): Double;
+var
+  alpha2, alpha3: Double;
+begin
+  alpha2 := alpha * alpha;
+  alpha3 := alpha2 * alpha;
+
+  Result := y3 * alpha3 + y2 * alpha2 + y1 * alpha + y0;
 end;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double;
