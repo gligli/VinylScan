@@ -81,7 +81,6 @@ var
   var
     ismp, ix, iy, icx, icy, cx, cy, upCnt, upAcc, sample, sampleMin, sampleMax, sampleMiddle: Integer;
     r, px, py, cxa: Double;
-    phc: PHerpCoeff44;
     y: THerpCoeff4;
     coeffs: array[-CMaxOffset .. CMaxOffset, -CMaxOffset .. CMaxOffset] of THerpCoeff44;
     emptys: array[-CMaxOffset .. CMaxOffset, -CMaxOffset .. CMaxOffset] of Boolean;
@@ -111,17 +110,15 @@ var
         icx := ix - cx;
         icy := iy - cy;
 
-        phc := @coeffs[icy, icx];
-
         if emptys[icy, icx] then
         begin
-          herpCoeffs(Scan.Image, ix, iy, phc);
+          herpCoeffs(Scan.Image, ix, iy, coeffs[icy, icx]);
           emptys[icy, icx] := False;
         end;
 
-        herpFromCoeffs(phc, @y, px - ix);
+        herpFromCoeffs(coeffs[icy, icx], y, px - ix);
 
-        sample := herp(@y, py - iy);
+        sample := herp(y, py - iy);
       end
       else
       begin

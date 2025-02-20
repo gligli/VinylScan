@@ -39,8 +39,6 @@ type
 
   THerpCoeff4 = array[0 .. 3] of Integer;
   THerpCoeff44 = array[0 .. 3, 0 .. 3] of Integer;
-  PHerpCoeff4 = ^THerpCoeff4;
-  PHerpCoeff44 = ^THerpCoeff44;
 
   TGRSEvalFunc = function(arg: Double; obj: Pointer): Double of object;
   TGradientEvalFunc = procedure(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer) of object;
@@ -131,11 +129,12 @@ function ilerp(x, y, alpha, maxAlpha: Integer): Integer;
 function revlerp(x, r, alpha: Double): Double;
 function herp(y0, y1, y2, y3, alpha: Double): Double; overload;
 function herp(y0, y1, y2, y3: Word; alpha: Double): Double; overload;
-function herp(y: PHerpCoeff4; alpha: Double): Integer; overload;
+function herp(const y: THerpCoeff4; alpha: Double): Integer; overload;
 function cerp(y0, y1, y2, y3, alpha: Double): Double;
-procedure herpCoeffs(y: PHerpCoeff4); overload;
-procedure herpCoeffs(const img: TWordDynArray2; ix, iy: Integer; res: PHerpCoeff44); overload;
-procedure herpFromCoeffs(coeffs: PHerpCoeff44; res: PHerpCoeff4; alpha: Double);
+procedure herpCoeffs(var y: THerpCoeff4); overload;
+procedure herpCoeffs(const img: TWordDynArray2; ix, iy: Integer; out res: THerpCoeff44); overload;
+procedure herpFromCoeffs(const coeffs: THerpCoeff44; var res: THerpCoeff4; alpha: Double);
+procedure herpFromCoeffs_asm(const coeffs_rcx: THerpCoeff44; out res_rdx: THerpCoeff4; alpha_xmm2: Single); register; assembler;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; Epsilon: Double = 1e-9; Data: Pointer = nil): Double;
@@ -308,7 +307,7 @@ begin
   Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
 end;
 
-function herp(y: PHerpCoeff4; alpha: Double): Integer;
+function herp(const y: THerpCoeff4; alpha: Double): Integer;
 var
   alpha2, alpha3: Double;
   ia1, ia2, ia3: Integer;
@@ -321,10 +320,10 @@ begin
   ia2 := Round(alpha2 * (High(SmallInt) + 1));
   ia3 := Round(alpha3 * (High(SmallInt) + 1));
 
-  a3 := (-1 * y^[0] + +3 * y^[1] + -3 * y^[2] + +1 * y^[3]) shr 16;
-  a2 := (+2 * y^[0] + -5 * y^[1] + +4 * y^[2] + -1 * y^[3]) shr 16;
-  a1 := (-1 * y^[0] + +0 * y^[1] + +1 * y^[2] + +0 * y^[3]) shr 16;
-  a0 := y^[1];
+  a3 := (-1 * y[0] + +3 * y[1] + -3 * y[2] + +1 * y[3]) shr 16;
+  a2 := (+2 * y[0] + -5 * y[1] + +4 * y[2] + -1 * y[3]) shr 16;
+  a1 := (-1 * y[0] + +0 * y[1] + +1 * y[2] + +0 * y[3]) shr 16;
+  a0 := y[1];
 
   Result := a3 * ia3 + a2 * ia2 + a1 * ia1 + a0;
 end;
@@ -361,22 +360,22 @@ begin
   Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
 end;
 
-procedure herpCoeffs(y: PHerpCoeff4);
+procedure herpCoeffs(var y: THerpCoeff4);
 var
   a0, a1, a2, a3: Integer;
 begin
-  a3 := (-1 * y^[0] + +3 * y^[1] + -3 * y^[2] + +1 * y^[3]) shr 1;
-  a2 := (+2 * y^[0] + -5 * y^[1] + +4 * y^[2] + -1 * y^[3]) shr 1;
-  a1 := (-1 * y^[0] + +0 * y^[1] + +1 * y^[2] + +0 * y^[3]) shr 1;
-  a0 := y^[1] shl 15;
+  a3 := (-1 * y[0] + +3 * y[1] + -3 * y[2] + +1 * y[3]) shr 1;
+  a2 := (+2 * y[0] + -5 * y[1] + +4 * y[2] + -1 * y[3]) shr 1;
+  a1 := (-1 * y[0] + +0 * y[1] + +1 * y[2] + +0 * y[3]) shr 1;
+  a0 := y[1] shl 15;
 
-  y^[3] := a3;
-  y^[2] := a2;
-  y^[1] := a1;
-  y^[0] := a0;
+  y[3] := a3;
+  y[2] := a2;
+  y[1] := a1;
+  y[0] := a0;
 end;
 
-procedure herpCoeffs(const img: TWordDynArray2; ix, iy: Integer; res: PHerpCoeff44);
+procedure herpCoeffs(const img: TWordDynArray2; ix, iy: Integer; out res: THerpCoeff44);
 var
   i, j: Integer;
   pc: PInteger;
@@ -384,7 +383,7 @@ var
 begin
   for j := 0 to 3 do
   begin
-    pc := @res^[0, 0];
+    pc := @res[j, 0];
     pp := @img[iy + j - 1, ix - 1];
     for i := 0 to 3 do
     begin
@@ -394,13 +393,13 @@ begin
     end;
   end;
 
-  herpCoeffs(@res^[0]);
-  herpCoeffs(@res^[1]);
-  herpCoeffs(@res^[2]);
-  herpCoeffs(@res^[3]);
+  herpCoeffs(res[0]);
+  herpCoeffs(res[1]);
+  herpCoeffs(res[2]);
+  herpCoeffs(res[3]);
 end;
 
-procedure herpFromCoeffs(coeffs: PHerpCoeff44; res: PHerpCoeff4; alpha: Double);
+procedure herpFromCoeffs(const coeffs: THerpCoeff44; var res: THerpCoeff4; alpha: Double);
 var
   f1, f2, f3: Double;
   a1, a2, a3: Integer;
@@ -413,10 +412,78 @@ begin
   a2 := round(f2 * (High(SmallInt) + 1));
   a3 := round(f3 * (High(SmallInt) + 1));
 
-  res^[0] := coeffs^[0, 0] + coeffs^[0, 1] * a1 + coeffs^[0, 2] * a2 + coeffs^[0, 3] * a3;
-  res^[1] := coeffs^[1, 0] + coeffs^[1, 1] * a1 + coeffs^[1, 2] * a2 + coeffs^[1, 3] * a3;
-  res^[2] := coeffs^[2, 0] + coeffs^[2, 1] * a1 + coeffs^[2, 2] * a2 + coeffs^[2, 3] * a3;
-  res^[3] := coeffs^[3, 0] + coeffs^[3, 1] * a1 + coeffs^[3, 2] * a2 + coeffs^[3, 3] * a3;
+  res[0] := coeffs[0, 0] + coeffs[0, 1] * a1 + coeffs[0, 2] * a2 + coeffs[0, 3] * a3;
+  res[1] := coeffs[1, 0] + coeffs[1, 1] * a1 + coeffs[1, 2] * a2 + coeffs[1, 3] * a3;
+  res[2] := coeffs[2, 0] + coeffs[2, 1] * a1 + coeffs[2, 2] * a2 + coeffs[2, 3] * a3;
+  res[3] := coeffs[3, 0] + coeffs[3, 1] * a1 + coeffs[3, 2] * a2 + coeffs[3, 3] * a3;
+end;
+
+procedure herpFromCoeffs_asm(const coeffs_rcx: THerpCoeff44; out res_rdx: THerpCoeff4; alpha_xmm2: Single); register;
+asm
+  push rax
+
+  sub rsp, 16 * 5
+  movdqu oword ptr [rsp],       xmm0
+  movdqu oword ptr [rsp + $10], xmm1
+  movdqu oword ptr [rsp + $20], xmm2
+  movdqu oword ptr [rsp + $30], xmm3
+  movdqu oword ptr [rsp + $40], xmm4
+
+  movss xmm1, xmm2
+
+  xor eax, eax
+  inc eax
+  cvtsi2ss xmm0, eax
+
+  shl eax, 16
+  cvtsi2ss xmm3, eax
+
+  mulss xmm2, xmm3
+  insertps xmm0, xmm2, 1 * 16
+
+  mulss xmm2, xmm1
+  insertps xmm0, xmm2, 2 * 16
+
+  mulss xmm2, xmm1
+  insertps xmm0, xmm2, 3 * 16
+
+  cvtps2dq xmm0, xmm0
+
+  movdqu xmm1, oword ptr [rcx]
+  movdqu xmm2, oword ptr [rcx + $10]
+  movdqu xmm3, oword ptr [rcx + $20]
+  movdqu xmm4, oword ptr [rcx + $30]
+
+  pmulld xmm1, xmm0
+  pmulld xmm2, xmm0
+  pmulld xmm3, xmm0
+  pmulld xmm4, xmm0
+
+  phaddd xmm1, xmm1
+  phaddd xmm1, xmm1
+
+  phaddd xmm2, xmm2
+  phaddd xmm2, xmm2
+
+  phaddd xmm3, xmm3
+  phaddd xmm3, xmm3
+
+  phaddd xmm4, xmm4
+  phaddd xmm4, xmm4
+
+  movq dword ptr [rdx], xmm1
+  movq dword ptr [rdx + $04], xmm2
+  movq dword ptr [rdx + $08], xmm3
+  movq dword ptr [rdx + $10], xmm4
+
+  movdqu xmm0,  oword ptr [rsp]
+  movdqu xmm1,  oword ptr [rsp + $10]
+  movdqu xmm2,  oword ptr [rsp + $20]
+  movdqu xmm3,  oword ptr [rsp + $30]
+  movdqu xmm4,  oword ptr [rsp + $40]
+  add rsp, 16 * 5
+
+  pop rax
 end;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double;
