@@ -10,7 +10,7 @@
 
 unit powell;
 
-{$mode ObjFPC}{$H+}
+{$include 'compileroptions.inc'}
 
 interface
 

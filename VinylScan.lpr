@@ -1,6 +1,6 @@
 program VinylScan;
 
-{$mode objfpc}{$H+}
+{$include 'compileroptions.inc'}
 
 uses
   tbbmalloc,

@@ -1,6 +1,6 @@
 unit inputscan;
 
-{$mode ObjFPC}{$H+}
+{$include 'compileroptions.inc'}
 
 interface
 
@@ -45,8 +45,8 @@ type
     function GetPNGShortName: String;
     function PowellCrop(const x: TVector; obj: Pointer): TScalar;
 
-    function GetHeight: Integer;
-    function GetWidth: Integer;
+    function GetHeight: Integer; inline;
+    function GetWidth: Integer; inline;
 
     procedure FindConcentricGroove;
     procedure FindGrooveStart;
@@ -59,7 +59,11 @@ type
     procedure Crop;
 
     function InRangePointD(Y, X: Double): Boolean; inline;
-    function GetPointD(Y, X: Double; Source: TInterpSource; Mode: TInterpMode): Double; inline;
+    function GetPointD_intPnt(Y, X: Double): Double; inline;
+    function GetPointD_intLin(Y, X: Double): Double; inline;
+    function GetPointD_intCbc(Y, X: Double): Double; inline;
+    function GetPointD_intHmt(Y, X: Double): Double; inline;
+    procedure GetGradientsD(Y, X: Double; out GY: Double; out GX: Double); inline;
 
     property PNGFileName: String read FPNGFileName write FPNGFileName;
     property PNGShortName: String read GetPNGShortName;
@@ -169,7 +173,7 @@ begin
     if InRangePointD(py, px) and
         not InNormalizedAngle(bt, a0a, a0b) and not InNormalizedAngle(bt, a1a, a1b) then
     begin
-      p := GetPointD(py, px, isImage, imLinear);
+      p := GetPointD_intLin(py, px);
       stdDevArr[arrPos] := p;
       Inc(arrPos);
     end;
@@ -204,7 +208,7 @@ end;
 
 procedure TInputScan.FindConcentricGroove;
 const
-  CBaseStdDevLimit = Round(0.1 * (high(Word) + 1));
+  CBaseStdDevLimit = Round(0.05 * (high(Word) + 1));
   CStdDevDecrease = 0.95;
 var
   ilut, iradius, rr, xx, yy, radiusInner, radiusOuter, radiusLimit, trackWidth, xMargin, yMargin: Integer;
@@ -319,7 +323,7 @@ begin
               x := cs * radius + xx;
               y := sn * radius + yy;
 
-              f += GetPointD(y, x, isImage, imPoint) * CRadiusYFactors[vs];
+              f += GetPointD_intPnt(y, x) * CRadiusYFactors[vs];
             end;
         end;
 
@@ -358,7 +362,7 @@ begin
 
     if InRangePointD(y, x) then
     begin
-      v := v * 0.99 + GetPointD(y, x, isImage, imLinear) * 0.01;
+      v := v * 0.99 + GetPointD_intLin(y, x) * 0.01;
 
       if v > best then
       begin
@@ -382,92 +386,36 @@ begin
   Result := Length(FImage);
 end;
 
-function TInputScan.GetPointD(Y, X: Double; Source: TInterpSource; Mode: TInterpMode): Double; inline;
-
-  function GetSample(AY, AX: Integer): Double; inline;
-  begin
-    Result := 0;
-
-    case Source of
-      isImage:
-      begin
-        Result := FImage[AY, AX];
-      end;
-      isXGradient:
-      begin
-        Result := FImage[AY, AX - 4] * (1/280);
-        Result += FImage[AY, AX - 3] * (-4/105);
-        Result += FImage[AY, AX - 2] * (1/5);
-        Result += FImage[AY, AX - 1] * (-4/5);
-        Result += FImage[AY, AX + 1] * (4/5);
-        Result += FImage[AY, AX + 2] * (-1/5);
-        Result += FImage[AY, AX + 3] * (4/105);
-        Result += FImage[AY, AX + 4] * (-1/280);
-      end;
-      isYGradient:
-      begin
-        Result := FImage[AY - 4, AX] * (1/280);
-        Result += FImage[AY - 3, AX] * (-4/105);
-        Result += FImage[AY - 2, AX] * (1/5);
-        Result += FImage[AY - 1, AX] * (-4/5);
-        Result += FImage[AY + 1, AX] * (4/5);
-        Result += FImage[AY + 2, AX] * (-1/5);
-        Result += FImage[AY + 3, AX] * (4/105);
-        Result += FImage[AY + 4, AX] * (-1/280);
-      end;
-    end;
-  end;
-
+procedure TInputScan.GetGradientsD(Y, X: Double; out GY: Double; out GX: Double);
+const
+  CFiniteDifferencesYFactor: array[-4 .. 4] of Double = (1/280, -4/105, 1/5, -4/5, 0, 4/5, -1/5, 4/105, -1/280);
 var
-  ix, iy: Integer;
-  y0, y1, y2, y3: Double;
+  i, iy, ix: Integer;
+  lGY00, lGY01, lGY10, lGY11, lGX00, lGX01, lGX10, lGX11, fdy: Double;
 begin
-  Result := 0;
   ix := trunc(X);
   iy := trunc(Y);
 
-  case Mode of
-    imPoint:
-    begin
-      Result := GetSample(iy, ix);
-    end;
-    imLinear:
-    begin
-      if Source = isImage then
-      begin
-        y1 := lerp(FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], X - ix);
-        y2 := lerp(FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], X - ix);
-      end
-      else
-      begin
-        y1 := lerp(GetSample(iy + 0, ix + 0), GetSample(iy + 0, ix + 1), X - ix);
-        y2 := lerp(GetSample(iy + 1, ix + 0), GetSample(iy + 1, ix + 1), X - ix);
-      end;
+  lGX00 := 0.0; lGX01 := 0.0; lGX10 := 0.0; lGX11 := 0.0;
+  lGY00 := 0.0; lGY01 := 0.0; lGY10 := 0.0; lGY11 := 0.0;
 
-      Result := lerp(y1, y2, Y - iy);
-    end;
-    imHermite:
-    begin
-      if Source = isImage then
-      begin
-        y0 := herp(FImage[iy - 1, ix - 1], FImage[iy - 1, ix + 0], FImage[iy - 1, ix + 1], FImage[iy - 1, ix + 2], X - ix);
-        y1 := herp(FImage[iy + 0, ix - 1], FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], FImage[iy + 0, ix + 2], X - ix);
-        y2 := herp(FImage[iy + 1, ix - 1], FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], FImage[iy + 1, ix + 2], X - ix);
-        y3 := herp(FImage[iy + 2, ix - 1], FImage[iy + 2, ix + 0], FImage[iy + 2, ix + 1], FImage[iy + 2, ix + 2], X - ix);
-      end
-      else
-      begin
-        y0 := herp(GetSample(iy - 1, ix - 1), GetSample(iy - 1, ix + 0), GetSample(iy - 1, ix + 1), GetSample(iy - 1, ix + 2), X - ix);
-        y1 := herp(GetSample(iy + 0, ix - 1), GetSample(iy + 0, ix + 0), GetSample(iy + 0, ix + 1), GetSample(iy + 0, ix + 2), X - ix);
-        y2 := herp(GetSample(iy + 1, ix - 1), GetSample(iy + 1, ix + 0), GetSample(iy + 1, ix + 1), GetSample(iy + 1, ix + 2), X - ix);
-        y3 := herp(GetSample(iy + 2, ix - 1), GetSample(iy + 2, ix + 0), GetSample(iy + 2, ix + 1), GetSample(iy + 2, ix + 2), X - ix);
-      end;
+  for i := Low(CFiniteDifferencesYFactor) to High(CFiniteDifferencesYFactor) do
+  begin
+    fdy := CFiniteDifferencesYFactor[i];
 
-      Result := herp(y0, y1, y2, y3, Y - iy);
-    end;
+    lGX00 += FImage[iy    , ix + i    ] * fdy;
+    lGX01 += FImage[iy    , ix + i + 1] * fdy;
+    lGX10 += FImage[iy + 1, ix + i    ] * fdy;
+    lGX11 += FImage[iy + 1, ix + i + 1] * fdy;
+
+    lGY00 += FImage[iy + i    , ix    ] * fdy;
+    lGY01 += FImage[iy + i    , ix + 1] * fdy;
+    lGY10 += FImage[iy + i + 1, ix    ] * fdy;
+    lGY11 += FImage[iy + i + 1, ix + 1] * fdy;
   end;
 
-  Result *= (1.0 / High(Word));
+  GX := lerp(lerp(lGX00, lGX01, X - ix), lerp(lGX10, lGX11, X - ix), Y - iy) * (1.0 / High(Word));
+  GY := lerp(lerp(lGY00, lGY01, X - ix), lerp(lGY10, lGY11, X - ix), Y - iy) * (1.0 / High(Word));
 end;
 
 function TInputScan.GetWidth: Integer;
@@ -571,6 +519,62 @@ end;
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
 begin
   Result := InRange(Y, 5, Height - 7) and InRange(X, 5, Width - 7);
+end;
+
+function TInputScan.GetPointD_intPnt(Y, X: Double): Double;
+var
+  ix, iy: Integer;
+begin
+  ix := trunc(X);
+  iy := trunc(Y);
+
+  Result := FImage[iy, ix] * (1.0 / High(Word));
+end;
+
+function TInputScan.GetPointD_intLin(Y, X: Double): Double;
+var
+  ix, iy: Integer;
+  y1, y2: Double;
+begin
+  ix := trunc(X);
+  iy := trunc(Y);
+
+  y1 := lerp(FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], X - ix);
+  y2 := lerp(FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], X - ix);
+
+  Result := lerp(y1, y2, Y - iy) * (1.0 / High(Word));
+end;
+
+function TInputScan.GetPointD_intCbc(Y, X: Double): Double;
+var
+  ix, iy: Integer;
+  y0, y1, y2, y3: Double;
+begin
+  ix := trunc(X);
+  iy := trunc(Y);
+
+  y0 := cerp(FImage[iy - 1, ix - 1], FImage[iy - 1, ix + 0], FImage[iy - 1, ix + 1], FImage[iy - 1, ix + 2], X - ix);
+  y1 := cerp(FImage[iy + 0, ix - 1], FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], FImage[iy + 0, ix + 2], X - ix);
+  y2 := cerp(FImage[iy + 1, ix - 1], FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], FImage[iy + 1, ix + 2], X - ix);
+  y3 := cerp(FImage[iy + 2, ix - 1], FImage[iy + 2, ix + 0], FImage[iy + 2, ix + 1], FImage[iy + 2, ix + 2], X - ix);
+
+  Result := cerp(y0, y1, y2, y3, Y - iy) * (1.0 / High(Word));
+end;
+
+function TInputScan.GetPointD_intHmt(Y, X: Double): Double;
+var
+  ix, iy: Integer;
+  y0, y1, y2, y3: Double;
+begin
+  ix := trunc(X);
+  iy := trunc(Y);
+
+  y0 := herp(FImage[iy - 1, ix - 1], FImage[iy - 1, ix + 0], FImage[iy - 1, ix + 1], FImage[iy - 1, ix + 2], X - ix);
+  y1 := herp(FImage[iy + 0, ix - 1], FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], FImage[iy + 0, ix + 2], X - ix);
+  y2 := herp(FImage[iy + 1, ix - 1], FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], FImage[iy + 1, ix + 2], X - ix);
+  y3 := herp(FImage[iy + 2, ix - 1], FImage[iy + 2, ix + 0], FImage[iy + 2, ix + 1], FImage[iy + 2, ix + 2], X - ix);
+
+  Result := herp(y0, y1, y2, y3, Y - iy) * (1.0 / High(Word));
 end;
 
 { TScanImage }

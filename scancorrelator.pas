@@ -1,6 +1,6 @@
 unit scancorrelator;
 
-{$mode ObjFPC}{$H+}
+{$include 'compileroptions.inc'}
 
 interface
 
@@ -198,12 +198,12 @@ var
         px := cx + cs * iRadius;
         py := cy + sn * iRadius;
         if scn.InRangePointD(py, px) then
-          arr[Result + 0] := scn.GetPointD(py, px, isImage, imLinear);
+          arr[Result + 0] := scn.GetPointD_intLin(py, px);
 
         px := cx - cs * iRadius;
         py := cy - sn * iRadius;
         if scn.InRangePointD(py, px) then
-          arr[Result + 1] := scn.GetPointD(py, px, isImage, imLinear);
+          arr[Result + 1] := scn.GetPointD_intLin(py, px);
 
         Inc(Result, 2);
       end;
@@ -297,7 +297,7 @@ begin
 
     if FInputScans[0].InRangePointD(py, px) then
     begin
-      Result[iRadius] := FInputScans[0].GetPointD(py, px, isImage, imLinear);
+      Result[iRadius] := FInputScans[0].GetPointD_intLin(py, px);
     end
     else
     begin
@@ -347,14 +347,13 @@ begin
 
     if FInputScans[scanIdx].InRangePointD(py, px) then
     begin
-      mseInt := coords^.PreparedData[iRadius] - FInputScans[scanIdx].GetPointD(py, px, isImage, imLinear);
+      mseInt := coords^.PreparedData[iRadius] - FInputScans[scanIdx].GetPointD_intLin(py, px);
 
       func += Sqr(mseInt);
 
       if Assigned(grad) then
       begin
-        gimgx := FInputScans[scanIdx].GetPointD(py, px, isXGradient, imLinear);
-        gimgy := FInputScans[scanIdx].GetPointD(py, px, isYGradient, imLinear);
+        FInputScans[scanIdx].GetGradientsD(py, px, gimgy, gimgx);
 
         gInt := -2.0 * mseInt;
         gr := r;
@@ -538,7 +537,7 @@ begin
       py := sn * r + cy;
 
       if scan.InRangePointD(py, px) then
-        coords.PreparedData[cnt] := scan.GetPointD(py, px, isImage, imLinear)
+        coords.PreparedData[cnt] := scan.GetPointD_intLin(py, px)
       else
         coords.PreparedData[cnt] := 1000.0;
 
@@ -597,7 +596,7 @@ begin
 
       if scan.InRangePointD(py, px) then
       begin
-        intRes[cnt] := scan.GetPointD(py, px, isImage, imLinear);
+        intRes[cnt] := scan.GetPointD_intLin(py, px);
       end
       else
       begin
@@ -839,7 +838,7 @@ var
                not InNormalizedAngle(ct, FInputScans[i].CropData.StartAngleMirror, FInputScans[i].CropData.EndAngleMirror) or
                (r < rLbl)) then
           begin
-            acc += FInputScans[i].GetPointD(py, px, isImage, imHermite);
+            acc += FInputScans[i].GetPointD_intHmt(py, px);
             Inc(cnt);
             if not FRebuildBlended then
               Break;
