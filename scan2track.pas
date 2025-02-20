@@ -79,7 +79,7 @@ var
   const
     CMaxOffset = round(C45RpmRecordingGrooveWidth * 19200 {dpi});
   var
-    j, ismp, ix, iy, icx, icy, cx, cy, upCnt, upAcc, sample, sampleMin, sampleMax, sampleMiddle: Integer;
+    ismp, ix, iy, icx, icy, cx, cy, upCnt, upAcc, sample, sampleMin, sampleMax, sampleMiddle: Integer;
     r, px, py, cxa: Double;
     phc: PHerpCoeff44;
     y: THerpCoeff4;
@@ -115,18 +115,7 @@ var
 
         if emptys[icy, icx] then
         begin
-          for j := 0 to 3 do
-          begin
-            phc^[j, 0] := Scan.Image[iy + j - 1, ix - 1];
-            phc^[j, 1] := Scan.Image[iy + j - 1, ix + 0];
-            phc^[j, 2] := Scan.Image[iy + j - 1, ix + 1];
-            phc^[j, 3] := Scan.Image[iy + j - 1, ix + 2];
-
-            herpCoeffs(@phc^[j]);
-
-            phc^[j, 0] := phc^[j, 0] shl 15;
-          end;
-
+          herpCoeffs(Scan.Image, ix, iy, phc);
           emptys[icy, icx] := False;
         end;
 

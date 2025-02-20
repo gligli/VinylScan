@@ -133,7 +133,8 @@ function herp(y0, y1, y2, y3, alpha: Double): Double; overload;
 function herp(y0, y1, y2, y3: Word; alpha: Double): Double; overload;
 function herp(y: PHerpCoeff4; alpha: Double): Integer; overload;
 function cerp(y0, y1, y2, y3, alpha: Double): Double;
-procedure herpCoeffs(y: PHerpCoeff4);
+procedure herpCoeffs(y: PHerpCoeff4); overload;
+procedure herpCoeffs(const img: TWordDynArray2; ix, iy: Integer; res: PHerpCoeff44); overload;
 procedure herpFromCoeffs(coeffs: PHerpCoeff44; res: PHerpCoeff4; alpha: Double);
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
@@ -367,12 +368,36 @@ begin
   a3 := (-1 * y^[0] + +3 * y^[1] + -3 * y^[2] + +1 * y^[3]) shr 1;
   a2 := (+2 * y^[0] + -5 * y^[1] + +4 * y^[2] + -1 * y^[3]) shr 1;
   a1 := (-1 * y^[0] + +0 * y^[1] + +1 * y^[2] + +0 * y^[3]) shr 1;
-  a0 := y^[1];
+  a0 := y^[1] shl 15;
 
   y^[3] := a3;
   y^[2] := a2;
   y^[1] := a1;
   y^[0] := a0;
+end;
+
+procedure herpCoeffs(const img: TWordDynArray2; ix, iy: Integer; res: PHerpCoeff44);
+var
+  i, j: Integer;
+  pc: PInteger;
+  pp: PWord;
+begin
+  for j := 0 to 3 do
+  begin
+    pc := @res^[0, 0];
+    pp := @img[iy + j - 1, ix - 1];
+    for i := 0 to 3 do
+    begin
+      pc^ := pp^;
+      Inc(pc);
+      Inc(pp);
+    end;
+  end;
+
+  herpCoeffs(@res^[0]);
+  herpCoeffs(@res^[1]);
+  herpCoeffs(@res^[2]);
+  herpCoeffs(@res^[3]);
 end;
 
 procedure herpFromCoeffs(coeffs: PHerpCoeff44; res: PHerpCoeff4; alpha: Double);
