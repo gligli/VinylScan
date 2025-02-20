@@ -404,13 +404,13 @@ var
   f1, f2, f3: Double;
   a1, a2, a3: Integer;
 begin
-  f1 := alpha;
-  f2 := Sqr(f1);
-  f3 := f2 * f1;
+  f1 := alpha * (High(SmallInt) + 1);
+  f2 := alpha * f1;
+  f3 := alpha * f2;
 
-  a1 := round(f1 * (High(SmallInt) + 1));
-  a2 := round(f2 * (High(SmallInt) + 1));
-  a3 := round(f3 * (High(SmallInt) + 1));
+  a1 := round(f1);
+  a2 := round(f2);
+  a3 := round(f3);
 
   res[0] := coeffs[0, 0] + coeffs[0, 1] * a1 + coeffs[0, 2] * a2 + coeffs[0, 3] * a3;
   res[1] := coeffs[1, 0] + coeffs[1, 1] * a1 + coeffs[1, 2] * a2 + coeffs[1, 3] * a3;
