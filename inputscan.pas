@@ -354,7 +354,7 @@ begin
     stdDevLimit *= CStdDevDecrease;
   until extents.Width > 0;
 
-  writeln(PNGShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
+  //writeln(PNGShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
 
   BuildSinCosLUT(FPointsPerRevolution, FSinCosLUT);
 
