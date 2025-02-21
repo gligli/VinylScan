@@ -14,6 +14,7 @@ type
     PreparedData: TDoubleDynArray;
     IntResults: TDoubleDynArray;
     SinCosLUT: TSinCosDynArray;
+    ConstSkew, MulSkew: Double;
   end;
 
   PCorrectCoords = ^TCorrectCoords;
@@ -44,6 +45,8 @@ type
     function PowellAnalyze(const arg: TVector; obj: Pointer): TScalar;
     procedure PrepareCorrect(var coords: TCorrectCoords);
     function PowellCorrect(const arg: TVector; obj: Pointer): TScalar;
+    function PowellCorrectConst(const arg: TVector; obj: Pointer): TScalar;
+    function PowellCorrectMul(const arg: TVector; obj: Pointer): TScalar;
 
     procedure AngleInit;
     procedure Analyze;
@@ -606,12 +609,26 @@ begin
   Result := -PearsonCorrelation(coords^.PreparedData, coords^.IntResults);
 end;
 
+function TScanCorrelator.PowellCorrectConst(const arg: TVector; obj: Pointer): TScalar;
+var
+  coords: PCorrectCoords absolute obj;
+begin
+  Result := PowellCorrect([arg[0], coords^.MulSkew], obj);
+end;
+
+function TScanCorrelator.PowellCorrectMul(const arg: TVector; obj: Pointer): TScalar;
+var
+  coords: PCorrectCoords absolute obj;
+begin
+ Result := PowellCorrect([coords^.ConstSkew, arg[0]], obj);
+end;
+
 procedure TScanCorrelator.Correct;
 const
   CConstCorrectExtents = 0.01; // inches
-  CConstCorrectHalfCount = 64;
-  CMulCorrectExtents = 0.01;
-  CMulCorrectHalfCount = 100;
+  CConstCorrectHalfCount = 32;
+  CMulCorrectExtents = 0.005;
+  CMulCorrectHalfCount = 50;
 var
   correls: TDoubleDynArray;
   coordsArray: array of TCorrectCoords;
@@ -620,9 +637,8 @@ var
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     coords: TCorrectCoords;
-    x: TVector;
-    f, best, skc, skm: Double;
-    iConst, iMul: Integer;
+    iMul, iConst: Integer;
+    skc, skm, best, f: Double;
   begin
     if not InRange(AIndex, 0, High(FPerAngleX)) then
       Exit;
@@ -630,46 +646,66 @@ var
     DivMod(AIndex, CCorrectAngleCount, coords.ScanIdx, coords.AngleIdx);
     Inc(coords.ScanIdx);
 
-    SetLength(x, 2);
-
     PrepareCorrect(coords);
 
+    coords.ConstSkew := 0.0;
+    coords.MulSkew := 0.0;
     best := Infinity;
 
     for iMul := -CMulCorrectHalfCount to CMulCorrectHalfCount do
     begin
-      skc := x[0];
       skm := iMul * CMulCorrectExtents / CMulCorrectHalfCount;
 
-      f := PowellCorrect([skc, skm], @coords);
+      f := PowellCorrectMul([skm], @coords);
 
       if f < best then
       begin
         best := f;
-        x[1] := skm;
+        coords.MulSkew := skm;
       end;
     end;
 
     for iConst := -CConstCorrectHalfCount to CConstCorrectHalfCount do
     begin
       skc := iConst * CConstCorrectExtents / CConstCorrectHalfCount * FOutputDPI;
-      skm := x[1];
 
-      f := PowellCorrect([skc, skm], @coords);
+      f := PowellCorrectConst([skc], @coords);
 
       if f < best then
       begin
         best := f;
-        x[0] := skc;
+        coords.ConstSkew := skc;
       end;
     end;
 
-    //Write(FInputScans[coords.ScanIdx].PNGShortName, ', Angle:', (coords.AngleIdx / CCorrectAngleCount) * 360.0:9:3, ', Correlation:', -best:12:6, ', ', x[0]:12:6, ', ', x[1]:12:6, #13);
-    Write(InterlockedIncrement(doneCount):4, ' / ', Length(FPerAngleX), #13);
+    //SetLength(x, 1);
+    //
+    //f := Infinity;
+    //
+    //repeat
+    //  prevf := f;
+    //
+    //  x[0] := coords.MulSkew;
+    //  PowellMinimize(@PowellCorrectMul, x, 1e-9, 1e-6, 0.0, MaxInt, @coords);
+    //  coords.MulSkew := x[0];
+    //
+    //  x[0] := coords.ConstSkew;
+    //  f := PowellMinimize(@PowellCorrectConst, x, 1e-9, 1e-3, 0.0, MaxInt, @coords)[0];
+    //  coords.ConstSkew := x[0];
+    //
+    //until SameValue(f, prevf, 1e-2);
 
-    FPerAngleX[AIndex] := x;
-    correls[AIndex] := -best;
+    // free up memory
+    SetLength(coords.IntResults, 0);
+    SetLength(coords.PreparedData, 0);
+    SetLength(coords.SinCosLUT, 0);
+
+    FPerAngleX[AIndex] := [coords.ConstSkew, coords.MulSkew];
+    correls[AIndex] := -f;
     coordsArray[AIndex] := coords;
+
+    //Write(FInputScans[coords.ScanIdx].PNGShortName, ', Angle:', (coords.AngleIdx / CCorrectAngleCount) * 360.0:9:3, ', Correlation:', -f:12:6, ', ', x[0]:12:6, ', ', x[1]:12:6, #13);
+    Write(InterlockedIncrement(doneCount):4, ' / ', Length(FPerAngleX), #13);
   end;
 
 var
