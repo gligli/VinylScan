@@ -180,7 +180,7 @@ begin
 
     pt := GetTickCount64;
 
-    fbRatio := 0.01;
+    fbRatio := CutoffToFeedbackRatio(CLowCutoffFreq, FSampleRate) * 2.0;
     BuildSinCosLUT(FPointsPerRevolution, sinCosLut, Scan.GrooveStartAngle, -2.0 * Pi);
 
     iSample := 0;
