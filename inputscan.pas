@@ -277,11 +277,18 @@ var
   line, x: TDoubleDynArray;
   extents: TRect;
 begin
+  BuildSinCosLUT(FPointsPerRevolution, FSinCosLUT);
+
+  xMargin := Width - Round(C45RpmOuterSize * FDPI);
+  yMargin := Height - Round(C45RpmOuterSize * FDPI);
+
+  if (xMargin <= 0) and (yMargin <= 0) then
+  begin
+    FCenterQuality := -PowellEvalConcentricGrooveXY([FCenter.X, FCenter.Y], nil);
+    Exit;
+  end;
+
   SetLength(line, Max(Width, Height));
-
-  xMargin := Width - Round(C45RpmOuterSize * FDPI) - 1;
-  yMargin := Height - Round(C45RpmOuterSize * FDPI) - 1;
-
   radiusLimit := Round(C45RpmOuterSize * 0.5 * FDPI) - 1;
 
   stdDevLimit := CBaseStdDevLimit;
@@ -317,7 +324,7 @@ begin
     extents.Bottom -= radiusLimit;
 
     stdDevLimit *= CStdDevDecrease;
-  until extents.Height > 0;
+  until extents.Height >= 0;
 
   stdDevLimit := CBaseStdDevLimit;
   repeat
@@ -352,15 +359,13 @@ begin
     extents.Right -= radiusLimit;
 
     stdDevLimit *= CStdDevDecrease;
-  until extents.Width > 0;
+  until extents.Width >= 0;
 
   //writeln(PNGShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
 
-  BuildSinCosLUT(FPointsPerRevolution, FSinCosLUT);
-
   SetLength(x, 2);
-  x[0] := extents.CenterPoint.X;
-  x[1] := extents.CenterPoint.Y;
+  x[0] := lerp(extents.Left, extents.Right, 0.5);
+  x[1] := lerp(extents.Top, extents.Bottom, 0.5);
 
   FCenterQuality := -PowellMinimize(@PowellEvalConcentricGrooveXY, x, 1.0, 1e-3, 0.0, MaxInt)[0];
 
