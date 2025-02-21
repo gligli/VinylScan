@@ -180,7 +180,7 @@ begin
 
     pt := GetTickCount64;
 
-    fbRatio := CutoffToFeedbackRatio(CLowCutoffFreq, FSampleRate) * 2.0;
+    fbRatio := CutoffToFeedbackRatio(CLowCutoffFreq, FSampleRate) * C45RpmRecordingGrooveWidth * Scan.DPI * C45RpmRevolutionsPerSecond;
     BuildSinCosLUT(FPointsPerRevolution, sinCosLut, Scan.GrooveStartAngle, -2.0 * Pi);
 
     iSample := 0;
