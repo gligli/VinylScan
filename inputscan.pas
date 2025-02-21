@@ -5,7 +5,7 @@ unit inputscan;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, FPReadPNG, FPImage, PNGComn,
+  Classes, SysUtils, Types, Math, Graphics, FPReadPNG, FPImage, PNGComn, MTProcs,
   utils, powell;
 
 type
@@ -43,10 +43,11 @@ type
     procedure SetRevolutionFromDPI(ADPI: Integer);
     procedure SetRevolutionFromSampleRate(ASampleRate: Integer);
     function GetPNGShortName: String;
-    function PowellCrop(const x: TVector; obj: Pointer): TScalar;
-
     function GetHeight: Integer; inline;
     function GetWidth: Integer; inline;
+
+    function PowellEvalConcentricGrooveXY(const x: TVector; obj: Pointer): TScalar;
+    function PowellCrop(const x: TVector; obj: Pointer): TScalar;
 
     procedure FindConcentricGroove;
     procedure FindGrooveStart;
@@ -206,15 +207,74 @@ begin
   Result := ChangeFileExt(ExtractFileName(FPNGFileName), '');
 end;
 
+function TInputScan.PowellEvalConcentricGrooveXY(const x: TVector; obj: Pointer): TScalar;
+var
+  radiusInner, radiusOuter, trackWidth: Integer;
+  results: TDoubleDynArray;
+
+  procedure DoRadius(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  var
+    iLut, iTrack: Integer;
+    px, py, sn, cs, radius, f: Double;
+    vs: TValueSign;
+  begin
+    if not InRange(AIndex, radiusInner, radiusOuter) then
+      Exit;
+
+    f := 0;
+    for iLut := 0 to High(FSinCosLUT) do
+    begin
+      cs := FSinCosLUT[iLut].Cos;
+      sn := FSinCosLUT[iLut].Sin;
+
+      for iTrack := -trackWidth to trackWidth do
+        for vs := Low(TValueSign) to High(TValueSign) do
+        begin
+          radius := AIndex + iTrack + CRadiusXOffsets[vs] * FDPI;
+
+          px := cs * radius + x[0];
+          py := sn * radius + x[1];
+
+          f += GetPointD_intLin(py, px) * CRadiusYFactors[vs];
+        end;
+    end;
+
+    results[AIndex - radiusInner] := f;
+  end;
+
+var
+  iRadius: Integer;
+  f: Double;
+begin
+  trackWidth := Floor(C45RpmLeadOutGrooveWidth * FDPI * 0.5);
+  radiusInner := Round(C45RpmMinConcentricGroove * FDPI * 0.5);
+  radiusOuter := Round(C45RpmMaxConcentricGroove * FDPI * 0.5);
+
+  SetLength(results, radiusOuter - radiusInner + 1);
+
+  ProcThreadPool.DoParallelLocalProc(@DoRadius, radiusInner, radiusOuter);
+
+  Result := Infinity;
+  for iRadius := radiusInner to radiusOuter do
+  begin
+    f := results[iRadius - radiusInner];
+
+    if f < Result then
+    begin
+      Result := f;
+      FConcentricGrooveRadius := iRadius;
+    end;
+  end;
+end;
+
 procedure TInputScan.FindConcentricGroove;
 const
-  CBaseStdDevLimit = Round(0.05 * (high(Word) + 1));
+  CBaseStdDevLimit = high(Word) + 1;
   CStdDevDecrease = 0.95;
 var
-  ilut, iradius, rr, xx, yy, radiusInner, radiusOuter, radiusLimit, trackWidth, xMargin, yMargin: Integer;
-  f, best, cs, sn, x, y, radius, stdDevLimit: Double;
-  vs: TValueSign;
-  line: TDoubleDynArray;
+  xx, yy, radiusLimit, xMargin, yMargin: Integer;
+  stdDevLimit: Double;
+  line, x: TDoubleDynArray;
   extents: TRect;
 begin
   SetLength(line, Max(Width, Height));
@@ -294,52 +354,18 @@ begin
     stdDevLimit *= CStdDevDecrease;
   until extents.Width > 0;
 
-  //writeln(PNGShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
+  writeln(PNGShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
 
   BuildSinCosLUT(FPointsPerRevolution, FSinCosLUT);
 
-  radiusInner := Round(C45RpmMinConcentricGroove * FDPI * 0.5);
-  radiusOuter := Round(C45RpmMaxConcentricGroove * FDPI * 0.5);
-  trackWidth := Floor(C45RpmLeadOutGrooveWidth * FDPI * 0.5);
+  SetLength(x, 2);
+  x[0] := extents.CenterPoint.X;
+  x[1] := extents.CenterPoint.Y;
 
-  best := Infinity;
-  for yy := extents.Top to extents.Bottom do
-  begin
-    for xx := extents.Left to extents.Right do
-    begin
-      for rr := radiusInner to radiusOuter do
-      begin
-        f := 0;
-        for ilut := 0 to High(FSinCosLUT) do
-        begin
-          cs := FSinCosLUT[ilut].Cos;
-          sn := FSinCosLUT[ilut].Sin;
+  FCenterQuality := -PowellMinimize(@PowellEvalConcentricGrooveXY, x, 1.0, 1e-3, 0.0, MaxInt)[0];
 
-          for iradius := -trackWidth to trackWidth do
-            for vs := Low(TValueSign) to High(TValueSign) do
-            begin
-              radius := rr + iradius + CRadiusXOffsets[vs] * FDPI;
-
-              x := cs * radius + xx;
-              y := sn * radius + yy;
-
-              f += GetPointD_intPnt(y, x) * CRadiusYFactors[vs];
-            end;
-        end;
-
-        if f < best then
-        begin
-          best := f;
-          FConcentricGrooveRadius := rr;
-          FCenter.X := xx;
-          FCenter.Y := yy;
-          //WriteLn(PNGShortName, xx:6, yy:6, rr:6, best:12:3);
-        end;
-      end;
-    end;
-  end;
-
-  FCenterQuality := -best;
+  FCenter.X := x[0];
+  FCenter.Y := x[1];
 end;
 
 procedure TInputScan.FindGrooveStart;
