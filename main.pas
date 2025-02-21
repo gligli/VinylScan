@@ -68,7 +68,7 @@ begin
   s2t := TScan2Track.Create(StrToIntDef(cbSR.Text, 48000), 16, StrToIntDef(cbDPI.Text, 2400));
   try
     s2t.OutputWAVFileName := edOutputWAV.Text;
-    s2t.Scan.PNGFileName := edInputPNG.Text;
+    s2t.Scan.ImageFileName := edInputPNG.Text;
 
     s2t.LoadPNG;
 
@@ -117,7 +117,7 @@ begin
     sc.CorrectAngles := chkCorrect.Checked;
     sc.RebuildBlended := chkBlend.Checked;
 
-    sc.LoadPNGs;
+    sc.LoadScans;
 
     if Length(sc.InputScans) > 0 then
     begin
@@ -204,11 +204,11 @@ begin
       sc1.OutputPNGFileName := fn;
       sc100.OutputPNGFileName := fn;
 
-      sc1.LoadPNGs;
+      sc1.LoadScans;
       sc1.Process;
       sc1.Save;
 
-      sc100.LoadPNGs;
+      sc100.LoadScans;
       sc100.Process;
       sc100.Save;
     finally
@@ -227,7 +227,7 @@ begin
         scm.OutputPNGFileName := fn;
         scm.Method := mm;
 
-        scm.LoadPNGs;
+        scm.LoadScans;
         scm.Process;
         DrawImage(scm.OutputImage);
         scm.Save;

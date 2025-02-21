@@ -1,8 +1,8 @@
 object MainForm: TMainForm
   Left = -8
-  Height = 915
+  Height = 954
   Top = -8
-  Width = 1040
+  Width = 1056
   HorzScrollBar.Increment = 240
   HorzScrollBar.Page = 640
   HorzScrollBar.Tracking = True
@@ -11,12 +11,13 @@ object MainForm: TMainForm
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 892
-  ClientWidth = 1040
+  ClientHeight = 954
+  ClientWidth = 1056
   Color = 4210752
   DoubleBuffered = False
   OnCreate = FormCreate
   ParentDoubleBuffered = False
+  LCLVersion = '3.8.0.0'
   Scaled = False
   WindowState = wsMaximized
   object Image: TImage
@@ -243,8 +244,9 @@ object MainForm: TMainForm
   end
   object odInPNGs: TOpenDialog
     DefaultExt = '.PNG'
-    Filter = 'PNG|*.png'
-    InitialDir = 'data'
+    FileName = 'C:\VinylScan\data\2025_02_21'
+    Filter = 'PNG; TIFF|*.png;*.tif'
+    InitialDir = 'C:\VinylScan\data\'
     Options = [ofAllowMultiSelect, ofEnableSizing, ofViewDetail]
     Left = 16
     Top = 216

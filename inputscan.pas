@@ -5,7 +5,7 @@ unit inputscan;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, FPReadPNG, FPImage, PNGComn, MTProcs,
+  Classes, SysUtils, Types, Math, Graphics, FPReadPNG, FPReadTiff, FPTiffCmn, FPImage, PNGComn, MTProcs,
   utils, powell;
 
 type
@@ -21,7 +21,7 @@ type
 
   TInputScan = class
   private
-    FPNGFileName: String;
+    FImageFileName: String;
     FDPI: Integer;
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
@@ -42,7 +42,7 @@ type
 
     procedure SetRevolutionFromDPI(ADPI: Integer);
     procedure SetRevolutionFromSampleRate(ASampleRate: Integer);
-    function GetPNGShortName: String;
+    function GetImageShortName: String;
     function GetHeight: Integer; inline;
     function GetWidth: Integer; inline;
 
@@ -56,6 +56,7 @@ type
     destructor Destroy; override;
 
     procedure LoadPNG;
+    procedure LoadTIFF;
     procedure FindTrack(AForcedSampleRate: Integer = -1);
     procedure Crop;
 
@@ -66,8 +67,8 @@ type
     function GetPointD_intHmt(Y, X: Double): Double; inline;
     procedure GetGradientsD(Y, X: Double; out GY: Double; out GX: Double); inline;
 
-    property PNGFileName: String read FPNGFileName write FPNGFileName;
-    property PNGShortName: String read GetPNGShortName;
+    property ImageFileName: String read FImageFileName write FImageFileName;
+    property ImageShortName: String read GetImageShortName;
 
     property DPI: Integer read FDPI;
     property Width: Integer read GetWidth;
@@ -202,9 +203,9 @@ begin
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
 end;
 
-function TInputScan.GetPNGShortName: String;
+function TInputScan.GetImageShortName: String;
 begin
-  Result := ChangeFileExt(ExtractFileName(FPNGFileName), '');
+  Result := ChangeFileExt(ExtractFileName(FImageFileName), '');
 end;
 
 function TInputScan.PowellEvalConcentricGrooveXY(const x: TVector; obj: Pointer): TScalar;
@@ -361,7 +362,7 @@ begin
     stdDevLimit *= CStdDevDecrease;
   until extents.Width >= 0;
 
-  //writeln(PNGShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
+  //writeln(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
 
   SetLength(x, 2);
   x[0] := lerp(extents.Left, extents.Right, 0.5);
@@ -474,9 +475,9 @@ var
   img: TScanImage;
   sz: TPoint;
 begin
-  if not FSilent then WriteLn('LoadPNG ', FPNGFileName);
+  if not FSilent then WriteLn('LoadPNG ', FImageFileName);
 
-  fs := TFileStream.Create(FPNGFileName, fmOpenRead or fmShareDenyNone);
+  fs := TFileStream.Create(FImageFileName, fmOpenRead or fmShareDenyNone);
   png := TDPIAwareReaderPNG.Create;
   try
     sz := png.ImageSize(fs);
@@ -503,6 +504,55 @@ begin
     FCenter.Y := sz.Y * 0.5;
   finally
     png.Free;
+    fs.Free;
+  end;
+end;
+
+procedure TInputScan.LoadTIFF;
+var
+  fs: TFileStream;
+  tiff: TFPReaderTiff;
+  img: TScanImage;
+  szX, szY: DWORD;
+  dpiX, dpiY: Double;
+begin
+  if not FSilent then WriteLn('LoadTIFF ', FImageFileName);
+
+  fs := TFileStream.Create(FImageFileName, fmOpenRead or fmShareDenyNone);
+  tiff := TFPReaderTiff.Create;
+  try
+    if not GetTIFFSize(fs, szX, szY, dpiX, dpiY) then
+    begin
+      szX := 0;
+      szY := 0;
+      dpiX := 0;
+      dpiY := 0;
+    end;
+
+    fs.Seek(soFromBeginning, 0);
+
+    img := TScanImage.Create(szX, szY);
+    try
+      SetLength(FImage, szY, szX);
+      img.Image := FImage;
+
+      if not FSilent then WriteLn('Size:', Width:6, 'x', Height:6);
+
+      tiff.ImageRead(fs, img);
+
+      if (dpiX > 0) and (dpiX = dpiY) then
+      begin
+        FDPI := Round(dpiX);
+        if not FSilent then   WriteLn('DPI:', FDPI:6);
+      end;
+    finally
+      img.Free;
+    end;
+
+    FCenter.X := szX * 0.5;
+    FCenter.Y := szY * 0.5;
+  finally
+    tiff.Free;
     fs.Free;
   end;
 end;

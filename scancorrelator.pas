@@ -57,7 +57,7 @@ type
     constructor Create(const AFileNames: TStrings; AOutputDPI: Integer = 2400);
     destructor Destroy; override;
 
-    procedure LoadPNGs;
+    procedure LoadScans;
     procedure Process;
     procedure Save;
 
@@ -116,7 +116,7 @@ begin
   for i := 0 to AFileNames.Count - 1 do
   begin
     FInputScans[i] := TInputScan.Create(AOutputDPI, True);
-    FInputScans[i].PNGFileName := AFileNames[i];
+    FInputScans[i].ImageFileName := AFileNames[i];
   end;
 end;
 
@@ -138,19 +138,25 @@ begin
   Result := CompareValue(s2^.CenterQuality, s1^.CenterQuality);
 end;
 
-procedure TScanCorrelator.LoadPNGs;
+procedure TScanCorrelator.LoadScans;
 
   procedure DoOne(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   begin
-    FInputScans[AIndex].LoadPNG;
+    if SameText(ExtractFileExt(FInputScans[AIndex].ImageFileName), '.tif') or
+        SameText(ExtractFileExt(FInputScans[AIndex].ImageFileName), '.tiff') then
+      FInputScans[AIndex].LoadTIFF
+    else
+      FInputScans[AIndex].LoadPNG;
+
     FInputScans[AIndex].FindTrack;
-    WriteLn(FInputScans[AIndex].PNGFileName);
+
+    WriteLn(FInputScans[AIndex].ImageFileName);
   end;
 
 var
   i: Integer;
 begin
-  WriteLn('LoadPNGs');
+  WriteLn('LoadScans');
 
   ProcThreadPool.DoParallelLocalProc(@DoOne, 0, high(FInputScans));
 
@@ -171,7 +177,7 @@ begin
   if Length(FInputScans) > 1 then
   begin
     QuickSort(FInputScans[0], 0, High(FInputScans), SizeOf(TInputScan), @CompareInputScansCenterQuality);
-    Writeln('Best centering: ', FInputScans[0].PNGShortName);
+    Writeln('Best centering: ', FInputScans[0].ImageShortName);
   end;
 
   SetLength(FOutputImage, Ceil(C45RpmOuterSize * FOutputDPI), Ceil(C45RpmOuterSize * FOutputDPI));
@@ -437,7 +443,7 @@ const
     end;
 
     f := Sqrt(f);
-    WriteLn(FInputScans[AIndex].PNGShortName, ', RMSE: ', f:12:9);
+    WriteLn(FInputScans[AIndex].ImageShortName, ', RMSE: ', f:12:9);
 
     FInputScans[AIndex].RelativeAngle := x[0];
     p.X := x[1];
@@ -454,13 +460,13 @@ begin
     Exit;
 
   for i := 0 to High(FInputScans) do
-    WriteLn(FInputScans[i].PNGShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (before)');
+    WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (before)');
 
   ProcThreadPool.DoParallelLocalProc(@DoEval, 1, High(FInputScans));
 
   WriteLn;
   for i := 0 to High(FInputScans) do
-    WriteLn(FInputScans[i].PNGShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (after)');
+    WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (after)');
 end;
 
 procedure TScanCorrelator.CorrectAnglesFromCoords(const coords: TCorrectCoords; out startAngle, endAngle,
@@ -704,7 +710,7 @@ var
     correls[AIndex] := -f;
     coordsArray[AIndex] := coords;
 
-    //Write(FInputScans[coords.ScanIdx].PNGShortName, ', Angle:', (coords.AngleIdx / CCorrectAngleCount) * 360.0:9:3, ', Correlation:', -f:12:6, ', ', x[0]:12:6, ', ', x[1]:12:6, #13);
+    //Write(FInputScans[coords.ScanIdx].ImageShortName, ', Angle:', (coords.AngleIdx / CCorrectAngleCount) * 360.0:9:3, ', Correlation:', -f:12:6, ', ', x[0]:12:6, ', ', x[1]:12:6, #13);
     Write(InterlockedIncrement(doneCount):4, ' / ', Length(FPerAngleX), #13);
   end;
 
@@ -761,7 +767,7 @@ begin
     begin
       ias := (iscan - 1) * CCorrectAngleCount + iangle;
 
-      Write(FInputScans[iscan].PNGShortName);
+      Write(FInputScans[iscan].ImageShortName);
       Write(', Angle:', (iangle / CCorrectAngleCount) * 360.0:9:3);
       Write(', Correlation:', correls[ias]:12:6);
       WriteLn(', ', FPerAngleX[ias, 0]:12:6, ', ', FPerAngleX[ias, 1]:12:6);
@@ -788,7 +794,7 @@ begin
   ProcThreadPool.DoParallelLocalProc(@DoCrop, 0, High(FInputScans));
 
   for i := 0 to High(FInputScans) do
-    WriteLn(FInputScans[i].PNGShortName, ', begin:', RadToDeg(FInputScans[i].CropData.StartAngle):9:3, ', end:', RadToDeg(FInputScans[i].CropData.EndAngle):9:3);
+    WriteLn(FInputScans[i].ImageShortName, ', begin:', RadToDeg(FInputScans[i].CropData.StartAngle):9:3, ', end:', RadToDeg(FInputScans[i].CropData.EndAngle):9:3);
 end;
 
 procedure TScanCorrelator.Rebuild;

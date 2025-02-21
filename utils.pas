@@ -158,6 +158,8 @@ procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string;
 
 procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFunction:TCompareFunction;AUserParameter:Pointer=nil);
 
+function GetTIFFSize(AStream: TStream; out AWidth, AHeight: DWord; out dpiX, dpiY: Double): Boolean;
+
 implementation
 
 function alglib_NonSmoothBoundedMinimize(Func: Pointer; n: Integer; X, LowBound, UpBound: PDouble; Epsilon, Radius, Penalty: Double; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
@@ -832,6 +834,101 @@ begin
   until I >= ALastItem;
 end;
 
+function GetTIFFSize(AStream: TStream; out AWidth, AHeight: DWord; out dpiX, dpiY: Double): Boolean;
+type
+  TByteOrder = (boLE, boBE);  // little edian, or big endian
+  TTifHeader = packed record
+     BOM: word;     // 'II' for little endian, 'MM' for big endian
+     Sig: word;     // Signature (42)
+     IFD: DWORD;    // Offset where image data begin
+  end;
+  TIFD_Field = packed record
+    Tag: word;
+    FieldType: word;
+    ValCount: DWord;
+    ValOffset: DWord;
+  end;
+
+  { Makes sure that the byte order of w is the same as specified by the parameter }
+  function FixByteOrder(w: Word; AByteOrder: TByteOrder): Word; overload;
+  begin
+    Result := IfThen(AByteOrder = boLE, LEToN(w), BEToN(w));
+  end;
+
+  { Makes sure that the byte order of dw is the same as specified by the parameter }
+  function FixByteOrder(dw: DWord; AByteOrder: TByteOrder): DWord; overload;
+  begin
+    Result := IfThen(AByteOrder = boLE, LEToN(dw), BEToN(dw));
+  end;
+
+var
+  header: TTifHeader = (BOM:0; Sig:0; IFD:0);
+  dirEntries: Word;
+  field: TIFD_Field = (Tag:0; FieldType:0; ValCount:0; ValOffset:0);
+  i: Integer;
+  bo: TByteOrder;
+  num, denom: LongInt;
+  units: Word;
+  p, pStart: Int64;
+begin
+  Result := false;
+  AWidth := 0;
+  AHeight := 0;
+  dpiX := 0;
+  dpiY := 0;
+  units := 0;
+
+  // Remember current stream position because procedure is called also from
+  // jpeg Exif block.
+  pStart := AStream.Position;
+
+  if AStream.Read(header, SizeOf(TTifHeader)) < SizeOf(TTifHeader) then exit;
+  if not ((header.BOM = $4949) or (header.BOM = $4D4D)) then exit;
+  if header.BOM = $4949 then bo := boLE else bo := boBE; // 'II' --> little endian, 'MM' --> big endian
+  if FixByteOrder(header.Sig, bo) <> 42 then exit;
+
+  AStream.Position := pStart + FixByteOrder(header.IFD, bo);
+  dirEntries := FixByteOrder(AStream.ReadWord, bo);
+  for i := 1 to dirEntries do
+  begin
+    AStream.Read(field, SizeOf(field));
+    field.Tag := FixByteOrder(field.Tag, bo);
+    field.ValOffset := FixByteOrder(field.ValOffset, bo);
+    field.FieldType := FixByteOrder(field.FieldType, bo);
+    p := AStream.Position;
+    case field.Tag OF
+      $0100 : AWidth := field.ValOffset;
+      $0101 : AHeight := field.ValOffset;
+      $011A : begin    // XResolution as RATIONAL value
+                AStream.Position := pStart + field.ValOffset;
+                num := FixByteOrder(AStream.ReadDWord, bo);
+                denom := FixByteOrder(AStream.ReadDWord, bo);
+                dpiX := num/denom;
+              end;
+      $011B : begin    // YResolution as RATIONAL value
+                AStream.Position := pStart + field.ValOffset;
+                num := FixByteOrder(AStream.ReadDWord, bo);
+                denom := FixByteOrder(AStream.ReadDWord, bo);
+                dpiY := num/denom;
+              end;
+      $0128 : begin
+                units := field.ValOffset;   // 1: non-square 2: inches, 3: cm
+              end;
+    end;
+    if (AWidth > 0) and (AHeight > 0) and (dpiX > 0) and (dpiY > 0) and (units > 0)
+    then
+      break;
+    AStream.Position := p;
+  end;
+
+  case units of
+    1: begin dpiX := 96; dpiY := 96; end;
+    2: ;  // is already inches, nothing to do
+    3: begin dpiX := dpiX * 2.54; dpiY := dpiY * 2.54; end;
+  end;
+
+  Result := true;
+end;
 
 initialization
 {$ifdef DEBUG}
