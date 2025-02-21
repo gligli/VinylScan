@@ -12,6 +12,8 @@ type
   TCorrectCoords = record
     AngleIdx, ScanIdx, BaseScanIdx: Integer;
     PreparedData: TDoubleDynArray;
+    IntResults: TDoubleDynArray;
+    SinCosLUT: TSinCosDynArray;
   end;
 
   PCorrectCoords = ^TCorrectCoords;
@@ -477,12 +479,12 @@ procedure TScanCorrelator.PrepareCorrect(var coords: TCorrectCoords);
 var
   iRadius, iAngle, iScan, cnt, radiusCnt, angleCnt, v, best: Integer;
   t, rBeg, r, sn, cs, px, py, cx, cy, startAngle, endAngle, angleInc: Double;
-  sinCosLUT: TSinCosDynArray;
   scan: TInputScan;
 begin
   CorrectAnglesFromCoords(coords, startAngle, endAngle, angleInc, radiusCnt, angleCnt);
 
   SetLength(coords.PreparedData, radiusCnt * angleCnt);
+  SetLength(coords.IntResults, radiusCnt * angleCnt);
 
   // devise best scan
 
@@ -518,7 +520,7 @@ begin
   cx := scan.Center.X;
   cy := scan.Center.Y;
 
-  BuildSinCosLUT(angleCnt, sinCosLUT, startAngle + t, endAngle - startAngle + angleInc);
+  BuildSinCosLUT(angleCnt, coords.SinCosLUT, startAngle + t, endAngle - startAngle + angleInc);
 
   // parse image arcs
 
@@ -530,8 +532,8 @@ begin
 
     for iAngle := 0 to angleCnt - 1 do
     begin
-      cs := sinCosLUT[iAngle].Cos;
-      sn := sinCosLUT[iAngle].Sin;
+      cs := coords.SinCosLUT[iAngle].Cos;
+      sn := coords.SinCosLUT[iAngle].Sin;
 
       px := cs * r + cx;
       py := sn * r + cy;
@@ -551,19 +553,13 @@ end;
 function TScanCorrelator.PowellCorrect(const arg: TVector; obj: Pointer): TScalar;
 var
   coords: PCorrectCoords absolute obj;
-  preparedData: TDoubleDynArray;
   cnt, iRadius, iScan, iAngle, radiusCnt, angleCnt: Integer;
   t, r, rBeg, sn, cs, px, py, cx, cy, rsk, startAngle, endAngle, angleInc: Double;
-  sinCosLUT: TSinCosDynArray;
-  intRes: TDoubleDynArray;
   scan: TInputScan;
 begin
-  Result := 0.0;
-
   CorrectAnglesFromCoords(coords^, startAngle, endAngle, angleInc, radiusCnt, angleCnt);
 
   iScan := coords^.ScanIdx;
-  preparedData := coords^.PreparedData;
   scan := FInputScans[iScan];
 
   t  := scan.RelativeAngle;
@@ -572,11 +568,9 @@ begin
 
   // build sin / cos lookup table
 
-  BuildSinCosLUT(angleCnt, sinCosLUT, startAngle + t, endAngle - startAngle + angleInc);
+  BuildSinCosLUT(angleCnt, coords^.sinCosLUT, startAngle + t, endAngle - startAngle + angleInc);
 
   // parse image arcs
-
-  SetLength(intRes, radiusCnt * angleCnt);
 
   cnt := 0;
   rBeg := CCorrectAreaBegin * 0.5 * FOutputDPI;
@@ -586,21 +580,21 @@ begin
 
     rsk := r + r * arg[1] + arg[0];
 
-    for iAngle := 0 to High(sinCosLUT) do
+    for iAngle := 0 to High(coords^.SinCosLUT) do
     begin
-      cs := sinCosLUT[iAngle].Cos;
-      sn := sinCosLUT[iAngle].Sin;
+      cs := coords^.SinCosLUT[iAngle].Cos;
+      sn := coords^.SinCosLUT[iAngle].Sin;
 
       px := cs * rsk + cx;
       py := sn * rsk + cy;
 
       if scan.InRangePointD(py, px) then
       begin
-        intRes[cnt] := scan.GetPointD_intLin(py, px);
+        coords^.IntResults[cnt] := scan.GetPointD_intLin(py, px);
       end
       else
       begin
-        intRes[cnt] := 1000;
+        coords^.IntResults[cnt] := 1000.0;
       end;
 
       Inc(cnt);
@@ -609,7 +603,7 @@ begin
 
   Assert(cnt = radiusCnt * angleCnt);
 
-  Result := -PearsonCorrelation(preparedData, intRes);
+  Result := -PearsonCorrelation(coords^.PreparedData, coords^.IntResults);
 end;
 
 procedure TScanCorrelator.Correct;
