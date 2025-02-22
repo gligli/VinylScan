@@ -89,7 +89,7 @@ const
   C45RpmLastMusicGroove = 4.25;
   C45RpmAdapterSize = 1.496;
 
-  CLowCutoffFreq = 20.0;
+  CLowCutoffFreq = 40.0;
 
 {$if 1}
   cRedMul = 1;
@@ -127,14 +127,18 @@ function lerp(x, y, alpha: Double): Double; overload;
 function lerp(x, y: Word; alpha: Double): Double; overload;
 function ilerp(x, y, alpha, maxAlpha: Integer): Integer;
 function revlerp(x, r, alpha: Double): Double;
+
+function cerp(y0, y1, y2, y3, alpha: Double): Double;
+
 function herp(y0, y1, y2, y3, alpha: Double): Double; overload;
 function herp(y0, y1, y2, y3: Word; alpha: Double): Double; overload;
 function herp(const y: THerpCoeff4; alpha: Double): Integer; overload;
-function cerp(y0, y1, y2, y3, alpha: Double): Double;
 procedure herpCoeffs(var y: THerpCoeff4); overload;
 procedure herpCoeffs(const img: TWordDynArray2; ix, iy: Integer; out res: THerpCoeff44); overload;
 procedure herpFromCoeffs(const coeffs: THerpCoeff44; var res: THerpCoeff4; alpha: Double);
 procedure herpFromCoeffs_asm(const coeffs_rcx: THerpCoeff44; out res_rdx: THerpCoeff4; alpha_xmm2: Single); register; assembler;
+
+function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; Epsilon: Double = 1e-9; Data: Pointer = nil): Double;
@@ -486,6 +490,27 @@ asm
   add rsp, 16 * 5
 
   pop rax
+end;
+
+
+function Sinc(x: Double): Double; inline;
+begin
+  Result := DivDef(Sin(x), x, 1.0);
+end;
+
+function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
+begin
+  alpha *= Pi;
+
+  Result := ym4 * Sinc(alpha + 4.0 * Pi);
+  Result += ym3 * Sinc(alpha + 3.0 * Pi);
+  Result += ym2 * Sinc(alpha + 2.0 * Pi);
+  Result += ym1 * Sinc(alpha + 1.0 * Pi);
+  Result += ycc * Sinc(alpha);
+  Result += yp1 * Sinc(alpha - 1.0 * Pi);
+  Result += yp2 * Sinc(alpha - 2.0 * Pi);
+  Result += yp3 * Sinc(alpha - 3.0 * Pi);
+  Result += yp4 * Sinc(alpha - 4.0 * Pi);
 end;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double;

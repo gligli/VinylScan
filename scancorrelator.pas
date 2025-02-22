@@ -12,7 +12,6 @@ type
   TCorrectCoords = record
     AngleIdx, ScanIdx, BaseScanIdx: Integer;
     PreparedData: TDoubleDynArray;
-    IntResults: TDoubleDynArray;
     SinCosLUT: TSinCosDynArray;
     ConstSkew, MulSkew: Double;
   end;
@@ -141,16 +140,21 @@ end;
 procedure TScanCorrelator.LoadScans;
 
   procedure DoOne(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  var
+    Scan: TInputScan;
   begin
-    if SameText(ExtractFileExt(FInputScans[AIndex].ImageFileName), '.tif') or
-        SameText(ExtractFileExt(FInputScans[AIndex].ImageFileName), '.tiff') then
-      FInputScans[AIndex].LoadTIFF
+    Scan := FInputScans[AIndex];
+
+    if SameText(ExtractFileExt(Scan.ImageFileName), '.tif') or
+        SameText(ExtractFileExt(Scan.ImageFileName), '.tiff') then
+      Scan.LoadTIFF
     else
-      FInputScans[AIndex].LoadPNG;
+      Scan.LoadPNG;
 
-    FInputScans[AIndex].FindTrack;
+    Scan.Level;
+    Scan.FindTrack;
 
-    WriteLn(FInputScans[AIndex].ImageFileName);
+    WriteLn(Scan.ImageFileName);
   end;
 
 var
@@ -209,12 +213,12 @@ var
         px := cx + cs * iRadius;
         py := cy + sn * iRadius;
         if scn.InRangePointD(py, px) then
-          arr[Result + 0] := scn.GetPointD_intLin(py, px);
+          arr[Result + 0] := scn.GetWorkPointD(py, px);
 
         px := cx - cs * iRadius;
         py := cy - sn * iRadius;
         if scn.InRangePointD(py, px) then
-          arr[Result + 1] := scn.GetPointD_intLin(py, px);
+          arr[Result + 1] := scn.GetWorkPointD(py, px);
 
         Inc(Result, 2);
       end;
@@ -308,7 +312,7 @@ begin
 
     if FInputScans[0].InRangePointD(py, px) then
     begin
-      Result[iRadius] := FInputScans[0].GetPointD_intLin(py, px);
+      Result[iRadius] := FInputScans[0].GetWorkPointD(py, px);
     end
     else
     begin
@@ -358,7 +362,7 @@ begin
 
     if FInputScans[scanIdx].InRangePointD(py, px) then
     begin
-      mseInt := coords^.PreparedData[iRadius] - FInputScans[scanIdx].GetPointD_intLin(py, px);
+      mseInt := coords^.PreparedData[iRadius] - FInputScans[scanIdx].GetWorkPointD(py, px);
 
       func += Sqr(mseInt);
 
@@ -493,7 +497,6 @@ begin
   CorrectAnglesFromCoords(coords, startAngle, endAngle, angleInc, radiusCnt, angleCnt);
 
   SetLength(coords.PreparedData, radiusCnt * angleCnt);
-  SetLength(coords.IntResults, radiusCnt * angleCnt);
 
   // devise best scan
 
@@ -548,7 +551,7 @@ begin
       py := sn * r + cy;
 
       if scan.InRangePointD(py, px) then
-        coords.PreparedData[cnt] := scan.GetPointD_intLin(py, px)
+        coords.PreparedData[cnt] := scan.GetWorkPointD(py, px)
       else
         coords.PreparedData[cnt] := 1000.0;
 
@@ -581,6 +584,7 @@ begin
 
   // parse image arcs
 
+  Result := 0;
   cnt := 0;
   rBeg := CCorrectAreaBegin * 0.5 * FOutputDPI;
   for iRadius := 0 to radiusCnt - 1 do
@@ -599,11 +603,11 @@ begin
 
       if scan.InRangePointD(py, px) then
       begin
-        coords^.IntResults[cnt] := scan.GetPointD_intLin(py, px);
+        Result += Sqr(scan.GetWorkPointD(py, px) - coords^.PreparedData[cnt]);
       end
       else
       begin
-        coords^.IntResults[cnt] := 1000.0;
+        Result += 1000.0;
       end;
 
       Inc(cnt);
@@ -612,7 +616,7 @@ begin
 
   Assert(cnt = radiusCnt * angleCnt);
 
-  Result := -PearsonCorrelation(coords^.PreparedData, coords^.IntResults);
+  Result /= cnt;
 end;
 
 function TScanCorrelator.PowellCorrectConst(const arg: TVector; obj: Pointer): TScalar;
@@ -636,7 +640,7 @@ const
   CMulCorrectExtents = 0.005;
   CMulCorrectHalfCount = 50;
 var
-  correls: TDoubleDynArray;
+  rmses: TDoubleDynArray;
   coordsArray: array of TCorrectCoords;
   doneCount: Integer;
 
@@ -702,12 +706,11 @@ var
     //until SameValue(f, prevf, 1e-2);
 
     // free up memory
-    SetLength(coords.IntResults, 0);
     SetLength(coords.PreparedData, 0);
     SetLength(coords.SinCosLUT, 0);
 
     FPerAngleX[AIndex] := [coords.ConstSkew, coords.MulSkew];
-    correls[AIndex] := -f;
+    rmses[AIndex] := Sqrt(f);
     coordsArray[AIndex] := coords;
 
     //Write(FInputScans[coords.ScanIdx].ImageShortName, ', Angle:', (coords.AngleIdx / CCorrectAngleCount) * 360.0:9:3, ', Correlation:', -f:12:6, ', ', x[0]:12:6, ', ', x[1]:12:6, #13);
@@ -724,7 +727,7 @@ begin
     Exit;
 
   SetLength(FPerAngleX, CCorrectAngleCount * High(FInputScans));
-  SetLength(correls, Length(FPerAngleX));
+  SetLength(rmses, Length(FPerAngleX));
   SetLength(coordsArray, Length(FPerAngleX));
 
   // compute
@@ -769,11 +772,11 @@ begin
 
       Write(FInputScans[iscan].ImageShortName);
       Write(', Angle:', (iangle / CCorrectAngleCount) * 360.0:9:3);
-      Write(', Correlation:', correls[ias]:12:6);
+      Write(', RMSE:', rmses[ias]:12:6);
       WriteLn(', ', FPerAngleX[ias, 0]:12:6, ', ', FPerAngleX[ias, 1]:12:6);
     end;
 
-  WriteLn('Worst Correlation: ', MinValue(correls):12:9);
+  WriteLn('Worst RMSE: ', MaxValue(rmses):12:9);
 end;
 
 procedure TScanCorrelator.Crop;
@@ -874,7 +877,7 @@ var
                not InNormalizedAngle(ct, FInputScans[i].CropData.StartAngleMirror, FInputScans[i].CropData.EndAngleMirror) or
                (r < rLbl)) then
           begin
-            acc += FInputScans[i].GetPointD_intHmt(py, px);
+            acc += FInputScans[i].GetFinalPointD(py, px);
             Inc(cnt);
             if not FRebuildBlended then
               Break;

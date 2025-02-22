@@ -39,6 +39,7 @@ type
     FCenterQuality: Double;
 
     FImage: TWordDynArray2;
+    FLeveledImage: TWordDynArray2;
 
     procedure SetRevolutionFromDPI(ADPI: Integer);
     procedure SetRevolutionFromSampleRate(ASampleRate: Integer);
@@ -57,14 +58,13 @@ type
 
     procedure LoadPNG;
     procedure LoadTIFF;
+    procedure Level;
     procedure FindTrack(AForcedSampleRate: Integer = -1);
     procedure Crop;
 
     function InRangePointD(Y, X: Double): Boolean; inline;
-    function GetPointD_intPnt(Y, X: Double): Double; inline;
-    function GetPointD_intLin(Y, X: Double): Double; inline;
-    function GetPointD_intCbc(Y, X: Double): Double; inline;
-    function GetPointD_intHmt(Y, X: Double): Double; inline;
+    function GetWorkPointD(Y, X: Double): Double; inline;
+    function GetFinalPointD(Y, X: Double): Double; inline;
     procedure GetGradientsD(Y, X: Double; out GY: Double; out GX: Double); inline;
 
     property ImageFileName: String read FImageFileName write FImageFileName;
@@ -87,6 +87,7 @@ type
     property CenterQuality: Double read FCenterQuality;
 
     property Image: TWordDynArray2 read FImage;
+    property LeveledImage: TWordDynArray2 read FLeveledImage;
   end;
 
   TInputScanDynArray = array of TInputScan;
@@ -175,7 +176,7 @@ begin
     if InRangePointD(py, px) and
         not InNormalizedAngle(bt, a0a, a0b) and not InNormalizedAngle(bt, a1a, a1b) then
     begin
-      p := GetPointD_intLin(py, px);
+      p := GetWorkPointD(py, px);
       stdDevArr[arrPos] := p;
       Inc(arrPos);
     end;
@@ -236,7 +237,7 @@ var
           px := cs * radius + x[0];
           py := sn * radius + x[1];
 
-          f += GetPointD_intLin(py, px) * CRadiusYFactors[vs];
+          f += GetWorkPointD(py, px) * CRadiusYFactors[vs];
         end;
     end;
 
@@ -394,7 +395,7 @@ begin
 
     if InRangePointD(y, x) then
     begin
-      v := v * 0.99 + GetPointD_intLin(y, x) * 0.01;
+      v := v * 0.99 + GetWorkPointD(y, x) * 0.01;
 
       if v > best then
       begin
@@ -500,6 +501,7 @@ begin
       img.Free;
     end;
 
+    FLeveledImage := FImage;
     FCenter.X := sz.X * 0.5;
     FCenter.Y := sz.Y * 0.5;
   finally
@@ -549,12 +551,81 @@ begin
       img.Free;
     end;
 
+    FLeveledImage := FImage;
     FCenter.X := szX * 0.5;
     FCenter.Y := szY * 0.5;
   finally
     tiff.Free;
     fs.Free;
   end;
+end;
+
+procedure TInputScan.Level;
+const
+  CSigma = 3;
+  CZoneBits = 6;
+  CHalfZoneSize = 1 shl (CZoneBits - 1);
+
+  procedure GetL2Extents(ay, ax: Integer; out amin, amax: Integer);
+  var
+    x, y: Integer;
+    px, mn, sd: Integer;
+  begin
+    mn := 0;
+    for y :=  ay - CHalfZoneSize to ay + CHalfZoneSize - 1 do
+      for x :=  ax - CHalfZoneSize to ax + CHalfZoneSize - 1 do
+      begin
+        px := FImage[y, x];
+        mn += px;
+      end;
+    mn := mn shr (CZoneBits * 2);
+
+    sd := 0;
+    for y :=  ay - CHalfZoneSize to ay + CHalfZoneSize - 1 do
+      for x :=  ax - CHalfZoneSize to ax + CHalfZoneSize - 1 do
+      begin
+        px := FImage[y, x];
+        px -= mn;
+        sd += px * px;
+      end;
+    sd := round(Sqrt(sd shr (CZoneBits * 2)));
+
+    amin := mn - CSigma * sd;
+    amax := mn + CSigma * sd;
+  end;
+
+
+  procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  var
+    x, y: Integer;
+    px, mn, mx: Integer;
+  begin
+    if not InRange(AIndex, 0, Height - 1) then
+      Exit;
+
+    y := AIndex;
+
+    for x := 0 to High(FImage[y]) do
+    begin
+      px := FImage[y, x];
+
+      if InRange(x, CHalfZoneSize, High(FImage[y]) - CHalfZoneSize) and
+          InRange(y, CHalfZoneSize, High(FImage) - CHalfZoneSize) then
+      begin
+        GetL2Extents(y, x, mn, mx);
+        px := ((px - mn) shl 16) div (mx - mn + 1);
+        px := EnsureRange(px, 0, High(word));
+      end;
+
+      FLeveledImage[y, x] := px;
+    end;
+  end;
+
+begin
+  FLeveledImage := nil;
+  SetLength(FLeveledImage, Height, Width);
+
+  ProcThreadPool.DoParallelLocalProc(@DoY, 0, Height - 1);
 end;
 
 procedure TInputScan.FindTrack(AForcedSampleRate: Integer);
@@ -602,17 +673,7 @@ begin
   Result := InRange(Y, 5, Height - 7) and InRange(X, 5, Width - 7);
 end;
 
-function TInputScan.GetPointD_intPnt(Y, X: Double): Double;
-var
-  ix, iy: Integer;
-begin
-  ix := trunc(X);
-  iy := trunc(Y);
-
-  Result := FImage[iy, ix] * (1.0 / High(Word));
-end;
-
-function TInputScan.GetPointD_intLin(Y, X: Double): Double;
+function TInputScan.GetWorkPointD(Y, X: Double): Double;
 var
   ix, iy: Integer;
   y1, y2: Double;
@@ -620,42 +681,31 @@ begin
   ix := trunc(X);
   iy := trunc(Y);
 
-  y1 := lerp(FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], X - ix);
-  y2 := lerp(FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], X - ix);
+  y1 := lerp(FLeveledImage[iy + 0, ix + 0], FLeveledImage[iy + 0, ix + 1], X - ix);
+  y2 := lerp(FLeveledImage[iy + 1, ix + 0], FLeveledImage[iy + 1, ix + 1], X - ix);
 
   Result := lerp(y1, y2, Y - iy) * (1.0 / High(Word));
 end;
 
-function TInputScan.GetPointD_intCbc(Y, X: Double): Double;
+function TInputScan.GetFinalPointD(Y, X: Double): Double;
 var
   ix, iy: Integer;
-  y0, y1, y2, y3: Double;
+  m4, m3, m2, m1, cc, p1, p2, p3, p4: Double;
 begin
   ix := trunc(X);
   iy := trunc(Y);
 
-  y0 := cerp(FImage[iy - 1, ix - 1], FImage[iy - 1, ix + 0], FImage[iy - 1, ix + 1], FImage[iy - 1, ix + 2], X - ix);
-  y1 := cerp(FImage[iy + 0, ix - 1], FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], FImage[iy + 0, ix + 2], X - ix);
-  y2 := cerp(FImage[iy + 1, ix - 1], FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], FImage[iy + 1, ix + 2], X - ix);
-  y3 := cerp(FImage[iy + 2, ix - 1], FImage[iy + 2, ix + 0], FImage[iy + 2, ix + 1], FImage[iy + 2, ix + 2], X - ix);
+  m4 := serp(FImage[iy - 4, ix - 4], FImage[iy - 4, ix - 3], FImage[iy - 4, ix - 2], FImage[iy - 4, ix - 1], FImage[iy - 4, ix + 0], FImage[iy - 4, ix + 1], FImage[iy - 4, ix + 2], FImage[iy - 4, ix + 3], FImage[iy - 4, ix + 4], X - ix);
+  m3 := serp(FImage[iy - 3, ix - 4], FImage[iy - 3, ix - 3], FImage[iy - 3, ix - 2], FImage[iy - 3, ix - 1], FImage[iy - 3, ix + 0], FImage[iy - 3, ix + 1], FImage[iy - 3, ix + 2], FImage[iy - 3, ix + 3], FImage[iy - 3, ix + 4], X - ix);
+  m2 := serp(FImage[iy - 2, ix - 4], FImage[iy - 2, ix - 3], FImage[iy - 2, ix - 2], FImage[iy - 2, ix - 1], FImage[iy - 2, ix + 0], FImage[iy - 2, ix + 1], FImage[iy - 2, ix + 2], FImage[iy - 2, ix + 3], FImage[iy - 2, ix + 4], X - ix);
+  m1 := serp(FImage[iy - 1, ix - 4], FImage[iy - 1, ix - 3], FImage[iy - 1, ix - 2], FImage[iy - 1, ix - 1], FImage[iy - 1, ix + 0], FImage[iy - 1, ix + 1], FImage[iy - 1, ix + 2], FImage[iy - 1, ix + 3], FImage[iy - 1, ix + 4], X - ix);
+  cc := serp(FImage[iy + 0, ix - 4], FImage[iy + 0, ix - 3], FImage[iy + 0, ix - 2], FImage[iy + 0, ix - 1], FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], FImage[iy + 0, ix + 2], FImage[iy + 0, ix + 3], FImage[iy + 0, ix + 4], X - ix);
+  p1 := serp(FImage[iy + 1, ix - 4], FImage[iy + 1, ix - 3], FImage[iy + 1, ix - 2], FImage[iy + 1, ix - 1], FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], FImage[iy + 1, ix + 2], FImage[iy + 1, ix + 3], FImage[iy + 1, ix + 4], X - ix);
+  p2 := serp(FImage[iy + 2, ix - 4], FImage[iy + 2, ix - 3], FImage[iy + 2, ix - 2], FImage[iy + 2, ix - 1], FImage[iy + 2, ix + 0], FImage[iy + 2, ix + 1], FImage[iy + 2, ix + 2], FImage[iy + 2, ix + 3], FImage[iy + 2, ix + 4], X - ix);
+  p3 := serp(FImage[iy + 3, ix - 4], FImage[iy + 3, ix - 3], FImage[iy + 3, ix - 2], FImage[iy + 3, ix - 1], FImage[iy + 3, ix + 0], FImage[iy + 3, ix + 1], FImage[iy + 3, ix + 2], FImage[iy + 3, ix + 3], FImage[iy + 3, ix + 4], X - ix);
+  p4 := serp(FImage[iy + 4, ix - 4], FImage[iy + 4, ix - 3], FImage[iy + 4, ix - 2], FImage[iy + 4, ix - 1], FImage[iy + 4, ix + 0], FImage[iy + 4, ix + 1], FImage[iy + 4, ix + 2], FImage[iy + 4, ix + 3], FImage[iy + 4, ix + 4], X - ix);
 
-  Result := cerp(y0, y1, y2, y3, Y - iy) * (1.0 / High(Word));
-end;
-
-function TInputScan.GetPointD_intHmt(Y, X: Double): Double;
-var
-  ix, iy: Integer;
-  y0, y1, y2, y3: Double;
-begin
-  ix := trunc(X);
-  iy := trunc(Y);
-
-  y0 := herp(FImage[iy - 1, ix - 1], FImage[iy - 1, ix + 0], FImage[iy - 1, ix + 1], FImage[iy - 1, ix + 2], X - ix);
-  y1 := herp(FImage[iy + 0, ix - 1], FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], FImage[iy + 0, ix + 2], X - ix);
-  y2 := herp(FImage[iy + 1, ix - 1], FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], FImage[iy + 1, ix + 2], X - ix);
-  y3 := herp(FImage[iy + 2, ix - 1], FImage[iy + 2, ix + 0], FImage[iy + 2, ix + 1], FImage[iy + 2, ix + 2], X - ix);
-
-  Result := herp(y0, y1, y2, y3, Y - iy) * (1.0 / High(Word));
+  Result := serp(m4, m3, m2, m1, cc, p1, p2, p3, p4, Y - iy) * (1.0 / High(Word));
 end;
 
 { TScanImage }

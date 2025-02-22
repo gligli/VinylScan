@@ -121,7 +121,7 @@ begin
 
     if Length(sc.InputScans) > 0 then
     begin
-      DrawImage(sc.InputScans[0].Image);
+      DrawImage(sc.InputScans[0].LeveledImage);
       DrawExtents(sc.InputScans[0]);
     end;
 
