@@ -44,33 +44,6 @@ type
   TGradientEvalFunc = procedure(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer) of object;
   TCompareFunction = function(Item1, Item2, UserParameter: Pointer): Integer;
 
-  { format of WAV file header }
-  TWavHeader = record         { parameter description }
-    rId             : longint; { 'RIFF'  4 characters }
-    rLen            : longint; { length of DATA + FORMAT chunk }
-    { FORMAT CHUNK }
-    wId             : longint; { 'WAVE' }
-    fId             : longint; { 'fmt ' }
-    fLen            : longint; { length of FORMAT DATA = 16 }
-    { format data }
-    wFormatTag      : word;    { $01 = PCM }
-    nChannels       : word;    { 1 = mono, 2 = stereo }
-    nSamplesPerSec  : longint; { Sample frequency ie 11025}
-    nAvgBytesPerSec : longint; { = nChannels * nSamplesPerSec *
-                                 (nBitsPerSample/8) }
-    nBlockAlign     : word;    { = nChannels * (nBitsPerSAmple / 8 }
-    wBitsPerSample  : word;    { 8 or 16 }
-    { DATA CHUNK }
-    dId             : longint; { 'data' }
-    wSampleLength   : longint; { length of SAMPLE DATA }
-      { sample data : offset 44 }
-      { for 8 bit mono = s[0],s[1]... :byte}
-      { for 8 bit stereo = sleft[0],sright[0],sleft[1],sright[1]... :byte}
-      { for 16 bit mono = s[0],s[1]... :word}
-      { for 16 bit stereo = sleft[0],sright[0],sleft[1],sright[1]... :word}
-  end;
-
-
 const
   C45RpmRevolutionsPerSecond = 45.0 / 60.0;
 
@@ -769,6 +742,33 @@ begin
 end;
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray);
+type
+  { format of WAV file header }
+  TWavHeader = record         { parameter description }
+    rId             : longint; { 'RIFF'  4 characters }
+    rLen            : longint; { length of DATA + FORMAT chunk }
+    { FORMAT CHUNK }
+    wId             : longint; { 'WAVE' }
+    fId             : longint; { 'fmt ' }
+    fLen            : longint; { length of FORMAT DATA = 16 }
+    { format data }
+    wFormatTag      : word;    { $01 = PCM }
+    nChannels       : word;    { 1 = mono, 2 = stereo }
+    nSamplesPerSec  : longint; { Sample frequency ie 11025}
+    nAvgBytesPerSec : longint; { = nChannels * nSamplesPerSec *
+                                 (nBitsPerSample/8) }
+    nBlockAlign     : word;    { = nChannels * (nBitsPerSAmple / 8 }
+    wBitsPerSample  : word;    { 8 or 16 }
+    { DATA CHUNK }
+    dId             : longint; { 'data' }
+    wSampleLength   : longint; { length of SAMPLE DATA }
+      { sample data : offset 44 }
+      { for 8 bit mono = s[0],s[1]... :byte}
+      { for 8 bit stereo = sleft[0],sright[0],sleft[1],sright[1]... :byte}
+      { for 16 bit mono = s[0],s[1]... :word}
+      { for 16 bit stereo = sleft[0],sright[0],sleft[1],sright[1]... :word}
+  end;
+
 var
   wf : TFileStream;
   wh : TWavHeader;
