@@ -15,6 +15,7 @@ type
     SinCosLUT: TSinCosDynArray;
     WeightsLUT: TDoubleDynArray;
     ConstSkew, MulSkew: Double;
+    Silent: Boolean;
   end;
 
   PCorrectCoords = ^TCorrectCoords;
@@ -204,6 +205,7 @@ var
 
     coords.AngleIdx := -1;
     coords.ScanIdx := AIndex;
+    coords.Silent := True;
     coords.PreparedData := preparedData;
 
     best := Infinity;
@@ -243,13 +245,16 @@ var
   iRadius, pos, cnt: Integer;
   t, rBeg, px, py, cx, cy, r, ri, sn, cs: Double;
   sinCosLUT: TSinCosDynArray;
+  scan: TInputScan;
 begin
   cnt := Ceil(CAnalyzeAreaWidth * FOutputDPI * FPointsPerRevolution);
   SetLength(Result, cnt);
 
-  t   := FInputScans[0].RelativeAngle;
-  cx  := FInputScans[0].Center.X;
-  cy  := FInputScans[0].Center.Y;
+  scan := FInputScans[0];
+
+  t   := scan.RelativeAngle;
+  cx  := scan.Center.X;
+  cy  := scan.Center.Y;
 
   BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
 
@@ -266,9 +271,9 @@ begin
     px := cs * r + cx;
     py := sn * r + cy;
 
-    if FInputScans[0].InRangePointD(py, px) then
+    if scan.InRangePointD(py, px) then
     begin
-      Result[iRadius] := FInputScans[0].GetWorkPointD(py, px);
+      Result[iRadius] := scan.GetWorkPointD(py, px);
     end
     else
     begin
@@ -286,16 +291,18 @@ procedure TScanCorrelator.GradientAnalyze(const arg: TVector; var func: Double; 
 var
   coords: PCorrectCoords absolute obj;
 
-  iRadius, iArg, pos, cnt, scanIdx: Integer;
+  iRadius, iArg, pos, cnt: Integer;
   t, rBeg, px, py, cx, cy, r, ri, sn, cs, mseInt, gInt, gimgx, gimgy, gr, gt, gcx, gcy: Double;
   sinCosLUT: TSinCosDynArray;
+  scan: TInputScan;
 begin
   func := 0.0;
   if Assigned(grad) then
     FillQWord(grad[0], Length(grad), 0);
 
-  scanIdx := coords^.ScanIdx;
   cnt := Ceil(CAnalyzeAreaWidth * FOutputDPI * FPointsPerRevolution);
+
+  scan := FInputScans[coords^.ScanIdx];
 
   t := arg[0];
   cx := arg[1];
@@ -316,15 +323,15 @@ begin
     px := cs * r + cx;
     py := sn * r + cy;
 
-    if FInputScans[scanIdx].InRangePointD(py, px) then
+    if scan.InRangePointD(py, px) then
     begin
-      mseInt := coords^.PreparedData[iRadius] - FInputScans[scanIdx].GetWorkPointD(py, px);
+      mseInt := coords^.PreparedData[iRadius] - scan.GetWorkPointD(py, px);
 
       func += Sqr(mseInt);
 
       if Assigned(grad) then
       begin
-        FInputScans[scanIdx].GetGradientsD(py, px, gimgy, gimgx);
+        scan.GetGradientsD(py, px, gimgy, gimgx);
 
         gInt := -2.0 * mseInt;
         gr := r;
@@ -354,7 +361,7 @@ begin
     for iArg := 0 to High(grad) do
       grad[iArg] /= cnt;
 
-  Write('RMSE: ', Sqrt(func):12:9,#13);
+  if not coords^.Silent then Write('RMSE: ', Sqrt(func):12:9,#13);
 end;
 
 procedure TScanCorrelator.Analyze;
@@ -379,7 +386,7 @@ const
 
     coords.AngleIdx := -1;
     coords.ScanIdx := AIndex;
-
+    coords.Silent := False;
     coords.PreparedData := PrepareAnalyze;
 
     case Method of
