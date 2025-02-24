@@ -229,16 +229,23 @@ var
       cs := FSinCosLUT[iLut].Cos;
       sn := FSinCosLUT[iLut].Sin;
 
-      for iTrack := -trackWidth to trackWidth do
-        for vs := Low(TValueSign) to High(TValueSign) do
-        begin
-          radius := AIndex + iTrack + CRadiusXOffsets[vs] * FDPI;
+      if InRangePointD(cs * AIndex + x[0], sn * AIndex + x[1]) then
+      begin
+        for iTrack := -trackWidth to trackWidth do
+          for vs := Low(TValueSign) to High(TValueSign) do
+          begin
+            radius := AIndex + iTrack + CRadiusXOffsets[vs] * FDPI;
 
-          px := cs * radius + x[0];
-          py := sn * radius + x[1];
+            px := cs * radius + x[0];
+            py := sn * radius + x[1];
 
-          f += GetWorkPointD(py, px) * CRadiusYFactors[vs];
-        end;
+            f += FImage[Trunc(py), Trunc(px)] * CRadiusYFactors[vs]
+          end;
+      end
+      else
+      begin
+        f += 1000.0;
+      end;
     end;
 
     results[AIndex - radiusInner] := f;
@@ -274,8 +281,8 @@ const
   CBaseStdDevLimit = high(Word) + 1;
   CStdDevDecrease = 0.95;
 var
-  xx, yy, radiusLimit, xMargin, yMargin: Integer;
-  stdDevLimit: Double;
+  xx, yy, radiusLimit, xMargin, yMargin, maxOffset: Integer;
+  stdDevLimit, prevf, bestf, f, bestX, bestY, reduce, offset, cc: Double;
   line, x: TDoubleDynArray;
   extents: TRect;
 begin
@@ -363,14 +370,65 @@ begin
     stdDevLimit *= CStdDevDecrease;
   until extents.Width >= 0;
 
-  //writeln(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
+  writeln(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
 
-  SetLength(x, 2);
-  x[0] := lerp(extents.Left, extents.Right, 0.5);
-  x[1] := lerp(extents.Top, extents.Bottom, 0.5);
+  x := [extents.CenterPoint.X, extents.CenterPoint.Y];
 
-  FCenterQuality := -PowellMinimize(@PowellEvalConcentricGrooveXY, x, 1.0, 1e-3, 0.0, MaxInt)[0];
+  maxOffset := Round((C45RpmMaxConcentricGroove - C45RpmMinConcentricGroove) * FDPI * 0.5);
 
+  bestf := Infinity;
+  reduce := 1.0;
+  repeat
+    prevf := bestf;
+
+    bestX := x[0];
+    bestY := x[1];
+
+    bestf := Infinity;
+    for xx := extents.Left to extents.Right do
+    begin
+      offset := (xx - extents.CenterPoint.X) * reduce;
+      if abs(offset) >= maxOffset then
+        Continue;
+
+      cc := offset + x[0];
+
+      f := PowellEvalConcentricGrooveXY([cc, bestY], nil);
+
+      if f < bestf then
+      begin
+        bestf := f;
+        bestX := cc;
+      end;
+    end;
+
+    bestf := Infinity;
+    for yy := extents.Top to extents.Bottom do
+    begin
+      offset := (yy - extents.CenterPoint.Y) * reduce;
+      if abs(offset) >= maxOffset then
+        Continue;
+
+      cc := offset + x[1];
+
+      f := PowellEvalConcentricGrooveXY([bestX, cc], nil);
+
+      if f < bestf then
+      begin
+        bestf := f;
+        bestY := cc;
+      end;
+    end;
+
+    x := [bestX, bestY];
+
+    WriteLn(ImageShortName, x[0]:12:3, x[1]:12:3);
+
+    reduce *= cInvPhi;
+
+  until bestf = prevf;
+
+  FCenterQuality := -bestf;
   FCenter.X := x[0];
   FCenter.Y := x[1];
 end;
@@ -562,70 +620,82 @@ end;
 
 procedure TInputScan.Level;
 const
-  CSigma = 3;
-  CZoneBits = 6;
-  CHalfZoneSize = 1 shl (CZoneBits - 1);
+  CSigma = 5;
+  CRadius = 32;
+var
+  offsets: array of TPoint;
 
   procedure GetL2Extents(ay, ax: Integer; out amin, amax: Integer);
   var
-    x, y: Integer;
+    i: Integer;
     px, mn, sd: Integer;
+    sdAcc: Int64;
+    opt: TPoint;
   begin
     mn := 0;
-    for y :=  ay - CHalfZoneSize to ay + CHalfZoneSize - 1 do
-      for x :=  ax - CHalfZoneSize to ax + CHalfZoneSize - 1 do
-      begin
-        px := FImage[y, x];
-        mn += px;
-      end;
-    mn := mn shr (CZoneBits * 2);
+    for i := 0 to High(offsets) do
+    begin
+      opt := offsets[i];
+      px := FImage[ay + opt.Y, ax + opt.X];
+      mn += px;
+    end;
+    mn := mn div Length(offsets);
 
-    sd := 0;
-    for y :=  ay - CHalfZoneSize to ay + CHalfZoneSize - 1 do
-      for x :=  ax - CHalfZoneSize to ax + CHalfZoneSize - 1 do
-      begin
-        px := FImage[y, x];
-        px -= mn;
-        sd += px * px;
-      end;
-    sd := round(Sqrt(sd shr (CZoneBits * 2)));
+    sdAcc := 0;
+    for i := 0 to High(offsets) do
+    begin
+      opt := offsets[i];
+      px := FImage[ay + opt.Y, ax + opt.X];
+      px -= mn;
+      sdAcc += px * px;
+    end;
+    sd := round(Sqrt(sdAcc div Length(offsets)));
 
-    amin := mn - CSigma * sd;
-    amax := mn + CSigma * sd;
+    amin := Max(0, mn - CSigma * sd);
+    amax := Min(High(Word), mn + CSigma * sd);
   end;
-
 
   procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
-    x, y: Integer;
-    px, mn, mx: Integer;
+    px, x, y: Integer;
+    mn, mx: Integer;
   begin
-    if not InRange(AIndex, 0, Height - 1) then
+    if not InRange(AIndex, CRadius, Height - 1 - CRadius) then
       Exit;
 
     y := AIndex;
 
-    for x := 0 to High(FImage[y]) do
+    for x := CRadius to High(FImage[y]) - CRadius do
     begin
+      GetL2Extents(y, x, mn, mx);
+
       px := FImage[y, x];
 
-      if InRange(x, CHalfZoneSize, High(FImage[y]) - CHalfZoneSize) and
-          InRange(y, CHalfZoneSize, High(FImage) - CHalfZoneSize) then
-      begin
-        GetL2Extents(y, x, mn, mx);
-        px := ((px - mn) shl 16) div (mx - mn + 1);
-        px := EnsureRange(px, 0, High(word));
-      end;
+      px := (px - mn) * (High(Word) + 1) div (mx - mn + 1);
 
-      FLeveledImage[y, x] := px;
+      FLeveledImage[y, x] := EnsureRange(px, 0, High(word));
     end;
   end;
 
+var
+  x, y, pos: Integer;
 begin
+  SetLength(offsets, Sqr(CRadius * 2));
+  pos := 0;
+  for y := -CRadius to CRadius - 1 do
+    for x := -CRadius to CRadius - 1 do
+      if Sqrt(Sqr(y) + Sqr(x)) <= CRadius then
+      begin
+        offsets[pos].X := x;
+        offsets[pos].Y := y;
+        Inc(pos);
+      end;
+  SetLength(offsets, pos);
+
   FLeveledImage := nil;
   SetLength(FLeveledImage, Height, Width);
 
-  ProcThreadPool.DoParallelLocalProc(@DoY, 0, Height - 1);
+  ProcThreadPool.DoParallelLocalProc(@DoY, CRadius, Height - 1 - CRadius);
 end;
 
 procedure TInputScan.FindTrack(AForcedSampleRate: Integer);
