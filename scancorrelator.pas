@@ -98,6 +98,7 @@ uses main;
 const
   CAnalyzeAreaBegin = C45RpmInnerSize + 0.1;
   CAnalyzeAreaEnd = C45RpmLabelOuterSize;
+  CAnalyzeAreaWidth = (CAnalyzeAreaEnd - CAnalyzeAreaBegin) * 0.5;
 
   CCorrectAngleCount = 36;
   CCorrectAreaBegin = C45RpmInnerSize + 0.1;
@@ -239,46 +240,45 @@ end;
 
 function TScanCorrelator.PrepareAnalyze: TDoubleDynArray;
 var
-  iAngle, iRadius, pos, rBeg, rEnd: Integer;
-  t, px, py, cx, cy, sn, cs: Double;
+  iRadius, pos, cnt: Integer;
+  t, rBeg, px, py, cx, cy, r, ri, sn, cs: Double;
   sinCosLUT: TSinCosDynArray;
-  scan: TInputScan;
 begin
-  rBeg := Round(CAnalyzeAreaBegin * 0.5 * FOutputDPI);
-  rEnd := Round(CAnalyzeAreaEnd * 0.5 * FOutputDPI);
+  cnt := Ceil(CAnalyzeAreaWidth * FOutputDPI * FPointsPerRevolution);
+  SetLength(Result, cnt);
 
-  SetLength(Result, FPointsPerRevolution * (rEnd - rBeg + 1));
-
-  scan := FInputScans[0];
-
-  t   := scan.RelativeAngle;
-  cx  := scan.Center.X;
-  cy  := scan.Center.Y;
+  t   := FInputScans[0].RelativeAngle;
+  cx  := FInputScans[0].Center.X;
+  cy  := FInputScans[0].Center.Y;
 
   BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
 
   pos := 0;
-  for iAngle := 0 to High(sinCosLUT) do
+  rBeg := CAnalyzeAreaBegin * 0.5 * FOutputDPI;
+  ri := 1.0 / FPointsPerRevolution;
+  for iRadius := 0 to High(Result) do
   begin
-    cs := sinCosLUT[iAngle].Cos;
-    sn := sinCosLUT[iAngle].Sin;
+    cs := sinCosLUT[pos].Cos;
+    sn := sinCosLUT[pos].Sin;
 
-    for iRadius := rBeg to rEnd do
+    r := rBeg + iRadius * ri;
+
+    px := cs * r + cx;
+    py := sn * r + cy;
+
+    if FInputScans[0].InRangePointD(py, px) then
     begin
-      px := cs * iRadius + cx;
-      py := sn * iRadius + cy;
-
-      if scan.InRangePointD(py, px) then
-      begin
-        Result[pos] := scan.GetWorkPointD(py, px);
-      end
-      else
-      begin
-        Result[pos] := 1000.0;
-      end;
-
-      Inc(pos);
+      Result[iRadius] := FInputScans[0].GetWorkPointD(py, px);
+    end
+    else
+    begin
+      Result[iRadius] := 1000.0;
     end;
+
+    Inc(pos);
+
+    if pos >= FPointsPerRevolution then
+      pos := 0;
   end;
 end;
 
@@ -286,67 +286,73 @@ procedure TScanCorrelator.GradientAnalyze(const arg: TVector; var func: Double; 
 var
   coords: PCorrectCoords absolute obj;
 
-  iAngle, iRadius, iArg, pos, rBeg, rEnd: Integer;
-  t, px, py, cx, cy, sn, cs, mseInt, gInt, gimgx, gimgy: Double;
+  iRadius, iArg, pos, cnt, scanIdx: Integer;
+  t, rBeg, px, py, cx, cy, r, ri, sn, cs, mseInt, gInt, gimgx, gimgy, gr, gt, gcx, gcy: Double;
   sinCosLUT: TSinCosDynArray;
-  scan: TInputScan;
 begin
- func := 0.0;
- if Assigned(grad) then
-   FillQWord(grad[0], Length(grad), 0);
+  func := 0.0;
+  if Assigned(grad) then
+    FillQWord(grad[0], Length(grad), 0);
 
-  rBeg := Round(CAnalyzeAreaBegin * 0.5 * FOutputDPI);
-  rEnd := Round(CAnalyzeAreaEnd * 0.5 * FOutputDPI);
+  scanIdx := coords^.ScanIdx;
+  cnt := Ceil(CAnalyzeAreaWidth * FOutputDPI * FPointsPerRevolution);
 
-  scan := FInputScans[coords^.ScanIdx];
-
-  t :=  arg[0];
+  t := arg[0];
   cx := arg[1];
   cy := arg[2];
 
   BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
 
   pos := 0;
-  for iAngle := 0 to High(sinCosLUT) do
+  rBeg := CAnalyzeAreaBegin * 0.5 * FOutputDPI;
+  ri := 1.0 / FPointsPerRevolution;
+  for iRadius := 0 to cnt - 1 do
   begin
-    cs := sinCosLUT[iAngle].Cos;
-    sn := sinCosLUT[iAngle].Sin;
+    cs := sinCosLUT[pos].Cos;
+    sn := sinCosLUT[pos].Sin;
 
-    for iRadius := rBeg to rEnd do
+    r := rBeg + iRadius * ri;
+
+    px := cs * r + cx;
+    py := sn * r + cy;
+
+    if FInputScans[scanIdx].InRangePointD(py, px) then
     begin
-      px := cs * iRadius + cx;
-      py := sn * iRadius + cy;
+      mseInt := coords^.PreparedData[iRadius] - FInputScans[scanIdx].GetWorkPointD(py, px);
 
-      if scan.InRangePointD(py, px) then
+      func += Sqr(mseInt);
+
+      if Assigned(grad) then
       begin
-        mseInt := coords^.PreparedData[pos] - scan.GetWorkPointD(py, px);
+        FInputScans[scanIdx].GetGradientsD(py, px, gimgy, gimgx);
 
-        func += Sqr(mseInt);
+        gInt := -2.0 * mseInt;
+        gr := r;
 
-        if Assigned(grad) then
-        begin
-          scan.GetGradientsD(py, px, gimgy, gimgx);
+        gt := (gimgx * -sn + gimgy * cs) * gr;
+        gcx := gimgx;
+        gcy := gimgy;
 
-          gInt := -2.0 * mseInt;
-
-          grad[0] += (gimgx * -sn + gimgy * cs) * gInt;
-          grad[1] += gimgx * gInt;
-          grad[2] += gimgy * gInt;
-        end;
-      end
-      else
-      begin
-        func += 1000.0;
+        grad[0] += gt * gInt;
+        grad[1] += gcx * gInt;
+        grad[2] += gcy * gInt;
       end;
-
-      Inc(pos);
+    end
+    else
+    begin
+      func += 1000.0;
     end;
+
+    Inc(pos);
+
+    if pos >= FPointsPerRevolution then
+      pos := 0;
   end;
 
-  func /= pos;
+  func /= cnt;
   if Assigned(grad) then
     for iArg := 0 to High(grad) do
-      grad[iArg] /= pos;
+      grad[iArg] /= cnt;
 
   Write('RMSE: ', Sqrt(func):12:9,#13);
 end;
