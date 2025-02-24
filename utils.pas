@@ -685,7 +685,6 @@ var
   d: Double;
 begin
   Assert(Length(a) = Length(b));
-  SetLength(gint, Length(a));
 
   Result := 0.0;
   if not Assigned(a) then
@@ -695,7 +694,8 @@ begin
   begin
     d := a[i] - b[i];
     Result += Sqr(d);
-    gint[i] := d;
+    if Assigned(gint) then
+      gint[i] := d;
   end;
 
   Result /= Length(a);
