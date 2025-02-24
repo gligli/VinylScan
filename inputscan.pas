@@ -370,7 +370,7 @@ begin
     stdDevLimit *= CStdDevDecrease;
   until extents.Width >= 0;
 
-  writeln(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
+  //writeln(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
 
   x := [extents.CenterPoint.X, extents.CenterPoint.Y];
 
@@ -422,7 +422,7 @@ begin
 
     x := [bestX, bestY];
 
-    WriteLn(ImageShortName, x[0]:12:3, x[1]:12:3);
+    //WriteLn(ImageShortName, x[0]:12:3, x[1]:12:3);
 
     reduce *= cInvPhi;
 
