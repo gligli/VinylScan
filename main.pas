@@ -24,6 +24,7 @@ type
     cbDPI: TComboBox;
     cbSR: TComboBox;
     cbMethod: TComboBox;
+    chkLevel: TCheckBox;
     edInputPNG: TEdit;
     edOutputPNG: TEdit;
     edOutputWAV: TEdit;
@@ -114,6 +115,7 @@ begin
   try
     sc.Method := TMinimizeMethod(cbMethod.ItemIndex);
     sc.OutputPNGFileName := edOutputPNG.Text;
+    sc.LevelScans := chkLevel.Checked;
     sc.CorrectAngles := chkCorrect.Checked;
     sc.RebuildBlended := chkBlend.Checked;
 

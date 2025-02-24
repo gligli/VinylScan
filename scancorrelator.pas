@@ -24,6 +24,7 @@ type
   private
     FInputScans: TInputScanDynArray;
     FMethod: TMinimizeMethod;
+    FLevelScans: Boolean;
     FCorrectAngles: Boolean;
     FRebuildBlended: Boolean;
     FOutputPNGFileName: String;
@@ -62,6 +63,7 @@ type
 
     property OutputPNGFileName: String read FOutputPNGFileName write FOutputPNGFileName;
     property Method: TMinimizeMethod read FMethod write FMethod;
+    property LevelScans: Boolean read FLevelScans write FLevelScans;
     property CorrectAngles: Boolean read FCorrectAngles write FCorrectAngles;
     property RebuildBlended: Boolean read FRebuildBlended write FRebuildBlended;
 
@@ -151,7 +153,7 @@ procedure TScanCorrelator.LoadScans;
     else
       Scan.LoadPNG;
 
-    //Scan.Level;
+    if FLevelScans then Scan.Level;
     Scan.FindTrack;
 
     WriteLn(Scan.ImageFileName);
