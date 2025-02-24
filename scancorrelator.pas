@@ -13,6 +13,7 @@ type
     AngleIdx, ScanIdx, BaseScanIdx: Integer;
     PreparedData: TDoubleDynArray;
     SinCosLUT: TSinCosDynArray;
+    WeightsLUT: TDoubleDynArray;
     ConstSkew, MulSkew: Double;
   end;
 
@@ -97,8 +98,6 @@ uses main;
 const
   CAnalyzeAreaBegin = C45RpmInnerSize + 0.1;
   CAnalyzeAreaEnd = C45RpmLabelOuterSize;
-  CAnalyzeAreaWidth = (CAnalyzeAreaEnd - CAnalyzeAreaBegin) * 0.5;
-  CAnalyzeAreaGroovesPerInch = 300;
 
   CCorrectAngleCount = 36;
   CCorrectAreaBegin = C45RpmInnerSize + 0.1;
@@ -485,6 +484,12 @@ begin
 
   BuildSinCosLUT(angleCnt, coords.SinCosLUT, startAngle + t, endAngle - startAngle + angleInc);
 
+  // build weights lookup table
+
+  SetLength(coords.WeightsLUT, angleCnt);
+  for iAngle := 0 to angleCnt - 1 do
+    coords.WeightsLUT[iAngle] := 2.0 - 4.0 * abs(iAngle / angleCnt - 0.5);
+
   // parse image arcs
 
   cnt := 0;
@@ -554,7 +559,7 @@ begin
 
       if scan.InRangePointD(py, px) then
       begin
-        Result += Sqr(scan.GetWorkPointD(py, px) - coords^.PreparedData[cnt]);
+        Result += Sqr((scan.GetWorkPointD(py, px) - coords^.PreparedData[cnt]) * coords^.WeightsLUT[iAngle]);
       end
       else
       begin
@@ -659,6 +664,7 @@ var
     // free up memory
     SetLength(coords.PreparedData, 0);
     SetLength(coords.SinCosLUT, 0);
+    SetLength(coords.WeightsLUT, 0);
 
     FPerAngleX[AIndex] := [coords.ConstSkew, coords.MulSkew];
     rmses[AIndex] := Sqrt(f);
