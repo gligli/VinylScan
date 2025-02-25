@@ -39,6 +39,7 @@ type
 
   THerpCoeff4 = array[0 .. 3] of Integer;
   THerpCoeff44 = array[0 .. 3, 0 .. 3] of Integer;
+  TSerpCoeffs9 = array[-4 .. 4 + 3] of Single;
 
   TGRSEvalFunc = function(arg: Double; obj: Pointer): Double of object;
   TGradientEvalFunc = procedure(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer) of object;
@@ -61,8 +62,9 @@ const
   C45RpmFirstMusicGroove = 6.625;
   C45RpmLastMusicGroove = 4.25;
   C45RpmAdapterSize = 1.496;
+  C45RpmLowCutoffFreq = 35.0;
 
-  CLowCutoffFreq = 40.0;
+  CLowCutoffFreq = 10.0;
 
 {$if 1}
   cRedMul = 1;
@@ -109,7 +111,11 @@ function herp(const y: THerpCoeff4; alpha: Double): Integer; overload;
 procedure herpCoeffs(var y: THerpCoeff4); overload;
 procedure herpCoeffs(const img: TWordDynArray2; ix, iy: Integer; out res: THerpCoeff44); overload;
 procedure herpFromCoeffs(const coeffs: THerpCoeff44; var res: THerpCoeff4; alpha: Double);
-procedure herpFromCoeffs_asm(const coeffs_rcx: THerpCoeff44; out res_rdx: THerpCoeff4; alpha_xmm2: Single); register; assembler;
+
+procedure serpCoeffs(alpha: Double; var res: TSerpCoeffs9);
+function serpFromCoeffsX(const coeffs: TSerpCoeffs9; const img: TWordDynArray2; ix, iy: Integer): Single;
+procedure serpFromCoeffsXY(const coeffs: TSerpCoeffs9; const img: TWordDynArray2; ix, iy: Integer; var res: TSerpCoeffs9);
+function serpFromCoeffs(const coeffs, data: TSerpCoeffs9): Single;
 
 function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
 
@@ -397,78 +403,114 @@ begin
   res[3] := coeffs[3, 0] + coeffs[3, 1] * a1 + coeffs[3, 2] * a2 + coeffs[3, 3] * a3;
 end;
 
-procedure herpFromCoeffs_asm(const coeffs_rcx: THerpCoeff44; out res_rdx: THerpCoeff4; alpha_xmm2: Single); register;
+function Sinc(x: Double): Double; inline;
+begin
+  Result := DivDef(Sin(x), x, 1.0);
+end;
+
+procedure serpCoeffs(alpha: Double; var res: TSerpCoeffs9);
+var
+  i: Integer;
+begin
+  for i := Low(res) to High(res) do
+    res[i] :=Sinc((alpha - i) * Pi);
+end;
+
+function serpFromCoeffsX(const coeffs: TSerpCoeffs9; const img: TWordDynArray2; ix, iy: Integer): Single;
+var
+  pp: PWord;
+begin
+  pp := @img[iy, ix];
+
+  Result := pp[-4] * coeffs[-4];
+  Result += pp[-3] * coeffs[-3];
+  Result += pp[-2] * coeffs[-2];
+  Result += pp[-1] * coeffs[-1];
+  Result += pp[ 0] * coeffs[ 0];
+  Result += pp[ 1] * coeffs[ 1];
+  Result += pp[ 2] * coeffs[ 2];
+  Result += pp[ 3] * coeffs[ 3];
+  Result += pp[ 4] * coeffs[ 4];
+end;
+
+function serpFromCoeffsX_asm(const coeffs_rcx: PSingle; const img_rdx: PWORD; ix_r8: Integer): Single; register; assembler;
 asm
   push rax
 
-  sub rsp, 16 * 5
-  movdqu oword ptr [rsp],       xmm0
-  movdqu oword ptr [rsp + $10], xmm1
-  movdqu oword ptr [rsp + $20], xmm2
-  movdqu oword ptr [rsp + $30], xmm3
-  movdqu oword ptr [rsp + $40], xmm4
+  sub rsp, 16 * 2
+  movdqu oword ptr [rsp], xmm1
+  movdqu oword ptr [rsp], xmm2
 
-  movss xmm1, xmm2
+  pxor xmm2, xmm2
 
-  xor eax, eax
-  inc eax
-  cvtsi2ss xmm0, eax
+  movdqu xmm1, [rdx + r8 * 2 - 4 * 2]
+  movdqa xmm0, xmm1
 
-  shl eax, 16
-  cvtsi2ss xmm3, eax
+  punpckhwd xmm1, xmm2
+  punpcklwd xmm0, xmm2
 
-  mulss xmm2, xmm3
-  insertps xmm0, xmm2, 1 * 16
+  movdqa xmm2, [rcx - 4 * 4]
 
-  mulss xmm2, xmm1
-  insertps xmm0, xmm2, 2 * 16
+  cvtdq2ps xmm1, xmm1
+  cvtdq2ps xmm0, xmm0
 
-  mulss xmm2, xmm1
-  insertps xmm0, xmm2, 3 * 16
+  mulps xmm1, [rcx]
+  mulps xmm0, xmm2
 
-  cvtps2dq xmm0, xmm0
+  addps xmm0, xmm1
 
-  movdqu xmm1, oword ptr [rcx]
-  movdqu xmm2, oword ptr [rcx + $10]
-  movdqu xmm3, oword ptr [rcx + $20]
-  movdqu xmm4, oword ptr [rcx + $30]
+  haddps xmm0, xmm0
+  haddps xmm0, xmm0
 
-  pmulld xmm1, xmm0
-  pmulld xmm2, xmm0
-  pmulld xmm3, xmm0
-  pmulld xmm4, xmm0
+  movzx eax, word ptr [rdx + r8 * 2 + 4 * 2]
+  cvtsi2ss xmm1, eax
+  mulss xmm1, [rcx + 4 * 4]
+  addss xmm0, xmm1
 
-  phaddd xmm1, xmm1
-  phaddd xmm1, xmm1
-
-  phaddd xmm2, xmm2
-  phaddd xmm2, xmm2
-
-  phaddd xmm3, xmm3
-  phaddd xmm3, xmm3
-
-  phaddd xmm4, xmm4
-  phaddd xmm4, xmm4
-
-  movq dword ptr [rdx], xmm1
-  movq dword ptr [rdx + $04], xmm2
-  movq dword ptr [rdx + $08], xmm3
-  movq dword ptr [rdx + $10], xmm4
-
-  movdqu xmm0,  oword ptr [rsp]
-  movdqu xmm1,  oword ptr [rsp + $10]
-  movdqu xmm2,  oword ptr [rsp + $20]
-  movdqu xmm3,  oword ptr [rsp + $30]
-  movdqu xmm4,  oword ptr [rsp + $40]
-  add rsp, 16 * 5
+  movdqu xmm2, oword ptr [rsp]
+  movdqu xmm1, oword ptr [rsp]
+  add rsp, 16 * 2
 
   pop rax
 end;
 
-
-function Sinc(x: Double): Double; inline;
+procedure serpFromCoeffsXY(const coeffs: TSerpCoeffs9; const img: TWordDynArray2; ix, iy: Integer; var res: TSerpCoeffs9
+  );
 begin
-  Result := DivDef(Sin(x), x, 1.0);
+{$if True}
+  res[-4] := serpFromCoeffsX_asm(@coeffs[0], @img[iy - 4, 0], ix);
+  res[-3] := serpFromCoeffsX_asm(@coeffs[0], @img[iy - 3, 0], ix);
+  res[-2] := serpFromCoeffsX_asm(@coeffs[0], @img[iy - 2, 0], ix);
+  res[-1] := serpFromCoeffsX_asm(@coeffs[0], @img[iy - 1, 0], ix);
+  res[ 0] := serpFromCoeffsX_asm(@coeffs[0], @img[iy + 0, 0], ix);
+  res[ 1] := serpFromCoeffsX_asm(@coeffs[0], @img[iy + 1, 0], ix);
+  res[ 2] := serpFromCoeffsX_asm(@coeffs[0], @img[iy + 2, 0], ix);
+  res[ 3] := serpFromCoeffsX_asm(@coeffs[0], @img[iy + 3, 0], ix);
+  res[ 4] := serpFromCoeffsX_asm(@coeffs[0], @img[iy + 4, 0], ix);
+{$else}
+  res[-4] := serpFromCoeffsX(coeffs, img, ix, iy - 4);
+  res[-3] := serpFromCoeffsX(coeffs, img, ix, iy - 3);
+  res[-2] := serpFromCoeffsX(coeffs, img, ix, iy - 2);
+  res[-1] := serpFromCoeffsX(coeffs, img, ix, iy - 1);
+  res[ 0] := serpFromCoeffsX(coeffs, img, ix, iy + 0);
+  res[ 1] := serpFromCoeffsX(coeffs, img, ix, iy + 1);
+  res[ 2] := serpFromCoeffsX(coeffs, img, ix, iy + 2);
+  res[ 3] := serpFromCoeffsX(coeffs, img, ix, iy + 3);
+  res[ 4] := serpFromCoeffsX(coeffs, img, ix, iy + 4);
+{$endif}
+end;
+
+function serpFromCoeffs(const coeffs, data: TSerpCoeffs9): Single;
+begin
+  Result := data[-4] * coeffs[-4];
+  Result += data[-3] * coeffs[-3];
+  Result += data[-2] * coeffs[-2];
+  Result += data[-1] * coeffs[-1];
+  Result += data[ 0] * coeffs[ 0];
+  Result += data[ 1] * coeffs[ 1];
+  Result += data[ 2] * coeffs[ 2];
+  Result += data[ 3] * coeffs[ 3];
+  Result += data[ 4] * coeffs[ 4];
 end;
 
 function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
@@ -733,12 +775,8 @@ begin
 end;
 
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
-var
-  cosOmegaC: Double;
 begin
-  cosOmegaC := Cos(2.0 * Pi * Cutoff / SampleRate);
-  Result := 2.0 - cosOmegaC - Sqrt(Sqr(2.0 - cosOmegaC) - 1);
-  Result := 1.0 - Result;
+  Result := (Cutoff * 2.0 / SampleRate) / sqrt(0.1024 + sqr(Cutoff * 2.0 / SampleRate));
 end;
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray);

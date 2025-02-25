@@ -760,22 +760,17 @@ end;
 function TInputScan.GetFinalPointD(Y, X: Double): Double;
 var
   ix, iy: Integer;
-  m4, m3, m2, m1, cc, p1, p2, p3, p4: Double;
+  coeffsX, coeffsY, intData: TSerpCoeffs9;
 begin
   ix := trunc(X);
   iy := trunc(Y);
 
-  m4 := serp(FImage[iy - 4, ix - 4], FImage[iy - 4, ix - 3], FImage[iy - 4, ix - 2], FImage[iy - 4, ix - 1], FImage[iy - 4, ix + 0], FImage[iy - 4, ix + 1], FImage[iy - 4, ix + 2], FImage[iy - 4, ix + 3], FImage[iy - 4, ix + 4], X - ix);
-  m3 := serp(FImage[iy - 3, ix - 4], FImage[iy - 3, ix - 3], FImage[iy - 3, ix - 2], FImage[iy - 3, ix - 1], FImage[iy - 3, ix + 0], FImage[iy - 3, ix + 1], FImage[iy - 3, ix + 2], FImage[iy - 3, ix + 3], FImage[iy - 3, ix + 4], X - ix);
-  m2 := serp(FImage[iy - 2, ix - 4], FImage[iy - 2, ix - 3], FImage[iy - 2, ix - 2], FImage[iy - 2, ix - 1], FImage[iy - 2, ix + 0], FImage[iy - 2, ix + 1], FImage[iy - 2, ix + 2], FImage[iy - 2, ix + 3], FImage[iy - 2, ix + 4], X - ix);
-  m1 := serp(FImage[iy - 1, ix - 4], FImage[iy - 1, ix - 3], FImage[iy - 1, ix - 2], FImage[iy - 1, ix - 1], FImage[iy - 1, ix + 0], FImage[iy - 1, ix + 1], FImage[iy - 1, ix + 2], FImage[iy - 1, ix + 3], FImage[iy - 1, ix + 4], X - ix);
-  cc := serp(FImage[iy + 0, ix - 4], FImage[iy + 0, ix - 3], FImage[iy + 0, ix - 2], FImage[iy + 0, ix - 1], FImage[iy + 0, ix + 0], FImage[iy + 0, ix + 1], FImage[iy + 0, ix + 2], FImage[iy + 0, ix + 3], FImage[iy + 0, ix + 4], X - ix);
-  p1 := serp(FImage[iy + 1, ix - 4], FImage[iy + 1, ix - 3], FImage[iy + 1, ix - 2], FImage[iy + 1, ix - 1], FImage[iy + 1, ix + 0], FImage[iy + 1, ix + 1], FImage[iy + 1, ix + 2], FImage[iy + 1, ix + 3], FImage[iy + 1, ix + 4], X - ix);
-  p2 := serp(FImage[iy + 2, ix - 4], FImage[iy + 2, ix - 3], FImage[iy + 2, ix - 2], FImage[iy + 2, ix - 1], FImage[iy + 2, ix + 0], FImage[iy + 2, ix + 1], FImage[iy + 2, ix + 2], FImage[iy + 2, ix + 3], FImage[iy + 2, ix + 4], X - ix);
-  p3 := serp(FImage[iy + 3, ix - 4], FImage[iy + 3, ix - 3], FImage[iy + 3, ix - 2], FImage[iy + 3, ix - 1], FImage[iy + 3, ix + 0], FImage[iy + 3, ix + 1], FImage[iy + 3, ix + 2], FImage[iy + 3, ix + 3], FImage[iy + 3, ix + 4], X - ix);
-  p4 := serp(FImage[iy + 4, ix - 4], FImage[iy + 4, ix - 3], FImage[iy + 4, ix - 2], FImage[iy + 4, ix - 1], FImage[iy + 4, ix + 0], FImage[iy + 4, ix + 1], FImage[iy + 4, ix + 2], FImage[iy + 4, ix + 3], FImage[iy + 4, ix + 4], X - ix);
+  serpCoeffs(X - ix, coeffsX);
+  serpCoeffs(Y - iy, coeffsY);
 
-  Result := serp(m4, m3, m2, m1, cc, p1, p2, p3, p4, Y - iy) * (1.0 / High(Word));
+  serpFromCoeffsXY(coeffsX, FImage, ix, iy, intData);
+
+  Result := serpFromCoeffs(coeffsY, intData) * (1.0 / High(Word));
 end;
 
 { TScanImage }
