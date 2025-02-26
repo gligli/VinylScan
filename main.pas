@@ -5,7 +5,7 @@ unit main;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, Types, scan2track, scancorrelator, utils, math, inputscan, FilterIIRLPBessel, FilterIIRHPBessel;
+  Classes, windows, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, Types, scan2track, scancorrelator, utils, math, inputscan, FilterIIRLPBessel, FilterIIRHPBessel;
 
 type
 
@@ -43,9 +43,14 @@ type
     procedure btScansCorrelatorClick(Sender: TObject);
     procedure btTestClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
+    procedure FormDestroy(Sender: TObject);
   private
     FReducRatio: Integer;
     FReducFactor: Double;
+    FLastTickCount: QWord;
+    FPoints: TPointFList;
+
+    function OnSample(Sender: TScan2Track; X, Y, Percent: Double): Boolean;
   public
     procedure SetReduc(AImageWidth, AImageHeight: Integer);
     procedure DrawExtents(AScan: TInputScan);
@@ -68,6 +73,7 @@ var
 begin
   s2t := TScan2Track.Create(StrToIntDef(cbSR.Text, 48000), 16, StrToIntDef(cbDPI.Text, 2400));
   try
+    s2t.OnSample := @OnSample;
     s2t.OutputWAVFileName := edOutputWAV.Text;
     s2t.Scan.ImageFileName := edInputPNG.Text;
 
@@ -248,6 +254,34 @@ procedure TMainForm.FormCreate(Sender: TObject);
 begin
   pnSettings.ControlStyle := pnSettings.ControlStyle + [csOpaque];
   Image.ControlStyle := Image.ControlStyle + [csOpaque];
+  FPoints := TPointFList.Create;
+end;
+
+procedure TMainForm.FormDestroy(Sender: TObject);
+begin
+  FPoints.Free;
+end;
+
+function TMainForm.OnSample(Sender: TScan2Track; X, Y, Percent: Double): Boolean;
+const
+  CSecondsAtATime = 4;
+var
+  tc: QWord;
+begin
+  Result := (GetAsyncKeyState(VK_ESCAPE) and $0001) = 0;
+
+  FPoints.Add(TPointF.Create(X, Y));
+
+  if not Result or SameValue(Percent, 100.0, 1e-2) or (FPoints.Count >= Sender.SampleRate * CSecondsAtATime) then
+  begin
+    DrawPoints(FPoints, clLime);
+
+    tc := GetTickCount64;
+    Write(Percent:6:2, '%,', FPoints.Count / Sender.SampleRate * 1000.0 / (tc - FLastTickCount):6:2, 'x', #13);
+    FLastTickCount := tc;
+
+    FPoints.Clear;
+  end;
 end;
 
 procedure TMainForm.SetReduc(AImageWidth, AImageHeight: Integer);
@@ -342,8 +376,8 @@ begin
   try
     for i := 0 to APoints.Count - 1 do
     begin
-      sc := Image.Picture.Bitmap.ScanLine[round(APoints[i].Y) div FReducRatio];
-      Inc(sc, round(APoints[i].X) div FReducRatio);
+      sc := Image.Picture.Bitmap.ScanLine[round(APoints[i].Y * FReducFactor)];
+      Inc(sc, round(APoints[i].X * FReducFactor));
       sc^ := SwapRB(AColor);
     end;
   finally

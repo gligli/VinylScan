@@ -96,7 +96,7 @@ function ToRGB(r, g, b: Byte): Integer; inline;
 procedure FromRGB(col: Integer; out r, g, b: Integer); inline; overload;
 procedure FromRGB(col: Integer; out r, g, b: Byte); inline; overload;
 function ToLuma(r, g, b: Integer): Integer; inline;
-function ToBW(col: Integer): Integer;
+function ToBW(col: Integer): Byte;
 
 function lerp(x, y, alpha: Double): Double; overload;
 function lerp(x, y: Word; alpha: Double): Double; overload;
@@ -245,14 +245,12 @@ begin
   Result := r * cRedMul + g * cGreenMul + b * cBlueMul;
 end;
 
-function ToBW(col: Integer): Integer;
+function ToBW(col: Integer): Byte;
 var
   r, g, b: Byte;
 begin
   FromRGB(col, r, g, b);
-  Result := ToLuma(r, g, b);
-  Result := Result div cLumaDiv;
-  Result := ToRGB(Result, Result, Result);
+  Result := ToLuma(r, g, b) div cLumaDiv;
 end;
 
 
