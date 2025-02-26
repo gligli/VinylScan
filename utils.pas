@@ -39,7 +39,9 @@ type
 
   THerpCoeff4 = array[0 .. 3] of Integer;
   THerpCoeff44 = array[0 .. 3, 0 .. 3] of Integer;
+
   TSerpCoeffs9 = array[-4 .. 4 + 3] of Single;
+  TSerpCoeffs9ByWord = array[0 .. high(Word)] of TSerpCoeffs9;
 
   TGRSEvalFunc = function(arg: Double; obj: Pointer): Double of object;
   TGradientEvalFunc = procedure(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer) of object;
@@ -112,7 +114,8 @@ procedure herpCoeffs(var y: THerpCoeff4); overload;
 procedure herpCoeffs(const img: TWordDynArray2; ix, iy: Integer; out res: THerpCoeff44); overload;
 procedure herpFromCoeffs(const coeffs: THerpCoeff44; var res: THerpCoeff4; alpha: Double);
 
-procedure serpCoeffs(alpha: Double; var res: TSerpCoeffs9);
+procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
+procedure serpCoeffs(alpha: Double; var res: TSerpCoeffs9); overload;
 function serpFromCoeffsX(const coeffs: TSerpCoeffs9; const img: TWordDynArray2; ix, iy: Integer): Single;
 procedure serpFromCoeffsXY(const coeffs: TSerpCoeffs9; const img: TWordDynArray2; ix, iy: Integer; var res: TSerpCoeffs9);
 function serpFromCoeffs(const coeffs, data: TSerpCoeffs9): Single;
@@ -120,7 +123,7 @@ function serpFromCoeffs(const coeffs, data: TSerpCoeffs9): Single;
 function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
-function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; Epsilon: Double = 1e-9; Data: Pointer = nil): Double;
+function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; EpsilonX: Double = 1e-9; Data: Pointer = nil): Double;
 function NonSmoothMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 function NonSmoothBoundedMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 
@@ -144,6 +147,7 @@ procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFun
 function GetTIFFSize(AStream: TStream; out AWidth, AHeight: DWord; out dpiX, dpiY: Double): Boolean;
 
 implementation
+var GSerpCoeffs9ByWord: TSerpCoeffs9ByWord;
 
 function alglib_NonSmoothBoundedMinimize(Func: Pointer; n: Integer; X, LowBound, UpBound: PDouble; Epsilon, Radius, Penalty: Double; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
 
@@ -406,12 +410,22 @@ begin
   Result := DivDef(Sin(x), x, 1.0);
 end;
 
-procedure serpCoeffs(alpha: Double; var res: TSerpCoeffs9);
+procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
 var
-  i: Integer;
+  w, i: Integer;
+  alpha: Double;
 begin
-  for i := Low(res) to High(res) do
-    res[i] :=Sinc((alpha - i) * Pi);
+  for w := 0 to High(Word) do
+  begin
+    alpha := w * (1 / High(Word));
+    for i := Low(TSerpCoeffs9) to High(TSerpCoeffs9) do
+      coeffs[w, i] :=Sinc((alpha - i) * Pi);
+  end;
+end;
+
+procedure serpCoeffs(alpha: Double; var res: TSerpCoeffs9);
+begin
+  res := GSerpCoeffs9ByWord[round(alpha * High(word))];
 end;
 
 function serpFromCoeffsX(const coeffs: TSerpCoeffs9; const img: TWordDynArray2; ix, iy: Integer): Single;
@@ -430,6 +444,8 @@ begin
   Result += pp[ 3] * coeffs[ 3];
   Result += pp[ 4] * coeffs[ 4];
 end;
+
+{$ifdef CPUX64}
 
 function serpFromCoeffsX_asm(const coeffs_rcx: PSingle; const img_rdx: PWORD; ix_r8: Integer): Single; register; assembler;
 asm
@@ -472,10 +488,12 @@ asm
   pop rax
 end;
 
+{$endif}
+
 procedure serpFromCoeffsXY(const coeffs: TSerpCoeffs9; const img: TWordDynArray2; ix, iy: Integer; var res: TSerpCoeffs9
   );
 begin
-{$if True}
+{$ifdef CPUX64}
   res[-4] := serpFromCoeffsX_asm(@coeffs[0], @img[iy - 4, 0], ix);
   res[-3] := serpFromCoeffsX_asm(@coeffs[0], @img[iy - 3, 0], ix);
   res[-2] := serpFromCoeffsX_asm(@coeffs[0], @img[iy - 2, 0], ix);
@@ -557,26 +575,48 @@ begin
 end;
 
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double;
-  Epsilon: Double; Data: Pointer): Double;
+  EpsilonX: Double; Data: Pointer): Double;
 var
-  gm: Double;
-  grad: TDoubleDynArray;
+  lr, gm, f: Double;
+  grad, bestX: TDoubleDynArray;
   i: Integer;
+  iter: Integer;
 begin
   SetLength(grad, Length(X));
+  SetLength(bestX, Length(X));
 
+  f := NaN;
+  Result := Infinity;
+  lr := LearningRate;
+  iter := 0;
   repeat
-    Func(X, Result, grad, Data);
+    Func(X, f, grad, Data);
+
+    if f <= Result then
+    begin
+      for i := 0 to High(X) do
+        bestX[i] := X[i];
+      Result := f;
+    end;
 
     gm := 0.0;
     for i := 0 to High(X) do
     begin
-      X[i] -= LearningRate * grad[i];
-      gm := max(gm, Abs(grad[i]));
+      X[i] -= lr * grad[i];
+      gm := max(gm, Abs(lr * grad[i]));
     end;
 
-    WriteLn(Result:20:9, gm:20:9);
-  until gm <= Epsilon;
+    Inc(iter);
+
+    lr := LearningRate / Log2(1 + iter);
+
+    //WriteLn(Result:20:9, gm:20:9);
+  until gm <= EpsilonX;
+
+  for i := 0 to High(X) do
+    X[i] := bestX[i];
+
+  //Write(iter:8, #13);
 end;
 
 threadvar
@@ -998,5 +1038,7 @@ initialization
   SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
   ProcThreadPool.MaxThreadCount := NumberOfProcessors;
 {$endif}
+
+  serpCoeffsBuilsLUT(GSerpCoeffs9ByWord);
 end.
 
