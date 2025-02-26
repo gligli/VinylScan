@@ -604,10 +604,10 @@ end;
 
 procedure TScanCorrelator.Correct;
 const
-  CConstCorrectExtents = 0.01; // inches
-  CConstCorrectHalfCount = 32;
-  CMulCorrectExtents = 0.005;
-  CMulCorrectHalfCount = 50;
+  CConstCorrectExtents = 0.02; // inches
+  CConstCorrectHalfCount = 64;
+  CMulCorrectExtents = 0.01;
+  CMulCorrectHalfCount = 100;
 var
   rmses: TDoubleDynArray;
   coordsArray: array of TCorrectCoords;
