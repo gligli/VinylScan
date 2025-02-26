@@ -58,7 +58,7 @@ type
 
     procedure LoadPNG;
     procedure LoadTIFF;
-    procedure Level;
+    procedure BrickwallLimit;
     procedure FindTrack(AForcedSampleRate: Integer = -1);
     procedure Crop;
 
@@ -618,47 +618,52 @@ begin
   end;
 end;
 
-procedure TInputScan.Level;
+procedure TInputScan.BrickwallLimit;
+type
+  TSample = record
+    OffsetX, OffsetY, ReverseRadius: Integer;
+  end;
+
 const
   CSigma = 2;
-  CRadius = 32;
+  CRadius = 16;
 var
-  offsets: array of TPoint;
+  offsets: array of TSample;
 
-  procedure GetL2Extents(ay, ax: Integer; out amin, amax: Integer);
+  procedure GetL2Extents(ay, ax: Integer; out amean, astddev: Integer);
   var
     i: Integer;
     px, mn, sd: Integer;
     sdAcc: Int64;
-    opt: TPoint;
+    opt: ^TSample;
   begin
     mn := 0;
     for i := 0 to High(offsets) do
     begin
-      opt := offsets[i];
-      px := FImage[ay + opt.Y, ax + opt.X];
+      opt := @offsets[i];
+      px := FImage[ay + opt^.OffsetY, ax + opt^.OffsetX] * opt^.ReverseRadius;
       mn += px;
     end;
-    mn := mn div Length(offsets);
+    mn := mn div (Length(offsets) * (CRadius div 2 + 1));
 
     sdAcc := 0;
     for i := 0 to High(offsets) do
     begin
-      opt := offsets[i];
-      px := FImage[ay + opt.Y, ax + opt.X];
+      opt := @offsets[i];
+      px := FImage[ay + opt^.OffsetY, ax + opt^.OffsetX] * opt^.ReverseRadius;
       px -= mn;
       sdAcc += px * px;
     end;
-    sd := round(Sqrt(sdAcc div Length(offsets)));
+    sd := round(Sqrt(sdAcc div (Length(offsets) * Sqr(CRadius div 2 + 1))));
 
-    amin := mn - CSigma * sd;
-    amax := mn + CSigma * sd;
+    amean := mn;
+    astddev := CSigma * sd;
   end;
 
   procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     px, x, y: Integer;
-    mn, mx: Integer;
+    mn, sd: Integer;
   begin
     if not InRange(AIndex, CRadius, Height - 1 - CRadius) then
       Exit;
@@ -667,29 +672,35 @@ var
 
     for x := CRadius to High(FImage[y]) - CRadius do
     begin
-      GetL2Extents(y, x, mn, mx);
+      GetL2Extents(y, x, mn, sd);
 
       px := FImage[y, x];
-
-      px := (px - mn) * (High(Word) + 1) div (mx - mn + 1);
+      px := (px - mn) * (High(Word) + 1) div sd + mn;
 
       FLeveledImage[y, x] := EnsureRange(px, 0, High(word));
     end;
   end;
 
 var
-  x, y, pos: Integer;
+  x, y, r,  pos: Integer;
 begin
+  if not FSilent then WriteLn('BrickwallLimit');
+
   SetLength(offsets, Sqr(CRadius * 2 + 1));
   pos := 0;
   for y := -CRadius to CRadius do
     for x := -CRadius to CRadius do
-      if Sqrt(Sqr(y) + Sqr(x)) <= CRadius then
+    begin
+      r := round(Sqrt(Sqr(y) + Sqr(x)));
+
+      if r <= CRadius then
       begin
-        offsets[pos].X := x;
-        offsets[pos].Y := y;
+        offsets[pos].OffsetX := x;
+        offsets[pos].OffsetY := y;
+        offsets[pos].ReverseRadius := CRadius - r;
         Inc(pos);
       end;
+    end;
   SetLength(offsets, pos);
 
   FLeveledImage := nil;

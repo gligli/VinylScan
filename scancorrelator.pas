@@ -26,7 +26,7 @@ type
   private
     FInputScans: TInputScanDynArray;
     FMethod: TMinimizeMethod;
-    FLevelScans: Boolean;
+    FBrickwallLimitScans: Boolean;
     FCorrectAngles: Boolean;
     FRebuildBlended: Boolean;
     FOutputPNGFileName: String;
@@ -65,7 +65,7 @@ type
 
     property OutputPNGFileName: String read FOutputPNGFileName write FOutputPNGFileName;
     property Method: TMinimizeMethod read FMethod write FMethod;
-    property LevelScans: Boolean read FLevelScans write FLevelScans;
+    property BrickwallLimitScans: Boolean read FBrickwallLimitScans write FBrickwallLimitScans;
     property CorrectAngles: Boolean read FCorrectAngles write FCorrectAngles;
     property RebuildBlended: Boolean read FRebuildBlended write FRebuildBlended;
 
@@ -97,13 +97,13 @@ uses main;
 { TScanCorrelator }
 
 const
-  CAnalyzeAreaBegin = C45RpmInnerSize + 0.1;
+  CAnalyzeAreaBegin = C45RpmInnerSize;
   CAnalyzeAreaEnd = C45RpmLabelOuterSize;
   CAnalyzeAreaWidth = (CAnalyzeAreaEnd - CAnalyzeAreaBegin) * 0.5;
 
   CCorrectAngleCount = 36;
-  CCorrectAreaBegin = C45RpmInnerSize + 0.1;
-  CCorrectAreaEnd = C45RpmOuterSize;
+  CCorrectAreaBegin = C45RpmInnerSize;
+  CCorrectAreaEnd = C45RpmFirstMusicGroove;
   CCorrectAreaWidth = (CCorrectAreaEnd - CCorrectAreaBegin) * 0.5;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
@@ -154,7 +154,7 @@ procedure TScanCorrelator.LoadScans;
     else
       Scan.LoadPNG;
 
-    if FLevelScans then Scan.Level;
+    if FBrickwallLimitScans then Scan.BrickwallLimit;
     Scan.FindTrack;
 
     WriteLn(Scan.ImageFileName);

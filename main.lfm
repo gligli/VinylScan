@@ -1,8 +1,8 @@
 object MainForm: TMainForm
   Left = -8
-  Height = 993
+  Height = 1032
   Top = -8
-  Width = 1072
+  Width = 1088
   HorzScrollBar.Increment = 240
   HorzScrollBar.Page = 640
   HorzScrollBar.Tracking = True
@@ -11,8 +11,8 @@ object MainForm: TMainForm
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 970
-  ClientWidth = 1072
+  ClientHeight = 1009
+  ClientWidth = 1088
   Color = 4210752
   DoubleBuffered = False
   OnCreate = FormCreate
@@ -115,17 +115,17 @@ object MainForm: TMainForm
       OnClick = btScan2TrackClick
     end
     object btTest: TButton
-      Left = 376
+      Left = 384
       Height = 17
       Hint = 'Unit tests'
-      Top = 8
+      Top = 0
       Width = 17
       Caption = 'UT'
       Font.Height = -9
       ParentFont = False
       ParentShowHint = False
       ShowHint = True
-      TabOrder = 9
+      TabOrder = 8
       OnClick = btTestClick
     end
     object cbDPI: TComboBox
@@ -242,13 +242,13 @@ object MainForm: TMainForm
       State = cbChecked
       TabOrder = 12
     end
-    object chkLevel: TCheckBox
+    object chkBrickLim: TCheckBox
       Left = 248
       Height = 19
       Top = 8
-      Width = 77
-      Caption = 'Level scans'
-      TabOrder = 8
+      Width = 124
+      Caption = 'Brickwall limit scans'
+      TabOrder = 9
     end
   end
   object odInPNGs: TOpenDialog
