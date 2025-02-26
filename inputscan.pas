@@ -620,7 +620,7 @@ end;
 
 procedure TInputScan.Level;
 const
-  CSigma = 5;
+  CSigma = 2;
   CRadius = 32;
 var
   offsets: array of TPoint;
@@ -651,8 +651,8 @@ var
     end;
     sd := round(Sqrt(sdAcc div Length(offsets)));
 
-    amin := Max(0, mn - CSigma * sd);
-    amax := Min(High(Word), mn + CSigma * sd);
+    amin := mn - CSigma * sd;
+    amax := mn + CSigma * sd;
   end;
 
   procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
@@ -680,10 +680,10 @@ var
 var
   x, y, pos: Integer;
 begin
-  SetLength(offsets, Sqr(CRadius * 2));
+  SetLength(offsets, Sqr(CRadius * 2 + 1));
   pos := 0;
-  for y := -CRadius to CRadius - 1 do
-    for x := -CRadius to CRadius - 1 do
+  for y := -CRadius to CRadius do
+    for x := -CRadius to CRadius do
       if Sqrt(Sqr(y) + Sqr(x)) <= CRadius then
       begin
         offsets[pos].X := x;
