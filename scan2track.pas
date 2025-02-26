@@ -8,15 +8,12 @@ uses
   Classes, SysUtils, Types, Math, Graphics, GraphType, FPCanvas, FPImage, FPWritePNG, MTProcs, fgl,
   utils, inputscan, powell, FilterIIRLPBessel, FilterIIRHPBessel;
 
+const
+  CSampleDecoderBits = 12;
+  CSampleDecoderMax = 1 shl (CSampleDecoderBits - 2);
+
 type
   TScan2Track = class;
-
-  TSerpCoeffs9ByWord = array[0 .. high(Word)] of TSerpCoeffs9;
-
-  TSampleParams = record
-    serpCoeffsLUT: TSerpCoeffs9ByWord;
-    radius, angleSin, angleCos: Double;
-  end;
 
   TSampleEvent = function(Sender: TScan2Track; X, Y, Percent: Double): Boolean of object;
 
@@ -33,11 +30,7 @@ type
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
 
-    FSampleParams: TSampleParams;
-
-    function PowellSample(const arg: TVector; obj: Pointer): TScalar;
-    procedure BuilsSerpCoeffsLUT(var coeffs: TSerpCoeffs9ByWord);
-    procedure DecodeSample(var sample: Double; radius, angleSin, angleCos: Double);
+    function DecodeSample(radius, angleSin, angleCos: Double): Double;
 
   public
     constructor Create(ASampleRate: Integer = 48000; ABitsPerSample: Integer = 16; ADPI: Integer = 2400);
@@ -78,58 +71,46 @@ begin
   inherited Destroy;
 end;
 
-procedure TScan2Track.BuilsSerpCoeffsLUT(var coeffs: TSerpCoeffs9ByWord);
+function TScan2Track.DecodeSample(radius, angleSin, angleCos: Double): Double;
 var
-  w: Integer;
+  ismp, upCnt: Integer;
+  r, px, py, cxa, sample, sampleMin, sampleMax, sampleMiddle, upAcc: Double;
+  smpBuf: array[-CSampleDecoderMax-1 .. CSampleDecoderMax] of Double;
 begin
-  for w := 0 to High(Word) do
-    serpCoeffs(w * (1 / High(Word)), coeffs[w]);
-end;
+  cxa := C45RpmRecordingGrooveWidth * Scan.DPI / CSampleDecoderMax;
 
-function TScan2Track.PowellSample(const arg: TVector; obj: Pointer): TScalar;
-var
-  ix, iy: Integer;
-  r, px, py: Double;
-  wx, wy: Word;
-  intData: TSerpCoeffs9;
-begin
-  Result := 1000.0;
-
-  if not InRange(arg[0], -1.0, 1.0) then
-    Exit;
-
-  r := FSampleParams.radius + arg[0] * C45RpmRecordingGrooveWidth * Scan.DPI;
-
-  px := FSampleParams.angleCos * r + Scan.Center.X;
-  py := FSampleParams.angleSin * r + Scan.Center.Y;
-
-  if Scan.InRangePointD(py, px) then
+  sampleMin := Infinity;
+  sampleMax := -Infinity;
+  for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
   begin
-    ix := trunc(px);
-    iy := trunc(py);
+    r := radius + ismp * cxa;
 
-    wx := Round((px - ix) * High(Word));
-    wy := Round((py - iy) * High(Word));
+    px := angleCos * r + Scan.Center.X;
+    py := angleSin * r + Scan.Center.Y;
 
-    serpFromCoeffsXY(FSampleParams.serpCoeffsLUT[wx], Scan.Image, ix, iy, intData);
+    sample := 0;
+    if Scan.InRangePointD(py, px) then
+      sample := Scan.GetFinalPointD(py, px);
 
-    Result := -serpFromCoeffs(FSampleParams.serpCoeffsLUT[wy], intData);
+    sampleMin := Min(sampleMin, sample);
+    sampleMax := Max(sampleMax, sample);
+
+    smpBuf[ismp] := sample;
   end;
-end;
 
+  sampleMiddle := (sampleMax + sampleMin) * 0.5;
+  //sampleMiddle := Mean(smpBuf);
 
-procedure TScan2Track.DecodeSample(var sample: Double; radius, angleSin, angleCos: Double);
-var
-  x: TVector;
-begin
-  FSampleParams.angleCos := angleCos;
-  FSampleParams.angleSin := angleSin;
-  FSampleParams.radius := radius;
+  upAcc := 0;
+  upCnt := 0;
+  for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
+    if smpBuf[ismp] >= sampleMiddle then
+    begin
+      upAcc += ismp;
+      Inc(upCnt);
+    end;
 
-  SetLength(x, 1);
-  x[0] := sample;
-  PowellMinimize(@PowellSample, x, 1.0, 1e-6, 0.5, MaxInt);
-  sample := x[0];
+  Result := DivDef(upAcc, CSampleDecoderMax * upCnt, 0.0);
 end;
 
 
@@ -149,7 +130,7 @@ var
   end;
 
 var
-  radius, rOuter, sn, cs, px, py, fbRatio, fsmp, ffSmp: Double;
+  radius, rOuter, sn, cs, px, py, fbRatio, fSmp, ffSmp: Double;
   iSample, iLut: Integer;
   fltSample: TFilterIIRHPBessel;
   sinCosLut: TSinCosDynArray;
@@ -163,27 +144,25 @@ begin
     fltSample.SampleRate := FSampleRate;
     fltSample.Order := 4;
 
-    BuilsSerpCoeffsLUT(FSampleParams.serpCoeffsLUT);
     BuildSinCosLUT(FPointsPerRevolution, sinCosLut, Scan.GrooveStartAngle, -2.0 * Pi);
 
     fbRatio := CutoffToFeedbackRatio(C45RpmLowCutoffFreq, FSampleRate) * C45RpmRecordingGrooveWidth * Scan.DPI;
 
     rOuter := C45RpmOuterSize * 0.5 * Scan.DPI;
-    fsmp := 0.0;
     iSample := 0;
     iLut := 0;
     radius := Scan.FirstGrooveRadius;
     repeat
-
       cs := sinCosLut[iLut].Cos;
       sn := sinCosLut[iLut].Sin;
 
-      DecodeSample(fsmp, radius, sn, cs);
+      fSmp := DecodeSample(radius, sn, cs);
 
-      ffSmp := fltSample.FilterFilter(fsmp);
+      ffSmp := fltSample.FilterFilter(fSmp);
+
       StoreSample(ffSmp, iSample);
 
-      radius += fsmp * fbRatio;
+      radius += fSmp * fbRatio;
 
       px := cs * radius + Scan.Center.X;
       py := sn * radius + Scan.Center.Y;
