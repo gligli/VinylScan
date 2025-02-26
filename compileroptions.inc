@@ -1,8 +1,10 @@
 {$mode ObjFPC}{$H+}
-{$optimization LEVEL4}
-{$optimization NOFASTMATH}
-{$optimization AUTOINLINE}
-{$optimization FORCENOSTACKFRAME}
+{$ifndef DEBUG}
+  {$optimization LEVEL4}
+  {$optimization NOFASTMATH}
+  {$optimization AUTOINLINE}
+  {$optimization FORCENOSTACKFRAME}
+{$endif}
 {$TYPEDADDRESS ON}
 {$CODEALIGN CONSTMIN=16}
 {$CODEALIGN VARMIN=16}
