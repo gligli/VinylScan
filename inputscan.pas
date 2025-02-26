@@ -9,9 +9,6 @@ uses
   utils, powell;
 
 type
-  TInterpSource = (isImage, isXGradient, isYGradient);
-  TInterpMode = (imPoint, imLinear, imHermite);
-
   TCropData = record
     StartAngle, EndAngle: Double;
     StartAngleMirror, EndAngleMirror: Double;
@@ -64,7 +61,7 @@ type
 
     function InRangePointD(Y, X: Double): Boolean; inline;
     function GetWorkPointD(Y, X: Double): Double; inline;
-    function GetFinalPointD(Y, X: Double): Double; inline;
+    function GetFinalPointD(Y, X: Double): Double;
     procedure GetGradientsD(Y, X: Double; out GY: Double; out GX: Double); inline;
 
     property ImageFileName: String read FImageFileName write FImageFileName;
