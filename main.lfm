@@ -1,8 +1,8 @@
 object MainForm: TMainForm
   Left = -8
-  Height = 1032
+  Height = 1149
   Top = -8
-  Width = 1088
+  Width = 1136
   HorzScrollBar.Increment = 240
   HorzScrollBar.Page = 640
   HorzScrollBar.Tracking = True
@@ -11,8 +11,8 @@ object MainForm: TMainForm
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 1032
-  ClientWidth = 1088
+  ClientHeight = 1149
+  ClientWidth = 1136
   Color = 4210752
   DoubleBuffered = True
   OnCreate = FormCreate

@@ -264,7 +264,7 @@ end;
 
 function TMainForm.OnSample(Sender: TScan2Track; X, Y, Percent: Double): Boolean;
 const
-  CSecondsAtATime = 4;
+  CSecondsAtATime = 0.1;
 var
   tc: QWord;
 begin
@@ -272,7 +272,7 @@ begin
 
   FPoints.Add(TPointF.Create(X, Y));
 
-  if not Result or SameValue(Percent, 100.0, 1e-2) or (FPoints.Count >= Sender.SampleRate * CSecondsAtATime) then
+  if not Result or not InRange(Percent, -0.1, 99.99) or (FPoints.Count >= Sender.SampleRate * CSecondsAtATime) then
   begin
     DrawPoints(FPoints, clLime);
 
