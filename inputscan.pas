@@ -62,7 +62,7 @@ type
     function InRangePointD(Y, X: Double): Boolean; inline;
     function GetWorkPointD(Y, X: Double): Double; inline;
     function GetFinalPointD(Y, X: Double): Double;
-    procedure GetGradientsD(Y, X: Double; out GY: Double; out GX: Double); inline;
+    procedure GetGradientsD(Y, X: Double; out GY: Double; out GX: Double);
 
     property ImageFileName: String read FImageFileName write FImageFileName;
     property ImageShortName: String read GetImageShortName;
@@ -208,62 +208,50 @@ end;
 
 function TInputScan.PowellEvalConcentricGrooveXY(const x: TVector; obj: Pointer): TScalar;
 var
-  radiusInner, radiusOuter, trackWidth: Integer;
-  results: TDoubleDynArray;
+  radiusInner, radiusOuter: Integer;
 
-  procedure DoRadius(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  function DoRadius(ARadius: Integer): Double;
   var
-    iLut, iTrack: Integer;
-    px, py, sn, cs, radius, f: Double;
+    iLut: Integer;
+    px, py, sn, cs, radius: Double;
     vs: TValueSign;
   begin
-    if not InRange(AIndex, radiusInner, radiusOuter) then
-      Exit;
-
-    f := 0;
+    Result := 0;
     for iLut := 0 to High(FSinCosLUT) do
     begin
       cs := FSinCosLUT[iLut].Cos;
       sn := FSinCosLUT[iLut].Sin;
 
-      if InRangePointD(cs * AIndex + x[0], sn * AIndex + x[1]) then
+      if InRangePointD(cs * ARadius + x[0], sn * ARadius + x[1]) then
       begin
-        for iTrack := -trackWidth to trackWidth do
-          for vs := Low(TValueSign) to High(TValueSign) do
-          begin
-            radius := AIndex + iTrack + CRadiusXOffsets[vs] * FDPI;
+        for vs := Low(TValueSign) to High(TValueSign) do
+        begin
+          radius := ARadius + CRadiusXOffsets[vs] * FDPI;
 
-            px := cs * radius + x[0];
-            py := sn * radius + x[1];
+          px := cs * radius + x[0];
+          py := sn * radius + x[1];
 
-            f += FImage[Trunc(py), Trunc(px)] * CRadiusYFactors[vs]
-          end;
+          Result += GetWorkPointD(py, px) * CRadiusYFactors[vs]
+        end;
       end
       else
       begin
-        f += 1000.0;
+        Result += 1000.0;
       end;
     end;
-
-    results[AIndex - radiusInner] := f;
   end;
 
 var
   iRadius: Integer;
   f: Double;
 begin
-  trackWidth := Floor(C45RpmLeadOutGrooveWidth * FDPI * 0.5);
   radiusInner := Round(C45RpmMinConcentricGroove * FDPI * 0.5);
   radiusOuter := Round(C45RpmMaxConcentricGroove * FDPI * 0.5);
-
-  SetLength(results, radiusOuter - radiusInner + 1);
-
-  ProcThreadPool.DoParallelLocalProc(@DoRadius, radiusInner, radiusOuter);
 
   Result := Infinity;
   for iRadius := radiusInner to radiusOuter do
   begin
-    f := results[iRadius - radiusInner];
+    f := DoRadius(iRadius);
 
     if f < Result then
     begin
@@ -423,7 +411,7 @@ begin
 
     reduce *= cInvPhi;
 
-  until bestf = prevf;
+  until SameValue(bestf, prevf, 0.5);
 
   FCenterQuality := -bestf;
   FCenter.X := x[0];
@@ -476,31 +464,22 @@ end;
 
 procedure TInputScan.GetGradientsD(Y, X: Double; out GY: Double; out GX: Double);
 const
-  CFiniteDifferencesYFactor: array[-4 .. 4] of Double = (1/280, -4/105, 1/5, -4/5, 0, 4/5, -1/5, 4/105, -1/280);
+  COperator = idoPrewitt;
 var
-  i, iy, ix: Integer;
-  lGY00, lGY01, lGY10, lGY11, lGX00, lGX01, lGX10, lGX11, fdy: Double;
+  ix, iy: Integer;
+  lGY00, lGY01, lGY10, lGY11, lGX00, lGX01, lGX10, lGX11: Integer;
 begin
   ix := trunc(X);
   iy := trunc(Y);
 
-  lGX00 := 0.0; lGX01 := 0.0; lGX10 := 0.0; lGX11 := 0.0;
-  lGY00 := 0.0; lGY01 := 0.0; lGY10 := 0.0; lGY11 := 0.0;
-
-  for i := Low(CFiniteDifferencesYFactor) to High(CFiniteDifferencesYFactor) do
-  begin
-    fdy := CFiniteDifferencesYFactor[i];
-
-    lGX00 += FImage[iy    , ix + i    ] * fdy;
-    lGX01 += FImage[iy    , ix + i + 1] * fdy;
-    lGX10 += FImage[iy + 1, ix + i    ] * fdy;
-    lGX11 += FImage[iy + 1, ix + i + 1] * fdy;
-
-    lGY00 += FImage[iy + i    , ix    ] * fdy;
-    lGY01 += FImage[iy + i    , ix + 1] * fdy;
-    lGY10 += FImage[iy + i + 1, ix    ] * fdy;
-    lGY11 += FImage[iy + i + 1, ix + 1] * fdy;
-  end;
+  lGX00 := Convolve(FLeveledImage, CImageDerivationKernels[COperator, False], iy + 0, ix + 0);
+  lGX01 := Convolve(FLeveledImage, CImageDerivationKernels[COperator, False], iy + 0, ix + 1);
+  lGX10 := Convolve(FLeveledImage, CImageDerivationKernels[COperator, False], iy + 1, ix + 0);
+  lGX11 := Convolve(FLeveledImage, CImageDerivationKernels[COperator, False], iy + 1, ix + 1);
+  lGY00 := Convolve(FLeveledImage, CImageDerivationKernels[COperator, True], iy + 0, ix + 0);
+  lGY01 := Convolve(FLeveledImage, CImageDerivationKernels[COperator, True], iy + 0, ix + 1);
+  lGY10 := Convolve(FLeveledImage, CImageDerivationKernels[COperator, True], iy + 1, ix + 0);
+  lGY11 := Convolve(FLeveledImage, CImageDerivationKernels[COperator, True], iy + 1, ix + 1);
 
   GX := lerp(lerp(lGX00, lGX01, X - ix), lerp(lGX10, lGX11, X - ix), Y - iy) * (1.0 / High(Word));
   GY := lerp(lerp(lGY00, lGY01, X - ix), lerp(lGY10, lGY11, X - ix), Y - iy) * (1.0 / High(Word));
@@ -727,6 +706,8 @@ begin
 
   FindConcentricGroove;
   FindGrooveStart;
+
+  FRelativeAngle := NormalizeAngle(FGrooveStartAngle);
 
   if not FSilent then
   begin
