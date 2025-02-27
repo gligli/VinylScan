@@ -24,7 +24,10 @@ type
     Sin, Cos, Angle: Double;
   end;
 
-  TMinimizeMethod = (mmNone, mmNS, mmPowell, mmAll);
+  TMinimizeMethod = (mmNone, mmBFGS, mmNS, mmAll);
+
+  TImageDerivationOperator = (idoPrewitt, idoSobel, idoScharr);
+  TConvolutionKernel = array[-1..1, -1..1] of integer;
 
   TPointDDynArray = array of TPointD;
   TPointDDynArray2 = array of TPointDDynArray;
@@ -83,6 +86,12 @@ const
   cPhi = (1 + sqrt(5)) / 2;
   cInvPhi = 1 / cPhi;
 
+  CImageDerivationKernels: array[TImageDerivationOperator, Boolean {Y?}] of TConvolutionKernel = (
+    (((-1, 0, 1), (-1, 0, 1), (-1, 0, 1)),   ((-1, -1, -1), (0, 0, 0), (1, 1, 1))),  // ckoPrewitt
+    (((-1, 0, 1), (-2, 0, 2), (-1, 0, 1)),   ((-1, -2, -1), (0, 0, 0), (1, 2, 1))),  // ckoSobel
+    (((-3, 0, 3), (-10, 0, 10), (-3, 0, 3)), ((-3, -10, -3), (0, 0, 0), (3, 10, 3))) // ckoScharr
+  );
+
 procedure SpinEnter(Lock: PSpinLock); assembler;
 procedure SpinLeave(Lock: PSpinLock); assembler;
 function NumberOfProcessors: Integer;
@@ -102,6 +111,7 @@ function ToBW(col: Integer): Byte;
 
 function lerp(x, y, alpha: Double): Double; overload;
 function lerp(x, y: Word; alpha: Double): Double; overload;
+function lerp(x, y: Integer; alpha: Double): Double; overload;
 function ilerp(x, y, alpha, maxAlpha: Integer): Integer;
 function revlerp(x, r, alpha: Double): Double;
 
@@ -124,8 +134,11 @@ function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Doubl
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; EpsilonX: Double = 1e-9; Data: Pointer = nil): Double;
+function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 function NonSmoothMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 function NonSmoothBoundedMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
+
+function Convolve(const image:TWordDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Integer;
 
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 function PearsonCorrelationGradient(const a: TDoubleDynArray; const b: TDoubleDynArray; const gb: TDoubleDynArray): Double;
@@ -147,6 +160,8 @@ procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFun
 function GetTIFFSize(AStream: TStream; out AWidth, AHeight: DWord; out dpiX, dpiY: Double): Boolean;
 
 implementation
+uses utypes, ubfgs;
+
 var GSerpCoeffs9ByWord: TSerpCoeffs9ByWord;
 
 function alglib_NonSmoothBoundedMinimize(Func: Pointer; n: Integer; X, LowBound, UpBound: PDouble; Epsilon, Radius, Penalty: Double; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
@@ -264,6 +279,11 @@ begin
 end;
 
 function lerp(x, y: Word; alpha: Double): Double;
+begin
+  Result := x + (y - x) * alpha;
+end;
+
+function lerp(x, y: Integer; alpha: Double): Double;
 begin
   Result := x + (y - x) * alpha;
 end;
@@ -608,15 +628,52 @@ begin
 
     Inc(iter);
 
-    lr := LearningRate / Log2(1 + iter);
+    Write(Result:20:9, gm:20:9);
+    for i := 0 to High(X) do
+      Write(X[i]:20:9);
+    WriteLn;
 
-    //WriteLn(Result:20:9, gm:20:9);
   until gm <= EpsilonX;
 
   for i := 0 to High(X) do
     X[i] := bestX[i];
 
-  //Write(iter:8, #13);
+  WriteLn(iter:8);
+end;
+
+threadvar
+  GBFGSData: Pointer;
+  GBFGSFunc: TGradientEvalFunc;
+
+  function BFGSX(X : TVector) : Float;
+  begin
+    GBFGSFunc(X, Result, nil, GBFGSData);
+  end;
+
+  procedure BFGSG(X, G : TVector);
+  var
+    dummy: Double;
+  begin
+    dummy := NaN;
+    GBFGSFunc(X, dummy, G, GBFGSData);
+  end;
+
+function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double; Data: Pointer): Double;
+var
+  G: TVector;
+  H: TMatrix;
+begin
+  SetLength(G, Length(X));
+  SetLength(H, Length(X), Length(X));
+
+  GBFGSData := Data;
+  GBFGSFunc := Func;
+  try
+    BFGS(@BFGSX, @BFGSG, X, 0, High(X), MaxInt, Epsilon, Result, G, H);
+  finally
+    GBFGSData := nil;
+    GBFGSFunc := nil;
+  end;
 end;
 
 threadvar
@@ -661,6 +718,16 @@ begin
   finally
     GNSFunc := nil;
   end;
+end;
+
+function Convolve(const image:TWordDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Integer;
+var
+  y, x: Integer;
+begin
+  Result := 0;
+  for y := -1 to 1 do
+    for x := -1 to 1 do
+      Result += image[y + row, x + col] * kernel[y, x];
 end;
 
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
