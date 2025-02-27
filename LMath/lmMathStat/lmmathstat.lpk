@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <Package Version="5">
+    <PathDelim Value="\"/>
+    <Name Value="lmmathstat"/>
+    <Type Value="RunAndDesignTime"/>
+    <CompilerOptions>
+      <Version Value="11"/>
+      <PathDelim Value="\"/>
+      <SearchPaths>
+        <OtherUnitFiles Value="units"/>
+        <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
+      </SearchPaths>
+      <CodeGeneration>
+        <Optimizations>
+          <OptimizationLevel Value="2"/>
+        </Optimizations>
+      </CodeGeneration>
+      <Linking>
+        <Debugging>
+          <DebugInfoType Value="dsDwarf2Set"/>
+        </Debugging>
+      </Linking>
+    </CompilerOptions>
+    <Version Minor="6" Release="1"/>
+    <Files Count="26">
+      <Item1>
+        <Filename Value="uanova1.pas"/>
+        <UnitName Value="uanova1"/>
+      </Item1>
+      <Item2>
+        <Filename Value="uanova2.pas"/>
+        <UnitName Value="uanova2"/>
+      </Item2>
+      <Item3>
+        <Filename Value="ubartlet.pas"/>
+        <UnitName Value="ubartlet"/>
+      </Item3>
+      <Item4>
+        <Filename Value="ubinom.pas"/>
+        <UnitName Value="ubinom"/>
+      </Item4>
+      <Item5>
+        <Filename Value="ucorrel.pas"/>
+        <UnitName Value="ucorrel"/>
+      </Item5>
+      <Item6>
+        <Filename Value="udistrib.pas"/>
+        <UnitName Value="udistrib"/>
+      </Item6>
+      <Item7>
+        <Filename Value="uexpdist.pas"/>
+        <UnitName Value="uexpdist"/>
+      </Item7>
+      <Item8>
+        <Filename Value="ugamdist.pas"/>
+        <UnitName Value="ugamdist"/>
+      </Item8>
+      <Item9>
+        <Filename Value="uibtdist.pas"/>
+        <UnitName Value="uibtdist"/>
+      </Item9>
+      <Item10>
+        <Filename Value="uigmdist.pas"/>
+        <UnitName Value="uigmdist"/>
+      </Item10>
+      <Item11>
+        <Filename Value="uinvbeta.pas"/>
+        <UnitName Value="uinvbeta"/>
+      </Item11>
+      <Item12>
+        <Filename Value="uinvgam.pas"/>
+        <UnitName Value="uinvgam"/>
+      </Item12>
+      <Item13>
+        <Filename Value="uinvnorm.pas"/>
+        <UnitName Value="uinvnorm"/>
+      </Item13>
+      <Item14>
+        <Filename Value="ukhi2.pas"/>
+        <UnitName Value="ukhi2"/>
+      </Item14>
+      <Item15>
+        <Filename Value="umeansd.pas"/>
+        <UnitName Value="umeansd"/>
+      </Item15>
+      <Item16>
+        <Filename Value="umeansd_md.pas"/>
+        <UnitName Value="umeansd_md"/>
+      </Item16>
+      <Item17>
+        <Filename Value="umedian.pas"/>
+        <UnitName Value="umedian"/>
+      </Item17>
+      <Item18>
+        <Filename Value="unonpar.pas"/>
+        <UnitName Value="unonpar"/>
+      </Item18>
+      <Item19>
+        <Filename Value="unormal.pas"/>
+        <UnitName Value="unormal"/>
+      </Item19>
+      <Item20>
+        <Filename Value="upca.pas"/>
+        <UnitName Value="upca"/>
+      </Item20>
+      <Item21>
+        <Filename Value="upoidist.pas"/>
+        <UnitName Value="upoidist"/>
+      </Item21>
+      <Item22>
+        <Filename Value="uskew.pas"/>
+        <UnitName Value="uskew"/>
+      </Item22>
+      <Item23>
+        <Filename Value="usnedeco.pas"/>
+        <UnitName Value="usnedeco"/>
+      </Item23>
+      <Item24>
+        <Filename Value="ustdpair.pas"/>
+        <UnitName Value="ustdpair"/>
+      </Item24>
+      <Item25>
+        <Filename Value="ustudind.pas"/>
+        <UnitName Value="ustudind"/>
+      </Item25>
+      <Item26>
+        <Filename Value="uwoolf.pas"/>
+        <UnitName Value="uwoolf"/>
+      </Item26>
+    </Files>
+    <CompatibilityMode Value="True"/>
+    <RequiredPkgs Count="3">
+      <Item1>
+        <PackageName Value="lmlinearalgebra"/>
+      </Item1>
+      <Item2>
+        <PackageName Value="lmgenmath"/>
+      </Item2>
+      <Item3>
+        <PackageName Value="FCL"/>
+      </Item3>
+    </RequiredPkgs>
+    <UsageOptions>
+      <UnitPath Value="$(PkgOutDir)"/>
+    </UsageOptions>
+    <PublishOptions>
+      <Version Value="2"/>
+    </PublishOptions>
+  </Package>
+</CONFIG>

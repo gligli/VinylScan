@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <Package Version="5">
+    <PathDelim Value="\"/>
+    <Name Value="LMath"/>
+    <Type Value="RunAndDesignTime"/>
+    <Author Value="Viatcheslav Nesterov (Glorfin)"/>
+    <CompilerOptions>
+      <Version Value="11"/>
+      <PathDelim Value="\"/>
+      <SearchPaths>
+        <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
+      </SearchPaths>
+      <Parsing>
+        <SyntaxOptions>
+          <CStyleOperator Value="False"/>
+        </SyntaxOptions>
+      </Parsing>
+      <CodeGeneration>
+        <SmartLinkUnit Value="True"/>
+      </CodeGeneration>
+    </CompilerOptions>
+    <License Value="modified LGPL"/>
+    <Version Minor="6" Release="1"/>
+    <CompatibilityMode Value="True"/>
+    <RequiredPkgs Count="13">
+      <Item1>
+        <PackageName Value="lmDSP"/>
+      </Item1>
+      <Item2>
+        <PackageName Value="lmspecregress"/>
+      </Item2>
+      <Item3>
+        <PackageName Value="lmRegression"/>
+      </Item3>
+      <Item4>
+        <PackageName Value="lmrandoms"/>
+      </Item4>
+      <Item5>
+        <PackageName Value="lmpolynoms"/>
+      </Item5>
+      <Item6>
+        <PackageName Value="lmplotter"/>
+      </Item6>
+      <Item7>
+        <PackageName Value="lmoptimum"/>
+      </Item7>
+      <Item8>
+        <PackageName Value="lmnonlineq"/>
+      </Item8>
+      <Item9>
+        <PackageName Value="lmMathUtil"/>
+      </Item9>
+      <Item10>
+        <PackageName Value="lmmathstat"/>
+      </Item10>
+      <Item11>
+        <PackageName Value="lmintegrals"/>
+      </Item11>
+      <Item12>
+        <PackageName Value="lmgenmath"/>
+      </Item12>
+      <Item13>
+        <PackageName Value="FCL"/>
+      </Item13>
+    </RequiredPkgs>
+    <UsageOptions>
+      <UnitPath Value="$(PkgOutDir)"/>
+    </UsageOptions>
+    <PublishOptions>
+      <Version Value="2"/>
+      <DestinationDirectory Value="C:\lazarus\Projects\Tests"/>
+      <UseFileFilters Value="True"/>
+      <FileFilter Value="*.(pas|pp|inc|lpr|lfm|lrs|lpi|lpk|xml|sh|tex|pdf)"/>
+    </PublishOptions>
+  </Package>
+</CONFIG>

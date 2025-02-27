@@ -1,0 +1,268 @@
+object MainForm: TMainForm
+  Left = 778
+  Height = 471
+  Top = 219
+  Width = 560
+  Caption = 'Polynomial Solver'
+  ClientHeight = 471
+  ClientWidth = 560
+  Color = clForm
+  Font.Color = clWindowText
+  Font.Height = -11
+  Font.Name = 'MS Sans Serif'
+  OnActivate = FormActivate
+  LCLVersion = '2.0.0.4'
+  object Label1: TLabel
+    Left = 8
+    Height = 20
+    Top = 8
+    Width = 521
+    AutoSize = False
+    Caption = 'Solve polynomial : a(0) + a(1) * x + a(2) * x^2 + ... + a(n) * x^n = 0'
+    Font.Color = clCaptionText
+    Font.Height = -16
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    ParentColor = False
+    ParentFont = False
+  end
+  object Label3: TLabel
+    Left = 24
+    Height = 16
+    Top = 88
+    Width = 82
+    Caption = 'Coefficients'
+    Font.Color = clCaptionText
+    Font.Height = -13
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    ParentColor = False
+    ParentFont = False
+  end
+  object Label2: TLabel
+    Left = 10
+    Height = 16
+    Top = 48
+    Width = 150
+    Caption = 'Degree of polynomial'
+    Font.Color = clCaptionText
+    Font.Height = -13
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    ParentColor = False
+    ParentFont = False
+  end
+  object Label4: TLabel
+    Left = 290
+    Height = 25
+    Top = 96
+    Width = 119
+    AutoSize = False
+    Caption = 'Roots'
+    Font.Color = clWindowText
+    Font.Height = -13
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    ParentColor = False
+    ParentFont = False
+    WordWrap = True
+  end
+  object SpinEdit1: TSpinEdit
+    Left = 176
+    Height = 24
+    Top = 48
+    Width = 69
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clRed
+    Font.Height = -16
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    MaxValue = 20
+    MinValue = 1
+    OnChange = SpinEdit1Change
+    ParentFont = False
+    TabOrder = 0
+    Value = 6
+  end
+  object Button5: TButton
+    Left = 368
+    Height = 33
+    Top = 392
+    Width = 177
+    Caption = 'S&olve polynomial'
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    OnClick = Button5Click
+    ParentFont = False
+    TabOrder = 6
+  end
+  object Button4: TButton
+    Left = 368
+    Height = 33
+    Top = 352
+    Width = 177
+    Caption = '&Numeric format'
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    OnClick = Button4Click
+    ParentFont = False
+    TabOrder = 5
+  end
+  object Button6: TButton
+    Left = 368
+    Height = 33
+    Top = 432
+    Width = 177
+    Caption = '&Quit'
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    OnClick = Button6Click
+    ParentFont = False
+    TabOrder = 9
+  end
+  object StringGrid1: TStringGrid
+    Left = 24
+    Height = 201
+    Top = 128
+    Width = 248
+    ColCount = 2
+    DefaultColWidth = 125
+    FixedRows = 0
+    Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goColSizing, goEditing]
+    RowCount = 6
+    TabOrder = 3
+    TitleFont.Color = clWindowText
+    TitleFont.Height = -11
+    TitleFont.Name = 'MS Sans Serif'
+  end
+  object StringGrid2: TStringGrid
+    Left = 288
+    Height = 201
+    Top = 128
+    Width = 255
+    ColCount = 4
+    DefaultColWidth = 125
+    FixedCols = 0
+    RowCount = 6
+    TabOrder = 7
+    TitleFont.Color = clWindowText
+    TitleFont.Height = -11
+    TitleFont.Name = 'MS Sans Serif'
+  end
+  object Button1: TButton
+    Left = 136
+    Height = 33
+    Top = 88
+    Width = 65
+    Caption = '&Load'
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    OnClick = Button1Click
+    ParentFont = False
+    TabOrder = 1
+  end
+  object Button2: TButton
+    Left = 207
+    Height = 33
+    Top = 88
+    Width = 65
+    Caption = '&Save'
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    OnClick = Button2Click
+    ParentFont = False
+    TabOrder = 2
+  end
+  object Button3: TButton
+    Left = 416
+    Height = 33
+    Top = 88
+    Width = 129
+    Caption = 'S&ave roots'
+    Font.CharSet = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'System'
+    Font.Style = [fsBold]
+    OnClick = Button3Click
+    ParentFont = False
+    TabOrder = 8
+  end
+  object GroupBox1: TGroupBox
+    Left = 5
+    Height = 121
+    Top = 344
+    Width = 328
+    Caption = 'Complex roots'
+    ClientHeight = 100
+    ClientWidth = 324
+    Font.Color = clMenuText
+    Font.Height = -13
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    ParentFont = False
+    TabOrder = 4
+    object Label5: TLabel
+      Left = 16
+      Height = 16
+      Top = 8
+      Width = 342
+      Caption = 'A complex root (x + i y) is considered real if abs(y / x) < 10^'
+      Font.Color = clWindowText
+      Font.Height = -13
+      Font.Name = 'MS Sans Serif'
+      ParentColor = False
+      ParentFont = False
+      WordWrap = True
+    end
+    object SpinEdit2: TSpinEdit
+      Left = 264
+      Height = 24
+      Top = 8
+      Width = 57
+      Font.CharSet = ANSI_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -16
+      Font.Name = 'System'
+      MaxValue = 0
+      MinValue = -20
+      ParentFont = False
+      TabOrder = 0
+      Value = -6
+    end
+  end
+  object OpenDialog1: TOpenDialog
+    DefaultExt = '.dat'
+    Filter = 'Data files|*.dat|All files|*.*'
+    Options = [ofHideReadOnly, ofPathMustExist, ofFileMustExist, ofEnableSizing]
+    left = 120
+    top = 264
+  end
+  object SaveDialog1: TSaveDialog
+    Filter = 'Data files|*.dat|All files|*.*'
+    Options = [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing]
+    left = 200
+    top = 272
+  end
+  object SaveDialog2: TSaveDialog
+    Filter = 'Data files|*.dat|All files|*.*'
+    Options = [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing]
+    left = 40
+    top = 272
+  end
+end
