@@ -50,7 +50,6 @@ type
     function PowellCorrectConst(const arg: TVector; obj: Pointer): TScalar;
     function PowellCorrectMul(const arg: TVector; obj: Pointer): TScalar;
 
-    procedure AngleInit;
     procedure Analyze;
     procedure BrickwallLimit;
     procedure Crop;
@@ -190,51 +189,6 @@ begin
   SetLength(FOutputImage, Ceil(C45RpmOuterSize * FOutputDPI), Ceil(C45RpmOuterSize * FOutputDPI));
 end;
 
-procedure TScanCorrelator.AngleInit;
-var
-  preparedData: TDoubleDynArray;
-
-  procedure DoScan(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
-  var
-    iAngle: Integer;
-    best, f, bestAngle: Double;
-    coords: TCorrectCoords;
-  begin
-    if not InRange(AIndex, 1, High(FInputScans)) then
-      Exit;
-
-    coords.AngleIdx := -1;
-    coords.ScanIdx := AIndex;
-    coords.Silent := True;
-    coords.PreparedData := preparedData;
-
-    best := Infinity;
-    bestAngle := 0.0;
-    for iAngle := 0 to 359 do
-    begin
-      f := PowellAnalyze([DegToRad(iAngle), FInputScans[AIndex].Center.X, FInputScans[AIndex].Center.Y], @coords);
-
-      if f < best then
-      begin
-        best := f;
-        bestAngle := DegToRad(iAngle);
-      end;
-    end;
-
-    FInputScans[AIndex].RelativeAngle := NormalizeAngle(bestAngle);
-  end;
-
-begin
-  WriteLn('AngleInit');
-
-  if Length(FInputScans) <= 0 then
-    Exit;
-
-  preparedData := PrepareAnalyze;
-
-  ProcThreadPool.DoParallelLocalProc(@DoScan, 1, High(FInputScans));
-end;
-
 function TScanCorrelator.PowellAnalyze(const arg: TVector; obj: Pointer): TScalar;
 begin
   GradientAnalyze(arg, Result, nil, obj);
@@ -366,8 +320,7 @@ end;
 
 procedure TScanCorrelator.Analyze;
 const
-  CEpsX = 1e-6;
-  CScale = 1e-9;
+  CEpsX = 1e-4;
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
@@ -390,18 +343,18 @@ const
     coords.PreparedData := PrepareAnalyze;
 
     case Method of
+      mmBFGS:
+      begin
+        f := BFGSMinimize(@GradientAnalyze, x, CEpsX, @coords);
+      end;
       mmNS:
       begin
         f := NonSmoothMinimize(@GradientAnalyze, x, CEpsX, @coords);
       end;
-      mmPowell:
-      begin
-        f := PowellMinimize(@PowellAnalyze, x, CScale, CEpsX, 0.0, MaxInt, @coords)[0];
-      end;
       mmAll:
       begin
-        NonSmoothMinimize(@GradientAnalyze, x, CEpsX, @coords);
-        f := PowellMinimize(@PowellAnalyze, x, CScale, CEpsX, 0.0, MaxInt, @coords)[0];
+        BFGSMinimize(@GradientAnalyze, x, CEpsX, @coords);
+        f := NonSmoothMinimize(@GradientAnalyze, x, CEpsX, @coords);
       end;
       else
       begin
@@ -928,7 +881,6 @@ end;
 
 procedure TScanCorrelator.Process;
 begin
-  AngleInit;
   Analyze;
   if FBrickwallLimitScans then BrickwallLimit;
   Crop;
