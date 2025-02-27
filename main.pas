@@ -40,9 +40,9 @@ type
     procedure btInPNGsClick(Sender: TObject);
     procedure btScan2TrackClick(Sender: TObject);
     procedure btScansCorrelatorClick(Sender: TObject);
-    procedure btTestClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
+    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
   private
     FReducRatio: Integer;
     FReducFactor: Double;
@@ -51,6 +51,8 @@ type
 
     function OnSample(Sender: TScan2Track; X, Y, Percent: Double): Boolean;
   public
+    procedure UnitTests;
+
     procedure SetReduc(AImageWidth, AImageHeight: Integer);
     procedure DrawExtents(AScan: TInputScan);
     procedure DrawImage(const Img: TWordDynArray2);
@@ -143,7 +145,7 @@ begin
   end;
 end;
 
-procedure TMainForm.btTestClick(Sender: TObject);
+procedure TMainForm.UnitTests;
 var
   img: TWordDynArray2;
   i: Integer;
@@ -259,6 +261,14 @@ end;
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
   FPoints.Free;
+end;
+
+procedure TMainForm.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  case Key of
+    VK_F12:
+      UnitTests;
+  end;
 end;
 
 function TMainForm.OnSample(Sender: TScan2Track; X, Y, Percent: Double): Boolean;
