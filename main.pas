@@ -18,7 +18,6 @@ type
     btOutWAV: TButton;
     btScan2Track: TButton;
     btScansCorrelator: TButton;
-    btTest: TButton;
     chkBlend: TCheckBox;
     chkCorrect: TCheckBox;
     cbDPI: TComboBox;

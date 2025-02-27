@@ -55,8 +55,8 @@ type
 
     procedure LoadPNG;
     procedure LoadTIFF;
-    procedure BrickwallLimit;
     procedure FindTrack(AForcedSampleRate: Integer = -1);
+    procedure BrickwallLimit;
     procedure Crop;
 
     function InRangePointD(Y, X: Double): Boolean; inline;
@@ -661,20 +661,28 @@ var
   var
     px, x, y: Integer;
     mn, sd: Integer;
+    sqy, rBeg, rEnd: Double;
   begin
-    if not InRange(AIndex, CRadius, Height - 1 - CRadius) then
+    if not InRange(AIndex, 0, High(FImage)) then
       Exit;
 
     y := AIndex;
+    rBeg := C45RpmLabelOuterSize * 0.5 * FDPI;
+    rEnd := C45RpmFirstMusicGroove * 0.5 * FDPI;
+    sqy := Sqr(y - FCenter.Y);
 
-    for x := CRadius to High(FImage[y]) - CRadius do
+    for x := 0 to High(FImage[y]) do
     begin
-      GetL2Extents(y, x, mn, sd);
-
       px := FImage[y, x];
-      px := (px - mn) * (High(Word) + 1) div sd + mn;
 
-      FLeveledImage[y, x] := EnsureRange(px, 0, High(word));
+      if InRange(Sqrt(sqy + Sqr(x - FCenter.X)), rBeg, rEnd) then
+      begin
+        GetL2Extents(y, x, mn, sd);
+        px := (px - mn) * (High(Word) + 1) div sd + mn;
+        px := EnsureRange(px, 0, High(word));
+      end;
+
+      FLeveledImage[y, x] := px;
     end;
   end;
 
@@ -703,7 +711,7 @@ begin
   FLeveledImage := nil;
   SetLength(FLeveledImage, Height, Width);
 
-  ProcThreadPool.DoParallelLocalProc(@DoY, CRadius, Height - 1 - CRadius);
+  ProcThreadPool.DoParallelLocalProc(@DoY, 0, High(FImage));
 end;
 
 procedure TInputScan.FindTrack(AForcedSampleRate: Integer);

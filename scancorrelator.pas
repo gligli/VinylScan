@@ -52,6 +52,7 @@ type
 
     procedure AngleInit;
     procedure Analyze;
+    procedure BrickwallLimit;
     procedure Crop;
     procedure Correct;
     procedure Rebuild;
@@ -154,7 +155,6 @@ procedure TScanCorrelator.LoadScans;
     else
       Scan.LoadPNG;
 
-    if FBrickwallLimitScans then Scan.BrickwallLimit;
     Scan.FindTrack;
 
     WriteLn(Scan.ImageFileName);
@@ -434,6 +434,16 @@ begin
   WriteLn;
   for i := 0 to High(FInputScans) do
     WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (after)');
+end;
+
+procedure TScanCorrelator.BrickwallLimit;
+var
+  i: Integer;
+begin
+  WriteLn('BrickwallLimit');
+
+  for i := 0 to High(FInputScans) do
+    FInputScans[i].BrickwallLimit;
 end;
 
 procedure TScanCorrelator.CorrectAnglesFromCoords(const coords: TCorrectCoords; out startAngle, endAngle,
@@ -920,6 +930,7 @@ procedure TScanCorrelator.Process;
 begin
   AngleInit;
   Analyze;
+  if FBrickwallLimitScans then BrickwallLimit;
   Crop;
   if FCorrectAngles then Correct;
   Rebuild;
