@@ -34,6 +34,7 @@ type
     FRelativeAngle: Double;
     FCropData: TCropData;
     FCenterQuality: Double;
+    FObjective: Double;
 
     FImage: TWordDynArray2;
     FLeveledImage: TWordDynArray2;
@@ -82,6 +83,7 @@ type
     property RelativeAngle: Double read FRelativeAngle write FRelativeAngle;
     property CropData: TCropData read FCropData write FCropData;
     property CenterQuality: Double read FCenterQuality;
+    property Objective: Double read FObjective write FObjective;
 
     property Image: TWordDynArray2 read FImage;
     property LeveledImage: TWordDynArray2 read FLeveledImage;
@@ -413,7 +415,7 @@ begin
 
   until SameValue(bestf, prevf, 0.5);
 
-  FCenterQuality := -bestf;
+  FCenterQuality := -PowellEvalConcentricGrooveXY(x, nil); // also needed to get the proper FConcentricGrooveRadius
   FCenter.X := x[0];
   FCenter.Y := x[1];
 end;
@@ -464,7 +466,7 @@ end;
 
 procedure TInputScan.GetGradientsD(Y, X: Double; out GY: Double; out GX: Double);
 const
-  COperator = idoPrewitt;
+  COperator = idoScharr;
 var
   ix, iy: Integer;
   lGY00, lGY01, lGY10, lGY11, lGX00, lGX01, lGX10, lGX11: Integer;
@@ -495,6 +497,7 @@ begin
   FDPI := ADefaultDPI;
   FSilent := ASilent;
   FCenterQuality := NaN;
+  FObjective := NaN;
   SetRevolutionFromDPI(FDPI);
 end;
 

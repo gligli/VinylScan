@@ -31,7 +31,7 @@ type
     FRebuildBlended: Boolean;
     FOutputPNGFileName: String;
     FOutputDPI: Integer;
-    FObjective: Double;
+    FLock: TSpinlock;
 
     FPerAngleX: TDoubleDynArray2;
 
@@ -71,7 +71,6 @@ type
 
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
-    property Objective: Double read FObjective;
 
     property InputScans: TInputScanDynArray read FInputScans;
     property OutputImage: TWordDynArray2 read FOutputImage;
@@ -100,18 +99,19 @@ const
   CAnalyzeAreaBegin = C45RpmInnerSize;
   CAnalyzeAreaEnd = C45RpmLabelOuterSize;
   CAnalyzeAreaWidth = (CAnalyzeAreaEnd - CAnalyzeAreaBegin) * 0.5;
+  CAnalyzeAreaGroovesPerInch = 100;
 
   CCorrectAngleCount = 36;
   CCorrectAreaBegin = C45RpmInnerSize;
   CCorrectAreaEnd = C45RpmFirstMusicGroove;
   CCorrectAreaWidth = (CCorrectAreaEnd - CCorrectAreaBegin) * 0.5;
+  CCorrectAreaGroovesPerInch = 300;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
   i: Integer;
 begin
   FOutputDPI := AOutputDPI;
-  FObjective := NaN;
   FMethod := mmNS;
   SetLength(FInputScans, AFileNames.Count);
 
@@ -120,6 +120,8 @@ begin
     FInputScans[i] := TInputScan.Create(AOutputDPI, True);
     FInputScans[i].ImageFileName := AFileNames[i];
   end;
+
+  SpinLeave(@FLock);
 end;
 
 destructor TScanCorrelator.Destroy;
@@ -201,7 +203,7 @@ var
   sinCosLUT: TSinCosDynArray;
   scan: TInputScan;
 begin
-  cnt := Ceil(CAnalyzeAreaWidth * FOutputDPI * FPointsPerRevolution);
+  cnt := Ceil(CAnalyzeAreaWidth * CAnalyzeAreaGroovesPerInch * FPointsPerRevolution);
   SetLength(Result, cnt);
 
   scan := FInputScans[0];
@@ -214,7 +216,7 @@ begin
 
   pos := 0;
   rBeg := CAnalyzeAreaBegin * 0.5 * FOutputDPI;
-  ri := 1.0 / FPointsPerRevolution;
+  ri := FOutputDPI / (CAnalyzeAreaGroovesPerInch * FPointsPerRevolution);
   for iRadius := 0 to High(Result) do
   begin
     cs := sinCosLUT[pos].Cos;
@@ -245,7 +247,7 @@ procedure TScanCorrelator.GradientAnalyze(const arg: TVector; var func: Double; 
 var
   coords: PCorrectCoords absolute obj;
 
-  iRadius, iArg, pos, cnt: Integer;
+  i, iRadius, iArg, pos, cnt: Integer;
   t, rBeg, px, py, cx, cy, r, ri, sn, cs, mseInt, gInt, gimgx, gimgy, gr, gt, gcx, gcy: Double;
   sinCosLUT: TSinCosDynArray;
   scan: TInputScan;
@@ -254,7 +256,7 @@ begin
   if Assigned(grad) then
     FillQWord(grad[0], Length(grad), 0);
 
-  cnt := Ceil(CAnalyzeAreaWidth * FOutputDPI * FPointsPerRevolution);
+  cnt := Ceil(CAnalyzeAreaWidth * CAnalyzeAreaGroovesPerInch * FPointsPerRevolution);
 
   scan := FInputScans[coords^.ScanIdx];
 
@@ -266,7 +268,7 @@ begin
 
   pos := 0;
   rBeg := CAnalyzeAreaBegin * 0.5 * FOutputDPI;
-  ri := 1.0 / FPointsPerRevolution;
+  ri := FOutputDPI / (CAnalyzeAreaGroovesPerInch * FPointsPerRevolution);
   for iRadius := 0 to cnt - 1 do
   begin
     cs := sinCosLUT[pos].Cos;
@@ -310,12 +312,29 @@ begin
       pos := 0;
   end;
 
-  func /= cnt;
+  func := Sqrt(func / cnt);
+
   if Assigned(grad) then
     for iArg := 0 to High(grad) do
+    begin
       grad[iArg] /= cnt;
+      grad[iArg] /= 2.0 * func;
+    end;
 
-  if not coords^.Silent then Write('RMSE: ', Sqrt(func):12:9,#13);
+  if not coords^.Silent then
+  begin
+    scan.Objective := func;
+
+    SpinEnter(@FLock);
+    try
+      Write('RMSES: ');
+      for i := 1 to High(FInputScans) do
+        Write(FInputScans[i].Objective:12:9);
+      Write(#13);
+    finally
+      SpinLeave(@FLock);
+    end;
+  end;
 end;
 
 procedure TScanCorrelator.Analyze;
@@ -326,7 +345,6 @@ const
   var
     coords: TCorrectCoords;
     x: TVector;
-    f: Double;
     p: TPointD;
   begin
     if not InRange(AIndex, 1, High(FInputScans)) then
@@ -345,25 +363,22 @@ const
     case Method of
       mmBFGS:
       begin
-        f := BFGSMinimize(@GradientAnalyze, x, CEpsX, @coords);
+        BFGSMinimize(@GradientAnalyze, x, CEpsX, @coords);
       end;
       mmNS:
       begin
-        f := NonSmoothMinimize(@GradientAnalyze, x, CEpsX, @coords);
+        NonSmoothMinimize(@GradientAnalyze, x, CEpsX, @coords);
       end;
       mmAll:
       begin
         BFGSMinimize(@GradientAnalyze, x, CEpsX, @coords);
-        f := NonSmoothMinimize(@GradientAnalyze, x, CEpsX, @coords);
+        NonSmoothMinimize(@GradientAnalyze, x, CEpsX, @coords);
       end;
       else
       begin
-        f := PowellAnalyze(x, @coords);
+        PowellAnalyze(x, @coords);
       end;
     end;
-
-    f := Sqrt(f);
-    WriteLn(FInputScans[AIndex].ImageShortName, ', RMSE: ', f:12:9);
 
     FInputScans[AIndex].RelativeAngle := x[0];
     p.X := x[1];
@@ -410,14 +425,14 @@ begin
   endAngle := angle + angleExtents;
   angleInc := FRadiansPerRevolutionPoint;
 
-  radiusCnt := Ceil(CCorrectAreaWidth * FOutputDPI);
+  radiusCnt := Ceil(CCorrectAreaWidth * CCorrectAreaGroovesPerInch);
   angleCnt := Ceil((endAngle - startAngle + angleInc) / angleInc);
 end;
 
 procedure TScanCorrelator.PrepareCorrect(var coords: TCorrectCoords);
 var
   iRadius, iAngle, iScan, cnt, radiusCnt, angleCnt, v, best: Integer;
-  t, rBeg, r, sn, cs, px, py, cx, cy, startAngle, endAngle, angleInc: Double;
+  t, rBeg, r, ri, sn, cs, px, py, cx, cy, startAngle, endAngle, angleInc: Double;
   scan: TInputScan;
 begin
   CorrectAnglesFromCoords(coords, startAngle, endAngle, angleInc, radiusCnt, angleCnt);
@@ -470,9 +485,10 @@ begin
 
   cnt := 0;
   rBeg := CCorrectAreaBegin * 0.5 * FOutputDPI;
+  ri := FOutputDPI / CCorrectAreaGroovesPerInch;
   for iRadius := 0 to radiusCnt - 1 do
   begin
-    r := rBeg + iRadius;
+    r := rBeg + iRadius * ri;
 
     for iAngle := 0 to angleCnt - 1 do
     begin
@@ -498,7 +514,7 @@ function TScanCorrelator.PowellCorrect(const arg: TVector; obj: Pointer): TScala
 var
   coords: PCorrectCoords absolute obj;
   cnt, iRadius, iScan, iAngle, radiusCnt, angleCnt: Integer;
-  t, r, rBeg, sn, cs, px, py, cx, cy, rsk, startAngle, endAngle, angleInc: Double;
+  t, r, ri, rBeg, sn, cs, px, py, cx, cy, rsk, startAngle, endAngle, angleInc: Double;
   scan: TInputScan;
 begin
   CorrectAnglesFromCoords(coords^, startAngle, endAngle, angleInc, radiusCnt, angleCnt);
@@ -519,9 +535,10 @@ begin
   Result := 0;
   cnt := 0;
   rBeg := CCorrectAreaBegin * 0.5 * FOutputDPI;
+  ri := FOutputDPI / CCorrectAreaGroovesPerInch;
   for iRadius := 0 to radiusCnt - 1 do
   begin
-    r := rBeg + iRadius;
+    r := rBeg + iRadius * ri;
 
     rsk := r + r * arg[1] + arg[0];
 
@@ -568,7 +585,7 @@ end;
 procedure TScanCorrelator.Correct;
 const
   CConstCorrectExtents = 0.02; // inches
-  CConstCorrectHalfCount = 64;
+  CConstCorrectHalfCount = 200;
   CMulCorrectExtents = 0.01;
   CMulCorrectHalfCount = 100;
 var

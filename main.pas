@@ -235,6 +235,8 @@ begin
       try
         scm.OutputPNGFileName := fn;
         scm.Method := mm;
+        scm.CorrectAngles := True;
+        scm.RebuildBlended := True;
 
         scm.LoadScans;
         scm.Process;
