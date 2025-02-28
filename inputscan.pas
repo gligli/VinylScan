@@ -56,8 +56,8 @@ type
 
     procedure LoadPNG;
     procedure LoadTIFF;
-    procedure FindTrack(AForcedSampleRate: Integer = -1);
     procedure BrickwallLimit;
+    procedure FindTrack(AForcedSampleRate: Integer = -1);
     procedure Crop;
 
     function InRangePointD(Y, X: Double): Boolean; inline;
@@ -126,70 +126,6 @@ const
   CCropAreaGroovesPerInch = 32;
 
 { TInputScan }
-
-function TInputScan.PowellCrop(const x: TVector; obj: Pointer): TScalar;
-var
-  rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy, t, ri, rri, sn, cs, bt, px, py, p: Double;
-  iLut, pos, arrPos: Integer;
-  stdDevArr: TDoubleDynArray;
-  sinCosLUT: TSinCosDynArray;
-begin
-  Result := 1000.0;
-
-  if not InRange(NormalizeAngle(x[1] - x[0]), DegToRad(0.0), DegToRad(120.0)) then
-    Exit;
-
-  a0a := NormalizeAngle(x[0]);
-  a0b := NormalizeAngle(x[1]);
-  a1a := NormalizeAngle(x[0] + Pi);
-  a1b := NormalizeAngle(x[1] + Pi);
-
-  rBeg := C45RpmLastMusicGroove * 0.5 * FDPI;
-  rEnd := C45RpmFirstMusicGroove * 0.5 * FDPI;
-
-  t := FRelativeAngle;
-  cx := FCenter.X;
-  cy := FCenter.Y;
-
-  SetLength(stdDevArr, Ceil((rEnd - rBeg) / FDPI * CCropAreaGroovesPerInch) * FPointsPerRevolution);
-
-  ri := (rEnd - rBeg) / (CCropAreaGroovesPerInch * FPointsPerRevolution);
-
-  BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
-
-  iLut := 0;
-  pos := 0;
-  arrPos := 0;
-  repeat
-    bt := sinCosLUT[iLut].Angle;
-    cs := sinCosLUT[iLut].Cos;
-    sn := sinCosLUT[iLut].Sin;
-
-    rri := rBeg + ri * pos;
-
-    px := cs * rri + cx;
-    py := sn * rri + cy;
-
-    Assert(pos < Length(stdDevArr));
-
-    if InRangePointD(py, px) and
-        not InNormalizedAngle(bt, a0a, a0b) and not InNormalizedAngle(bt, a1a, a1b) then
-    begin
-      p := GetWorkPointD(py, px);
-      stdDevArr[arrPos] := p;
-      Inc(arrPos);
-    end;
-
-    Inc(iLut);
-    if iLut >= FPointsPerRevolution then
-      iLut := 0;
-
-    Inc(pos);
-  until rri >= rEnd;
-
-  if arrPos > 0 then
-    Result := -StdDev(PDouble(@stdDevArr[0]), arrPos);
-end;
 
 procedure TInputScan.SetRevolutionFromDPI(ADPI: Integer);
 begin
@@ -614,13 +550,15 @@ var
     i: Integer;
     px, mn, sd: Integer;
     sdAcc: Int64;
-    opt: ^TSample;
+    opt: TSample;
+    buf: array[0 .. Sqr(CRadius * 2 + 1)] of Integer;
   begin
     mn := 0;
     for i := 0 to High(offsets) do
     begin
-      opt := @offsets[i];
-      px := FImage[ay + opt^.OffsetY, ax + opt^.OffsetX] * opt^.ReverseRadius;
+      opt := offsets[i];
+      px := FImage[ay + opt.OffsetY, ax + opt.OffsetX] * opt.ReverseRadius;
+      buf[i] := px;
       mn += px;
     end;
     mn := mn div (Length(offsets) * (CRadius div 2 + 1));
@@ -628,8 +566,7 @@ var
     sdAcc := 0;
     for i := 0 to High(offsets) do
     begin
-      opt := @offsets[i];
-      px := FImage[ay + opt^.OffsetY, ax + opt^.OffsetX] * opt^.ReverseRadius;
+      px := buf[i];
       px -= mn;
       sdAcc += px * px;
     end;
@@ -643,33 +580,26 @@ var
   var
     px, x, y: Integer;
     mn, sd: Integer;
-    sqy, rBeg, rEnd: Double;
   begin
-    if not InRange(AIndex, 0, High(FImage)) then
+    if not InRange(AIndex, CRadius, High(FImage) - CRadius) then
       Exit;
 
     y := AIndex;
-    rBeg := C45RpmLabelOuterSize * 0.5 * FDPI;
-    rEnd := C45RpmFirstMusicGroove * 0.5 * FDPI;
-    sqy := Sqr(y - FCenter.Y);
 
-    for x := 0 to High(FImage[y]) do
+    for x := CRadius to High(FImage[y]) - CRadius do
     begin
       px := FImage[y, x];
 
-      if InRange(Sqrt(sqy + Sqr(x - FCenter.X)), rBeg, rEnd) then
-      begin
-        GetL2Extents(y, x, mn, sd);
-        px := (px - mn) * (High(Word) + 1) div sd + mn;
-        px := EnsureRange(px, 0, High(word));
-      end;
+      GetL2Extents(y, x, mn, sd);
+      px := (px - mn) * (High(Word) + 1) div sd + mn;
+      px := EnsureRange(px, 0, High(word));
 
       FLeveledImage[y, x] := px;
     end;
   end;
 
 var
-  x, y, r,  pos: Integer;
+  x, y, r, pos: Integer;
 begin
   if not FSilent then WriteLn('BrickwallLimit');
 
@@ -693,7 +623,7 @@ begin
   FLeveledImage := nil;
   SetLength(FLeveledImage, Height, Width);
 
-  ProcThreadPool.DoParallelLocalProc(@DoY, 0, High(FImage));
+  ProcThreadPool.DoParallelLocalProc(@DoY, CRadius, High(FImage) - CRadius);
 end;
 
 procedure TInputScan.FindTrack(AForcedSampleRate: Integer);
@@ -719,6 +649,70 @@ begin
     WriteLn('ConcentricGrooveRadius:', FConcentricGrooveRadius:12:3);
     WriteLn('GrooveStartPoint:', FGrooveStartPoint.X:12:3, ',', FGrooveStartPoint.Y:12:3);
   end;
+end;
+
+function TInputScan.PowellCrop(const x: TVector; obj: Pointer): TScalar;
+var
+  rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy, t, ri, rri, sn, cs, bt, px, py, p: Double;
+  iLut, pos, arrPos: Integer;
+  stdDevArr: TDoubleDynArray;
+  sinCosLUT: TSinCosDynArray;
+begin
+  Result := 1000.0;
+
+  if not InRange(NormalizeAngle(x[1] - x[0]), DegToRad(0.0), DegToRad(120.0)) then
+    Exit;
+
+  a0a := NormalizeAngle(x[0]);
+  a0b := NormalizeAngle(x[1]);
+  a1a := NormalizeAngle(x[0] + Pi);
+  a1b := NormalizeAngle(x[1] + Pi);
+
+  rBeg := C45RpmLastMusicGroove * 0.5 * FDPI;
+  rEnd := C45RpmFirstMusicGroove * 0.5 * FDPI;
+
+  t := FRelativeAngle;
+  cx := FCenter.X;
+  cy := FCenter.Y;
+
+  SetLength(stdDevArr, Ceil((rEnd - rBeg) / FDPI * CCropAreaGroovesPerInch) * FPointsPerRevolution);
+
+  ri := (rEnd - rBeg) / (CCropAreaGroovesPerInch * FPointsPerRevolution);
+
+  BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
+
+  iLut := 0;
+  pos := 0;
+  arrPos := 0;
+  repeat
+    bt := sinCosLUT[iLut].Angle;
+    cs := sinCosLUT[iLut].Cos;
+    sn := sinCosLUT[iLut].Sin;
+
+    rri := rBeg + ri * pos;
+
+    px := cs * rri + cx;
+    py := sn * rri + cy;
+
+    Assert(pos < Length(stdDevArr));
+
+    if InRangePointD(py, px) and
+        not InNormalizedAngle(bt, a0a, a0b) and not InNormalizedAngle(bt, a1a, a1b) then
+    begin
+      p := GetWorkPointD(py, px);
+      stdDevArr[arrPos] := p;
+      Inc(arrPos);
+    end;
+
+    Inc(iLut);
+    if iLut >= FPointsPerRevolution then
+      iLut := 0;
+
+    Inc(pos);
+  until rri >= rEnd;
+
+  if arrPos > 0 then
+    Result := -StdDev(PDouble(@stdDevArr[0]), arrPos);
 end;
 
 procedure TInputScan.Crop;
