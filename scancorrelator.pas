@@ -44,6 +44,8 @@ type
 
     function PrepareAnalyze: TDoubleDynArray;
     procedure GradientAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+    procedure GradientAnalyzeXY(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+    procedure GradientAnalyzeAngle(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
     function PowellAnalyze(const arg: TVector; obj: Pointer): TScalar;
     procedure PrepareCorrect(var coords: TCorrectCoords);
     function PowellCorrect(const arg: TVector; obj: Pointer): TScalar;
@@ -51,7 +53,6 @@ type
     function PowellCorrectMul(const arg: TVector; obj: Pointer): TScalar;
 
     procedure Analyze;
-    procedure BrickwallLimit;
     procedure Crop;
     procedure Correct;
     procedure Rebuild;
@@ -91,7 +92,6 @@ type
   end;
 
 implementation
-uses main;
 
 { TScanCorrelator }
 
@@ -156,6 +156,7 @@ procedure TScanCorrelator.LoadScans;
     else
       Scan.LoadPNG;
 
+    if FBrickwallLimitScans then Scan.BrickwallLimit;
     Scan.FindTrack;
 
     WriteLn(Scan.ImageFileName);
@@ -337,53 +338,99 @@ begin
   end;
 end;
 
+procedure TScanCorrelator.GradientAnalyzeXY(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+var
+  coords: PCorrectCoords absolute obj;
+  lgrad: TVector;
+begin
+  if Assigned(grad) then
+  begin
+    SetLength(lgrad, 3);
+  end;
+
+  GradientAnalyze([FInputScans[coords^.ScanIdx].RelativeAngle, arg[0], arg[1]], func, lgrad, obj);
+
+  if Assigned(grad) then
+  begin
+    grad[0] := lgrad[1];
+    grad[1] := lgrad[2];
+  end;
+end;
+
+procedure TScanCorrelator.GradientAnalyzeAngle(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+var
+  coords: PCorrectCoords absolute obj;
+  lgrad: TVector;
+begin
+  if Assigned(grad) then
+  begin
+    SetLength(lgrad, 3);
+  end;
+
+  GradientAnalyze([arg[0], FInputScans[coords^.ScanIdx].Center.X, FInputScans[coords^.ScanIdx].Center.Y], func, lgrad, obj);
+
+  if Assigned(grad) then
+  begin
+    grad[0] := lgrad[0];
+  end;
+end;
+
 procedure TScanCorrelator.Analyze;
 const
-  CEpsX = 1e-4;
+  CEpsX = 1e-9;
+
+  function Minimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Data: Pointer): Double;
+  begin
+    Result := NaN;
+
+    case Method of
+      mmBFGS:
+      begin
+        Result := BFGSMinimize(Func, X, CEpsX, Data);
+      end;
+      mmNS:
+      begin
+        Result := NonSmoothMinimize(Func, X, CEpsX, Data);
+      end;
+      mmAll:
+      begin
+        BFGSMinimize(Func, X, CEpsX, Data);
+        Result := NonSmoothMinimize(Func, X, CEpsX, Data);
+      end;
+      else
+      begin
+        Result := PowellAnalyze(X, Data);
+      end;
+    end;
+  end;
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     coords: TCorrectCoords;
     x: TVector;
     p: TPointD;
+    scan: TInputScan;
   begin
     if not InRange(AIndex, 1, High(FInputScans)) then
       Exit;
 
-    SetLength(x, 3);
-    x[0] := FInputScans[AIndex].RelativeAngle;
-    x[1] := FInputScans[AIndex].Center.X;
-    x[2] := FInputScans[AIndex].Center.Y;
+    scan := FInputScans[AIndex];
 
     coords.AngleIdx := -1;
     coords.ScanIdx := AIndex;
     coords.Silent := False;
     coords.PreparedData := PrepareAnalyze;
 
-    case Method of
-      mmBFGS:
-      begin
-        BFGSMinimize(@GradientAnalyze, x, CEpsX, @coords);
-      end;
-      mmNS:
-      begin
-        NonSmoothMinimize(@GradientAnalyze, x, CEpsX, @coords);
-      end;
-      mmAll:
-      begin
-        BFGSMinimize(@GradientAnalyze, x, CEpsX, @coords);
-        NonSmoothMinimize(@GradientAnalyze, x, CEpsX, @coords);
-      end;
-      else
-      begin
-        PowellAnalyze(x, @coords);
-      end;
-    end;
+    x := [scan.RelativeAngle];
+    Minimize(@GradientAnalyzeAngle, x, @coords);
+    scan.RelativeAngle := x[0];
 
-    FInputScans[AIndex].RelativeAngle := x[0];
+    x := [scan.RelativeAngle, scan.Center.X, scan.Center.Y];
+    Minimize(@GradientAnalyze, x, @coords);
+    scan.RelativeAngle := x[0];
     p.X := x[1];
     p.Y := x[2];
-    FInputScans[AIndex].Center := p;
+    scan.Center := p;
   end;
 
 var
@@ -402,16 +449,6 @@ begin
   WriteLn;
   for i := 0 to High(FInputScans) do
     WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (after)');
-end;
-
-procedure TScanCorrelator.BrickwallLimit;
-var
-  i: Integer;
-begin
-  WriteLn('BrickwallLimit');
-
-  for i := 0 to High(FInputScans) do
-    FInputScans[i].BrickwallLimit;
 end;
 
 procedure TScanCorrelator.CorrectAnglesFromCoords(const coords: TCorrectCoords; out startAngle, endAngle,
@@ -899,7 +936,6 @@ end;
 procedure TScanCorrelator.Process;
 begin
   Analyze;
-  if FBrickwallLimitScans then BrickwallLimit;
   Crop;
   if FCorrectAngles then Correct;
   Rebuild;
