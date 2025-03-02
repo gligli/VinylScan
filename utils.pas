@@ -126,14 +126,13 @@ procedure herpFromCoeffs(const coeffs: THerpCoeff44; var res: THerpCoeff4; alpha
 
 procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
 procedure serpCoeffs(alpha: Double; var res: TSerpCoeffs9); overload;
-function serpFromCoeffsX(const coeffs: TSerpCoeffs9; const img: TWordDynArray2; ix, iy: Integer): Single;
 procedure serpFromCoeffsXY(const coeffs: TSerpCoeffs9; const img: TWordDynArray2; ix, iy: Integer; var res: TSerpCoeffs9);
 function serpFromCoeffs(const coeffs, data: TSerpCoeffs9): Single;
 
 function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
-function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; EpsilonX: Double = 1e-9; Data: Pointer = nil): Double;
+function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double; EpsilonG: Double = 1e-9; Data: Pointer = nil): Double;
 function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 function NonSmoothMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 function NonSmoothBoundedMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
@@ -595,9 +594,9 @@ begin
 end;
 
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double;
-  EpsilonX: Double; Data: Pointer): Double;
+  EpsilonG: Double; Data: Pointer): Double;
 var
-  lr, gm, f: Double;
+  gm, f: Double;
   grad, bestX: TDoubleDynArray;
   i: Integer;
   iter: Integer;
@@ -607,7 +606,6 @@ begin
 
   f := NaN;
   Result := Infinity;
-  lr := LearningRate;
   iter := 0;
   repeat
     Func(X, f, grad, Data);
@@ -622,8 +620,8 @@ begin
     gm := 0.0;
     for i := 0 to High(X) do
     begin
-      X[i] -= lr * grad[i];
-      gm := max(gm, Abs(lr * grad[i]));
+      X[i] -= LearningRate * grad[i];
+      gm := max(gm, Abs(grad[i]));
     end;
 
     Inc(iter);
@@ -633,7 +631,7 @@ begin
       Write(X[i]:20:9);
     WriteLn;
 
-  until gm <= EpsilonX;
+  until gm <= EpsilonG;
 
   for i := 0 to High(X) do
     X[i] := bestX[i];
