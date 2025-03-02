@@ -1,8 +1,8 @@
 object MainForm: TMainForm
   Left = -8
-  Height = 1305
+  Height = 1383
   Top = -8
-  Width = 1200
+  Width = 1232
   HorzScrollBar.Increment = 240
   HorzScrollBar.Page = 640
   HorzScrollBar.Tracking = True
@@ -11,8 +11,8 @@ object MainForm: TMainForm
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 1282
-  ClientWidth = 1200
+  ClientHeight = 1360
+  ClientWidth = 1232
   Color = 4210752
   DoubleBuffered = True
   KeyPreview = True
@@ -197,7 +197,7 @@ object MainForm: TMainForm
       Top = 8
       Width = 131
       ItemHeight = 15
-      ItemIndex = 3
+      ItemIndex = 1
       Items.Strings = (
         'No optimization'
         'BFGS'
@@ -208,7 +208,7 @@ object MainForm: TMainForm
       ShowHint = True
       Style = csDropDownList
       TabOrder = 8
-      Text = 'All solvers'
+      Text = 'BFGS'
     end
     object chkCorrect: TCheckBox
       Left = 264
