@@ -61,7 +61,7 @@ type
     procedure Crop;
 
     function InRangePointD(Y, X: Double): Boolean; inline;
-    function GetWorkPointD(Y, X: Double): Double; inline;
+    function GetWorkPointD(Y, X: Double): Double;
     function GetFinalPointD(Y, X: Double): Double;
     procedure GetGradientsD(Y, X: Double; out GY: Double; out GX: Double);
 
@@ -146,12 +146,12 @@ end;
 
 function TInputScan.PowellEvalConcentricGrooveXY(const x: TVector; obj: Pointer): TScalar;
 var
-  radiusInner, radiusOuter: Integer;
+  radiusInner, radiusOuter, halfTrackWidth: Integer;
 
-  function DoRadius(ARadius: Integer): Double;
+  function DoRadius(ARadius: Double): Double;
   var
-    iLut: Integer;
-    px, py, sn, cs, radius: Double;
+    iLut, iTrack: Integer;
+    px, py, sn, cs, radius, r, f: Double;
     vs: TValueSign;
   begin
     Result := 0;
@@ -164,12 +164,20 @@ var
       begin
         for vs := Low(TValueSign) to High(TValueSign) do
         begin
-          radius := ARadius + CRadiusXOffsets[vs] * FDPI;
+          r := ARadius + CRadiusXOffsets[vs] * FDPI;
+          f := 0.0;
 
-          px := cs * radius + x[0];
-          py := sn * radius + x[1];
+          for iTrack := -halfTrackWidth to halfTrackWidth do
+          begin
+            radius := r + iTrack;
 
-          Result += GetWorkPointD(py, px) * CRadiusYFactors[vs]
+            px := cs * radius + x[0];
+            py := sn * radius + x[1];
+
+            f += GetWorkPointD(py, px);
+          end;
+
+          Result += f * CRadiusYFactors[vs];
         end;
       end
       else
@@ -183,6 +191,7 @@ var
   iRadius: Integer;
   f: Double;
 begin
+  halfTrackWidth := Ceil(C45RpmLeadOutGrooveWidth * 0.5 * FDPI * 0.5);
   radiusInner := Round(C45RpmMinConcentricGroove * FDPI * 0.5);
   radiusOuter := Round(C45RpmMaxConcentricGroove * FDPI * 0.5);
 
@@ -200,13 +209,10 @@ begin
 end;
 
 procedure TInputScan.FindConcentricGroove;
-const
-  CBaseStdDevLimit = high(Word) + 1;
-  CStdDevDecrease = 0.95;
 var
-  xx, yy, radiusLimit, xMargin, yMargin, maxOffset: Integer;
-  stdDevLimit, prevf, bestf, f, bestX, bestY, reduce, offset, cc: Double;
-  line, x: TDoubleDynArray;
+  xx, yy, radiusLimit, xMargin, yMargin, iter: Integer;
+  prevf, bestf, f: Double;
+  x: TDoubleDynArray;
   extents: TRect;
 begin
   BuildSinCosLUT(FPointsPerRevolution, FSinCosLUT);
@@ -220,134 +226,54 @@ begin
     Exit;
   end;
 
-  SetLength(line, Max(Width, Height));
   radiusLimit := Round(C45RpmOuterSize * 0.5 * FDPI) - 1;
 
-  stdDevLimit := CBaseStdDevLimit;
-  repeat
-    extents.Top := 0;
-    extents.Bottom := Height - 1;
+  extents.Left := radiusLimit;
+  extents.Top := radiusLimit;
+  extents.Right := Width - 1 - radiusLimit;
+  extents.Bottom := Height - 1 - radiusLimit;
 
-    for yy := 0 to yMargin do
-    begin
-      for xx := 0 to Width - 1 do
-        line[xx] := FImage[yy, xx];
-
-      if StdDev(PDouble(@line[0]), Width) > stdDevLimit then
-      begin
-        extents.Top := yy;
-        Break;
-      end;
-    end;
-
-    for yy := Height - 1 downto Height - 1 - yMargin do
-    begin
-      for xx := 0 to Width - 1 do
-        line[xx] := FImage[yy, xx];
-
-      if StdDev(PDouble(@line[0]), Width) > stdDevLimit then
-      begin
-        extents.Bottom := yy;
-        Break;
-      end;
-    end;
-
-    extents.Top += radiusLimit;
-    extents.Bottom -= radiusLimit;
-
-    stdDevLimit *= CStdDevDecrease;
-  until extents.Height >= 0;
-
-  stdDevLimit := CBaseStdDevLimit;
-  repeat
-    extents.Left := 0;
-    extents.Right := Width - 1;
-
-    for xx := 0 to xMargin do
-    begin
-      for yy := 0 to Height - 1 do
-        line[yy] := FImage[yy, xx];
-
-      if StdDev(PDouble(@line[0]), Height) > stdDevLimit then
-      begin
-        extents.Left := xx;
-        Break;
-      end;
-    end;
-
-    for xx := Width - 1 downto Width - 1 - xMargin do
-    begin
-      for yy := 0 to Height - 1 do
-        line[yy] := FImage[yy, xx];
-
-      if StdDev(PDouble(@line[0]), Height) > stdDevLimit then
-      begin
-        extents.Right := xx;
-        Break;
-      end;
-    end;
-
-    extents.Left += radiusLimit;
-    extents.Right -= radiusLimit;
-
-    stdDevLimit *= CStdDevDecrease;
-  until extents.Width >= 0;
-
-  //writeln(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
+  writeln(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
 
   x := [extents.CenterPoint.X, extents.CenterPoint.Y];
 
-  maxOffset := Round((C45RpmMaxConcentricGroove - C45RpmMinConcentricGroove) * FDPI * 0.5);
-
+  iter := 0;
   bestf := Infinity;
-  reduce := 1.0;
   repeat
     prevf := bestf;
 
-    bestX := x[0];
-    bestY := x[1];
-
     bestf := Infinity;
-    for xx := extents.Left to extents.Right do
+
+    if Odd(iter) then
     begin
-      offset := (xx - extents.CenterPoint.X) * reduce;
-      if abs(offset) >= maxOffset then
-        Continue;
-
-      cc := offset + x[0];
-
-      f := PowellEvalConcentricGrooveXY([cc, bestY], nil);
-
-      if f < bestf then
+      for xx := extents.Left to extents.Right do
       begin
-        bestf := f;
-        bestX := cc;
+        f := PowellEvalConcentricGrooveXY([xx, x[1]], nil);
+
+        if f < bestf then
+        begin
+          bestf := f;
+          x[0] := xx;
+        end;
+      end;
+    end
+    else
+    begin
+      for yy := extents.Top to extents.Bottom do
+      begin
+        f := PowellEvalConcentricGrooveXY([x[0], yy], nil);
+
+        if f < bestf then
+        begin
+          bestf := f;
+          x[1] := yy;
+        end;
       end;
     end;
 
-    bestf := Infinity;
-    for yy := extents.Top to extents.Bottom do
-    begin
-      offset := (yy - extents.CenterPoint.Y) * reduce;
-      if abs(offset) >= maxOffset then
-        Continue;
+    WriteLn(ImageShortName, x[0]:12:3, x[1]:12:3, bestf:12:3);
 
-      cc := offset + x[1];
-
-      f := PowellEvalConcentricGrooveXY([bestX, cc], nil);
-
-      if f < bestf then
-      begin
-        bestf := f;
-        bestY := cc;
-      end;
-    end;
-
-    x := [bestX, bestY];
-
-    //WriteLn(ImageShortName, x[0]:12:3, x[1]:12:3);
-
-    reduce *= cInvPhi;
+    Inc(iter);
 
   until SameValue(bestf, prevf, 0.5);
 
@@ -540,37 +466,37 @@ type
   end;
 
 const
-  CSigma = 2;
-  CRadius = 16;
+  CGrooveWidthMul = 10;
+  CSigma = 4;
 var
   offsets: array of TSample;
+  radius, meanDiv, stdDevDiv: Integer;
 
-  procedure GetL2Extents(ay, ax: Integer; out amean, astddev: Integer);
+  procedure GetL2Extents(ay, ax: Integer; buf: TIntegerDynArray; out amean, astddev: Integer);
   var
     i: Integer;
     px, mn, sd: Integer;
     sdAcc: Int64;
     opt: TSample;
-    buf: array[0 .. Sqr(CRadius * 2 + 1)] of Integer;
   begin
     mn := 0;
-    for i := 0 to High(offsets) do
+    for i := 0 to High(buf) do
     begin
       opt := offsets[i];
       px := FImage[ay + opt.OffsetY, ax + opt.OffsetX] * opt.ReverseRadius;
       buf[i] := px;
       mn += px;
     end;
-    mn := mn div (Length(offsets) * (CRadius div 2 + 1));
+    mn := mn div meanDiv;
 
     sdAcc := 0;
-    for i := 0 to High(offsets) do
+    for i := 0 to High(buf) do
     begin
       px := buf[i];
       px -= mn;
       sdAcc += px * px;
     end;
-    sd := round(Sqrt(sdAcc div (Length(offsets) * Sqr(CRadius div 2 + 1))));
+    sd := round(Sqrt(sdAcc div stdDevDiv));
 
     amean := mn;
     astddev := CSigma * sd;
@@ -580,17 +506,20 @@ var
   var
     px, x, y: Integer;
     mn, sd: Integer;
+    buf: TIntegerDynArray;
   begin
-    if not InRange(AIndex, CRadius, High(FImage) - CRadius) then
+    if not InRange(AIndex, radius, High(FImage) - radius) then
       Exit;
+
+    SetLength(buf, Length(offsets));
 
     y := AIndex;
 
-    for x := CRadius to High(FImage[y]) - CRadius do
+    for x := radius to High(FImage[y]) - radius do
     begin
       px := FImage[y, x];
 
-      GetL2Extents(y, x, mn, sd);
+      GetL2Extents(y, x, buf, mn, sd);
       px := (px - mn) * (High(Word) + 1) div sd + mn;
       px := EnsureRange(px, 0, High(word));
 
@@ -599,31 +528,37 @@ var
   end;
 
 var
-  x, y, r, pos: Integer;
+  x, y, r, pos, acc: Integer;
 begin
   if not FSilent then WriteLn('BrickwallLimit');
 
-  SetLength(offsets, Sqr(CRadius * 2 + 1));
+  radius := Ceil(C45RpmRecordingGrooveWidth * FDPI * CGrooveWidthMul);
+
+  SetLength(offsets, Sqr(radius * 2 + 1));
   pos := 0;
-  for y := -CRadius to CRadius do
-    for x := -CRadius to CRadius do
+  acc := 0;
+  for y := -radius to radius do
+    for x := -radius to radius do
     begin
       r := round(Sqrt(Sqr(y) + Sqr(x)));
 
-      if r <= CRadius then
+      if r <= radius then
       begin
         offsets[pos].OffsetX := x;
         offsets[pos].OffsetY := y;
-        offsets[pos].ReverseRadius := CRadius - r;
+        offsets[pos].ReverseRadius := radius - r + 1;
+        acc += offsets[pos].ReverseRadius;
         Inc(pos);
       end;
     end;
   SetLength(offsets, pos);
+  meanDiv := acc;
+  stdDevDiv := Sqr(acc);
 
   FLeveledImage := nil;
   SetLength(FLeveledImage, Height, Width);
 
-  ProcThreadPool.DoParallelLocalProc(@DoY, CRadius, High(FImage) - CRadius);
+  ProcThreadPool.DoParallelLocalProc(@DoY, radius, High(FImage) - radius);
 end;
 
 procedure TInputScan.FindTrack(AForcedSampleRate: Integer);
@@ -639,8 +574,6 @@ begin
 
   FindConcentricGroove;
   FindGrooveStart;
-
-  FRelativeAngle := NormalizeAngle(FGrooveStartAngle);
 
   if not FSilent then
   begin
