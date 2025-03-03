@@ -134,6 +134,7 @@ function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Doubl
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; EpsilonG: Double = 1e-9; Data: Pointer = nil): Double;
 function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
+function LBFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; M: Integer = 5; Data: Pointer = nil): Double;
 function LBFGSScaledMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Scale: array of Double; Epsilon: Double = 1e-12; M: Integer = 5; Data: Pointer = nil): Double;
 function NonSmoothMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 function NonSmoothBoundedMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
@@ -709,12 +710,23 @@ function LBFGSScaledMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Sc
 begin
   GLBFGSFunc := Func;
   try
+    M := min(Length(X), M);
     Result := alglib_LBFGSMinimize(@LBFGSFunc, Length(X), @X[0], @Scale[0], Epsilon, M, Data);
   finally
     GLBFGSFunc := nil;
   end;
 end;
 
+function LBFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double; M: Integer; Data: Pointer): Double;
+begin
+  GLBFGSFunc := Func;
+  try
+    M := min(Length(X), M);
+    Result := alglib_LBFGSMinimize(@LBFGSFunc, Length(X), @X[0], nil, Epsilon, M, Data);
+  finally
+    GLBFGSFunc := nil;
+  end;
+end;
 
 threadvar
   GNSFunc: TGradientEvalFunc;
