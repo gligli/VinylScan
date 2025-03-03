@@ -193,7 +193,7 @@ begin
   x := [FCenter.X, FCenter.Y];
 
   if (x[0] <> rOut) and (x[1] <> rOut) then
-    FCenterQuality := -LBFGSMinimize(@GradientEvalCenter, x);
+    FCenterQuality := -BFGSMinimize(@GradientEvalCenter, x);
 
   FCenter.X := x[0];
   FCenter.Y := x[1];
@@ -299,7 +299,7 @@ begin
 
   if (x[0] <> rOut) and (x[1] <> rOut) then
   begin
-    LBFGSMinimize(@GradientEvalConcentricGrooveXY, x);
+    BFGSMinimize(@GradientEvalConcentricGrooveXY, x);
     FCenter.X := x[0];
     FCenter.Y := x[1];
   end;
