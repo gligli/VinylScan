@@ -132,8 +132,9 @@ function serpFromCoeffs(const coeffs, data: TSerpCoeffs9): Single;
 function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
-function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double; EpsilonG: Double = 1e-9; Data: Pointer = nil): Double;
+function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; EpsilonG: Double = 1e-9; Data: Pointer = nil): Double;
 function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
+function LBFGSScaledMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Scale: array of Double; Epsilon: Double = 1e-12; M: Integer = 5; Data: Pointer = nil): Double;
 function NonSmoothMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 function NonSmoothBoundedMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 
@@ -143,6 +144,7 @@ function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray):
 function PearsonCorrelationGradient(const a: TDoubleDynArray; const b: TDoubleDynArray; const gb: TDoubleDynArray): Double;
 function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray; var gint: TDoubleDynArray): Double;
 function MSEGradient(const gint: TDoubleDynArray; const gb: TDoubleDynArray): Double;
+function SpearmanRankCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 
 function Make16BitSample(smp: Double): SmallInt;
 function NormalizeAngle(x: Double): Double;
@@ -164,6 +166,8 @@ uses utypes, ubfgs;
 var GSerpCoeffs9ByWord: TSerpCoeffs9ByWord;
 
 function alglib_NonSmoothBoundedMinimize(Func: Pointer; n: Integer; X, LowBound, UpBound: PDouble; Epsilon, Radius, Penalty: Double; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
+function alglib_LBFGSMinimize(Func: Pointer; n: Integer; X, Scale: PDouble; Epsilon: Double; M: Integer; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
+function alglib_SpearmanRankCorrelation(X, Y: PDouble; n: Integer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
 
 procedure SpinEnter(Lock: PSpinLock); assembler;
 label spin_lock;
@@ -626,9 +630,11 @@ begin
 
     Inc(iter);
 
-    Write(Result:20:9, gm:20:9);
+    Write(Result:16:9, gm:16:9);
     for i := 0 to High(X) do
-      Write(X[i]:20:9);
+      Write(X[i]:16:9);
+    for i := 0 to High(grad) do
+      Write(grad[i]:16:9);
     WriteLn;
 
   until gm <= EpsilonG;
@@ -673,6 +679,42 @@ begin
     GBFGSFunc := nil;
   end;
 end;
+
+threadvar
+  GLBFGSFunc: TGradientEvalFunc;
+
+  procedure LBFGSFunc(n: Integer; arg: PDouble; func: PDouble; grad: PDouble; obj: Pointer);
+  var
+    i: Integer;
+    lfunc: Double;
+    larg: TDoubleDynArray;
+    lgrad: TDoubleDynArray;
+  begin
+    lfunc := NaN;
+    SetLength(larg, n);
+    SetLength(lgrad, n);
+    for i := 0 to n - 1 do
+      larg[i] := arg[i];
+
+    GLBFGSFunc(larg, lfunc, lgrad, obj);
+
+    for i := 0 to n - 1 do
+      grad[i] := lgrad[i];
+
+    func^ := lfunc;
+  end;
+
+function LBFGSScaledMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Scale: array of Double; Epsilon: Double;
+  M: Integer; Data: Pointer): Double;
+begin
+  GLBFGSFunc := Func;
+  try
+    Result := alglib_LBFGSMinimize(@LBFGSFunc, Length(X), @X[0], @Scale[0], Epsilon, M, Data);
+  finally
+    GLBFGSFunc := nil;
+  end;
+end;
+
 
 threadvar
   GNSFunc: TGradientEvalFunc;
@@ -833,6 +875,13 @@ begin
     Result -= 2.0 * gint[i] * gb[i];
 
   Result /= Length(gint);
+end;
+
+function SpearmanRankCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
+begin
+  Assert(Length(a) = Length(b));
+
+  Result := alglib_SpearmanRankCorrelation(@a[0], @b[0], Length(a));
 end;
 
 function Make16BitSample(smp: Double): SmallInt;

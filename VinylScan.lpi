@@ -99,7 +99,7 @@
           </Target>
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir)"/>
-            <OtherUnitFiles Value="LazFiltersIIR"/>
+            <OtherUnitFiles Value="LazFiltersIIR;alglib"/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)-WPO"/>
           </SearchPaths>
           <Parsing>
@@ -196,7 +196,7 @@
     </Target>
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir)"/>
-      <OtherUnitFiles Value="LazFiltersIIR"/>
+      <OtherUnitFiles Value="LazFiltersIIR;alglib"/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)-$(BuildMode)"/>
     </SearchPaths>
     <Parsing>

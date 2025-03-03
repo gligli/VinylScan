@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Graphics, GraphType, IntfGraphics, FPCanvas, FPImage, PNGComn, ZStream, MTProcs, TypInfo,
-  utils, inputscan, powell, hackedwritepng, fgl;
+  utils, inputscan, powell, hackedwritepng;
 
 type
   TCorrectCoords = record
@@ -52,6 +52,7 @@ type
     function PowellCorrectConst(const arg: TVector; obj: Pointer): TScalar;
     function PowellCorrectMul(const arg: TVector; obj: Pointer): TScalar;
 
+    procedure AngleInit;
     procedure Analyze;
     procedure Crop;
     procedure Correct;
@@ -101,11 +102,11 @@ const
   CAnalyzeAreaWidth = (CAnalyzeAreaEnd - CAnalyzeAreaBegin) * 0.5;
   CAnalyzeAreaGroovesPerInch = 100;
 
-  CCorrectAngleCount = 36;
+  CCorrectAngleCount = 16;
   CCorrectAreaBegin = C45RpmInnerSize;
   CCorrectAreaEnd = C45RpmFirstMusicGroove;
   CCorrectAreaWidth = (CCorrectAreaEnd - CCorrectAreaBegin) * 0.5;
-  CCorrectAreaGroovesPerInch = 300;
+  CCorrectAreaGroovesPerInch = 600;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
@@ -190,6 +191,96 @@ begin
   end;
 
   SetLength(FOutputImage, Ceil(C45RpmOuterSize * FOutputDPI), Ceil(C45RpmOuterSize * FOutputDPI));
+end;
+
+procedure TScanCorrelator.AngleInit;
+const
+  CAngleCount = 36;
+var
+  rBeg, rEnd: Integer;
+  base: TDoubleDynArray;
+
+  function DoAngle(iScan: Integer; a: Double; var arr: TDoubleDynArray): Integer;
+  var
+    iRadius, iAngle: Integer;
+    sn, cs, cy, cx, px, py: Double;
+    scn: TInputScan;
+  begin
+    Result := 0;
+    scn := FInputScans[iScan];
+    cx := scn.Center.X;
+    cy := scn.Center.Y;
+
+    for iAngle := 0 to CAngleCount - 1 do
+    begin
+      SinCos(a + DegToRad(iAngle * (180 / CAngleCount)), sn, cs);
+      for iRadius:= rBeg to rEnd do
+      begin
+        px := cx + cs * iRadius;
+        py := cy + sn * iRadius;
+        if scn.InRangePointD(py, px) then
+          arr[Result + 0] := scn.GetWorkPointD(py, px);
+
+        px := cx - cs * iRadius;
+        py := cy - sn * iRadius;
+        if scn.InRangePointD(py, px) then
+          arr[Result + 1] := scn.GetWorkPointD(py, px);
+
+        Inc(Result, 2);
+      end;
+    end;
+  end;
+
+  procedure DoScan(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  var
+    iAngle: Integer;
+    a, r, bestr, bestAngle: Double;
+    angle: TDoubleDynArray;
+  begin
+    if not InRange(AIndex, 1, High(FInputScans)) then
+      Exit;
+
+    SetLength(angle, Length(base));
+
+    bestr := Infinity;
+    bestAngle := 0.0;
+
+    for iAngle := 0 to 359 do
+    begin
+      a := DegToRad(iAngle);
+
+      DoAngle(AIndex, a, angle);
+
+      r := -SpearmanRankCorrelation(base, angle);
+
+      if r <= bestr then
+      begin
+        bestr := r;
+        bestAngle := a;
+      end;
+    end;
+
+    FInputScans[AIndex].RelativeAngle := NormalizeAngle(bestAngle);
+  end;
+
+var
+  pos: Integer;
+begin
+  WriteLn('AngleInit');
+
+  if Length(FInputScans) <= 0 then
+    Exit;
+
+  SetLength(base, FInputScans[0].Width * CAngleCount);
+
+  rBeg := Round(CAnalyzeAreaBegin * 0.5 * FOutputDPI);
+  rEnd := Round(CAnalyzeAreaEnd * 0.5 * FOutputDPI);
+
+  pos := DoAngle(0, 0, base);
+
+  SetLength(base, pos);
+
+  ProcThreadPool.DoParallelLocalProc(@DoScan, 1, High(FInputScans));
 end;
 
 function TScanCorrelator.PowellAnalyze(const arg: TVector; obj: Pointer): TScalar;
@@ -313,18 +404,14 @@ begin
       pos := 0;
   end;
 
-  func := Sqrt(func / cnt);
-
+  func /= cnt;
   if Assigned(grad) then
     for iArg := 0 to High(grad) do
-    begin
       grad[iArg] /= cnt;
-      grad[iArg] /= 2.0 * func;
-    end;
 
   if not coords^.Silent then
   begin
-    scan.Objective := func;
+    scan.Objective := Sqrt(func);
 
     SpinEnter(@FLock);
     try
@@ -377,7 +464,7 @@ end;
 
 procedure TScanCorrelator.Analyze;
 const
-  CEpsX = 1e-9;
+  CEpsX = 1e-12;
 
   function Minimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Data: Pointer): Double;
   begin
@@ -386,7 +473,7 @@ const
     case Method of
       mmBFGS:
       begin
-        Result := BFGSMinimize(Func, X, CEpsX, Data);
+        Result := LBFGSScaledMinimize(Func, X, [Pi / FOutputDPI, 1.0, 1.0], CEpsX, 3, Data);
       end;
       mmNS:
       begin
@@ -394,7 +481,7 @@ const
       end;
       mmAll:
       begin
-        BFGSMinimize(Func, X, CEpsX, Data);
+        LBFGSScaledMinimize(Func, X, [Pi / FOutputDPI, 1.0, 1.0], CEpsX, 3, Data);
         Result := NonSmoothMinimize(Func, X, CEpsX, Data);
       end;
       else
@@ -420,10 +507,6 @@ const
     coords.ScanIdx := AIndex;
     coords.Silent := False;
     coords.PreparedData := PrepareAnalyze;
-
-    x := [scan.RelativeAngle];
-    Minimize(@GradientAnalyzeAngle, x, @coords);
-    scan.RelativeAngle := x[0];
 
     x := [scan.RelativeAngle, scan.Center.X, scan.Center.Y];
     Minimize(@GradientAnalyze, x, @coords);
@@ -935,6 +1018,7 @@ end;
 
 procedure TScanCorrelator.Process;
 begin
+  AngleInit;
   Analyze;
   Crop;
   if FCorrectAngles then Correct;

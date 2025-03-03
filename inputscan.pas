@@ -45,9 +45,12 @@ type
     function GetHeight: Integer; inline;
     function GetWidth: Integer; inline;
 
+    procedure GradientEvalCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+    procedure GradientEvalConcentricGrooveXY(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
     function PowellEvalConcentricGrooveXY(const x: TVector; obj: Pointer): TScalar;
     function PowellCrop(const x: TVector; obj: Pointer): TScalar;
 
+    procedure FindCenter;
     procedure FindConcentricGroove;
     procedure FindGrooveStart;
   public
@@ -60,7 +63,7 @@ type
     procedure FindTrack(AForcedSampleRate: Integer = -1);
     procedure Crop;
 
-    function InRangePointD(Y, X: Double): Boolean; inline;
+    function InRangePointD(Y, X: Double): Boolean;
     function GetWorkPointD(Y, X: Double): Double;
     function GetFinalPointD(Y, X: Double): Double;
     procedure GetGradientsD(Y, X: Double; out GY: Double; out GX: Double);
@@ -144,40 +147,114 @@ begin
   Result := ChangeFileExt(ExtractFileName(FImageFileName), '');
 end;
 
+procedure TInputScan.GradientEvalCenter(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+var
+  ix, iy, radiusOuter: Integer;
+  x, y, gimgx, gimgy: Double;
+begin
+  func := 0;
+  if Assigned(grad) then
+  begin
+    grad[0] := 0;
+    grad[1] := 0;
+  end;
+
+  radiusOuter := Round(C45RpmAdapterSize * FDPI * 0.5);
+
+  for iy := -radiusOuter to radiusOuter do
+  begin
+    y := iy + arg[1];
+
+    for ix := -radiusOuter to radiusOuter do
+    begin
+      x := ix + arg[0];
+
+      if (Sqrt(Sqr(ix) + Sqr(iy)) <= radiusOuter) and  InRangePointD(y, x) then
+      begin
+        func -= GetWorkPointD(y, x);
+        if Assigned(grad) then
+        begin
+          GetGradientsD(y, x, gimgy, gimgx);
+          grad[0] -= gimgx;
+          grad[1] -= gimgy;
+        end;
+      end;
+    end;
+  end;
+end;
+
+procedure TInputScan.FindCenter;
+var
+  x: TVector;
+  rOut: Double;
+begin
+  rOut := C45RpmOuterSize * FDPI * 0.5;
+
+  x := [FCenter.X, FCenter.Y];
+
+  if (x[0] <> rOut) and (x[1] <> rOut) then
+    FCenterQuality := -LBFGSScaledMinimize(@GradientEvalCenter, x, [1.0, 1.0], 1e-6, 2);
+
+  FCenter.X := x[0];
+  FCenter.Y := x[1];
+end;
+
 function TInputScan.PowellEvalConcentricGrooveXY(const x: TVector; obj: Pointer): TScalar;
+begin
+  GradientEvalConcentricGrooveXY(x, Result, nil, obj);
+end;
+
+procedure TInputScan.GradientEvalConcentricGrooveXY(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 var
   radiusInner, radiusOuter, halfTrackWidth: Integer;
 
-  function DoRadius(ARadius: Double): Double;
+  function DoRadius(ARadius: Double; AGrad: TVector): Double;
   var
     iLut, iTrack: Integer;
-    px, py, sn, cs, radius, r, f: Double;
+    px, py, sn, cs, radius, r, f, gimgx, gimgy, gx, gy: Double;
     vs: TValueSign;
   begin
-    Result := 0;
+    Result := 0.0;
+    if Assigned(AGrad) then
+      FillQWord(AGrad[0], Length(AGrad), 0);
+
     for iLut := 0 to High(FSinCosLUT) do
     begin
       cs := FSinCosLUT[iLut].Cos;
       sn := FSinCosLUT[iLut].Sin;
 
-      if InRangePointD(cs * ARadius + x[0], sn * ARadius + x[1]) then
+      if InRangePointD(cs * ARadius + arg[0], sn * ARadius + arg[1]) then
       begin
         for vs := Low(TValueSign) to High(TValueSign) do
         begin
           r := ARadius + CRadiusXOffsets[vs] * FDPI;
           f := 0.0;
+          gx := 0.0;
+          gy := 0.0;
 
           for iTrack := -halfTrackWidth to halfTrackWidth do
           begin
             radius := r + iTrack;
 
-            px := cs * radius + x[0];
-            py := sn * radius + x[1];
+            px := cs * radius + arg[0];
+            py := sn * radius + arg[1];
 
             f += GetWorkPointD(py, px);
+
+            if Assigned(AGrad) then
+            begin
+              GetGradientsD(py, px, gimgy, gimgx);
+              gx += gimgx;
+              gy += gimgy;
+            end;
           end;
 
           Result += f * CRadiusYFactors[vs];
+          if Assigned(AGrad) then
+          begin
+            AGrad[0] += gx * CRadiusYFactors[vs];
+            AGrad[1] += gy * CRadiusYFactors[vs];
+          end;
         end;
       end
       else
@@ -195,91 +272,39 @@ begin
   radiusInner := Round(C45RpmMinConcentricGroove * FDPI * 0.5);
   radiusOuter := Round(C45RpmMaxConcentricGroove * FDPI * 0.5);
 
-  Result := Infinity;
+  func := Infinity;
   for iRadius := radiusInner to radiusOuter do
   begin
-    f := DoRadius(iRadius);
+    f := DoRadius(iRadius, nil);
 
-    if f < Result then
+    if f < func then
     begin
-      Result := f;
+      func := f;
       FConcentricGrooveRadius := iRadius;
     end;
   end;
+
+  DoRadius(FConcentricGrooveRadius, grad);
 end;
 
 procedure TInputScan.FindConcentricGroove;
 var
-  xx, yy, radiusLimit, xMargin, yMargin, iter: Integer;
-  prevf, bestf, f: Double;
+  rOut: Double;
   x: TDoubleDynArray;
-  extents: TRect;
 begin
   BuildSinCosLUT(FPointsPerRevolution, FSinCosLUT);
 
-  xMargin := Width - Round(C45RpmOuterSize * FDPI);
-  yMargin := Height - Round(C45RpmOuterSize * FDPI);
+  rOut := C45RpmOuterSize * FDPI * 0.5;
+  x := [FCenter.X, FCenter.Y];
 
-  if (xMargin <= 0) and (yMargin <= 0) then
+  if (x[0] <> rOut) and (x[1] <> rOut) then
   begin
-    FCenterQuality := -PowellEvalConcentricGrooveXY([FCenter.X, FCenter.Y], nil);
-    Exit;
+    LBFGSScaledMinimize(@GradientEvalConcentricGrooveXY, x, [1.0, 1.0], 1e-6, 2);
+    FCenter.X := x[0];
+    FCenter.Y := x[1];
   end;
 
-  radiusLimit := Round(C45RpmOuterSize * 0.5 * FDPI) - 1;
-
-  extents.Left := radiusLimit;
-  extents.Top := radiusLimit;
-  extents.Right := Width - 1 - radiusLimit;
-  extents.Bottom := Height - 1 - radiusLimit;
-
-  writeln(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
-
-  x := [extents.CenterPoint.X, extents.CenterPoint.Y];
-
-  iter := 0;
-  bestf := Infinity;
-  repeat
-    prevf := bestf;
-
-    bestf := Infinity;
-
-    if Odd(iter) then
-    begin
-      for xx := extents.Left to extents.Right do
-      begin
-        f := PowellEvalConcentricGrooveXY([xx, x[1]], nil);
-
-        if f < bestf then
-        begin
-          bestf := f;
-          x[0] := xx;
-        end;
-      end;
-    end
-    else
-    begin
-      for yy := extents.Top to extents.Bottom do
-      begin
-        f := PowellEvalConcentricGrooveXY([x[0], yy], nil);
-
-        if f < bestf then
-        begin
-          bestf := f;
-          x[1] := yy;
-        end;
-      end;
-    end;
-
-    WriteLn(ImageShortName, x[0]:12:3, x[1]:12:3, bestf:12:3);
-
-    Inc(iter);
-
-  until SameValue(bestf, prevf, 0.5);
-
   FCenterQuality := -PowellEvalConcentricGrooveXY(x, nil); // also needed to get the proper FConcentricGrooveRadius
-  FCenter.X := x[0];
-  FCenter.Y := x[1];
 end;
 
 procedure TInputScan.FindGrooveStart;
@@ -466,17 +491,18 @@ type
   end;
 
 const
-  CGrooveWidthMul = 10;
+  CGrooveWidthMul = 2;
   CSigma = 4;
 var
   offsets: array of TSample;
-  radius, meanDiv, stdDevDiv: Integer;
+  radius, meanDiv: Integer;
+  stdDevDiv: UInt64;
 
   procedure GetL2Extents(ay, ax: Integer; buf: TIntegerDynArray; out amean, astddev: Integer);
   var
     i: Integer;
     px, mn, sd: Integer;
-    sdAcc: Int64;
+    sdAcc: UInt64;
     opt: TSample;
   begin
     mn := 0;
@@ -553,7 +579,7 @@ begin
     end;
   SetLength(offsets, pos);
   meanDiv := acc;
-  stdDevDiv := Sqr(acc);
+  stdDevDiv := acc * acc;
 
   FLeveledImage := nil;
   SetLength(FLeveledImage, Height, Width);
@@ -570,8 +596,9 @@ begin
   else
     SetRevolutionFromDPI(FDPI);
 
-  FFirstGrooveRadius := C45RpmFirstMusicGroove * FDPI * 0.5;
+  FFirstGrooveRadius := (C45RpmFirstMusicGroove + C45RpmOuterSize) * 0.5 * FDPI * 0.5;
 
+  FindCenter;
   FindConcentricGroove;
   FindGrooveStart;
 

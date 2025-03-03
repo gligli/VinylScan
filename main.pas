@@ -283,12 +283,12 @@ begin
 
   FPoints.Add(TPointF.Create(X, Y));
 
-  if not Result or not InRange(Percent, -0.1, 99.99) or (FPoints.Count >= Sender.SampleRate * CSecondsAtATime) then
+  if not Result or not InRange(Percent, -1.0, 99.99) or (FPoints.Count >= Sender.SampleRate * CSecondsAtATime) then
   begin
     DrawPoints(FPoints, clLime);
 
     tc := GetTickCount64;
-    Write(Percent:6:2, '%,', FPoints.Count / Sender.SampleRate * 1000.0 / (tc - FLastTickCount):6:2, 'x', #13);
+    Write(Percent:6:2, '%,', DivDef(FPoints.Count / Sender.SampleRate * 1000.0, tc - FLastTickCount, 0.0):6:2, 'x', #13);
     FLastTickCount := tc;
 
     FPoints.Clear;
