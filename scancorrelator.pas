@@ -25,7 +25,6 @@ type
   TScanCorrelator = class
   private
     FInputScans: TInputScanDynArray;
-    FMethod: TMinimizeMethod;
     FBrickwallLimitScans: Boolean;
     FCorrectAngles: Boolean;
     FRebuildBlended: Boolean;
@@ -43,9 +42,6 @@ type
     procedure CorrectAnglesFromCoords(const coords: TCorrectCoords; out startAngle, endAngle, angleInc: Double; out radiusCnt, angleCnt: Integer);
 
     function PrepareAnalyze: TDoubleDynArray;
-    procedure GradientAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
-    procedure GradientAnalyzeXY(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
-    procedure GradientAnalyzeAngle(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
     function PowellAnalyze(const arg: TVector; obj: Pointer): TScalar;
     procedure PrepareCorrect(var coords: TCorrectCoords);
     function PowellCorrect(const arg: TVector; obj: Pointer): TScalar;
@@ -66,7 +62,6 @@ type
     procedure Save;
 
     property OutputPNGFileName: String read FOutputPNGFileName write FOutputPNGFileName;
-    property Method: TMinimizeMethod read FMethod write FMethod;
     property BrickwallLimitScans: Boolean read FBrickwallLimitScans write FBrickwallLimitScans;
     property CorrectAngles: Boolean read FCorrectAngles write FCorrectAngles;
     property RebuildBlended: Boolean read FRebuildBlended write FRebuildBlended;
@@ -100,20 +95,17 @@ const
   CAnalyzeAreaBegin = C45RpmInnerSize;
   CAnalyzeAreaEnd = C45RpmLabelOuterSize;
   CAnalyzeAreaWidth = (CAnalyzeAreaEnd - CAnalyzeAreaBegin) * 0.5;
-  CAnalyzeAreaGroovesPerInch = 100;
 
-  CCorrectAngleCount = 16;
+  CCorrectAngleCount = 36;
   CCorrectAreaBegin = C45RpmInnerSize;
   CCorrectAreaEnd = C45RpmFirstMusicGroove;
   CCorrectAreaWidth = (CCorrectAreaEnd - CCorrectAreaBegin) * 0.5;
-  CCorrectAreaGroovesPerInch = 600;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
   i: Integer;
 begin
   FOutputDPI := AOutputDPI;
-  FMethod := mmNS;
   SetLength(FInputScans, AFileNames.Count);
 
   for i := 0 to AFileNames.Count - 1 do
@@ -195,39 +187,44 @@ end;
 
 procedure TScanCorrelator.AngleInit;
 const
-  CAngleCount = 36;
+  CAngleCount = 180;
+  CAggregatedPixelsInches = 0.1;
 var
-  rBeg, rEnd: Integer;
+  rBeg, rEnd, aggregatedPixelCount: Integer;
   base: TDoubleDynArray;
 
-  function DoAngle(iScan: Integer; a: Double; var arr: TDoubleDynArray): Integer;
+  function DoAngle(Scan: TInputScan; a: Double; var arr: TDoubleDynArray): Integer;
   var
-    iRadius, iAngle: Integer;
+    iRadius, iAngle, pxAggr: Integer;
     sn, cs, cy, cx, px, py: Double;
-    scn: TInputScan;
   begin
     Result := 0;
-    scn := FInputScans[iScan];
-    cx := scn.Center.X;
-    cy := scn.Center.Y;
 
+    FillQWord(arr[0], Length(arr), 0);
+
+    cx := Scan.Center.X;
+    cy := Scan.Center.Y;
     for iAngle := 0 to CAngleCount - 1 do
     begin
-      SinCos(a + DegToRad(iAngle * (180 / CAngleCount)), sn, cs);
+      SinCos(a + DegToRad(iAngle * (360 / CAngleCount)), sn, cs);
+
+      pxAggr := 0;
       for iRadius:= rBeg to rEnd do
       begin
         px := cx + cs * iRadius;
         py := cy + sn * iRadius;
-        if scn.InRangePointD(py, px) then
-          arr[Result + 0] := scn.GetWorkPointD(py, px);
+        if Scan.InRangePointD(py, px) then
+          arr[Result] += Scan.GetPointD_Point(Scan.Image, py, px);
 
-        px := cx - cs * iRadius;
-        py := cy - sn * iRadius;
-        if scn.InRangePointD(py, px) then
-          arr[Result + 1] := scn.GetWorkPointD(py, px);
-
-        Inc(Result, 2);
+        Inc(pxAggr);
+        if pxAggr >= aggregatedPixelCount then
+        begin
+          pxAggr := 0;
+          Inc(Result);
+        end;
       end;
+
+      Inc(Result);
     end;
   end;
 
@@ -236,9 +233,12 @@ var
     iAngle: Integer;
     a, r, bestr, bestAngle: Double;
     angle: TDoubleDynArray;
+    scan: TInputScan;
   begin
     if not InRange(AIndex, 1, High(FInputScans)) then
       Exit;
+
+    scan := FInputScans[AIndex];
 
     SetLength(angle, Length(base));
 
@@ -249,7 +249,7 @@ var
     begin
       a := DegToRad(iAngle);
 
-      DoAngle(AIndex, a, angle);
+      DoAngle(scan, a, angle);
 
       r := -SpearmanRankCorrelation(base, angle);
 
@@ -273,19 +273,15 @@ begin
 
   SetLength(base, FInputScans[0].Width * CAngleCount);
 
+  aggregatedPixelCount := Round(CAggregatedPixelsInches * FOutputDPI);
   rBeg := Round(CAnalyzeAreaBegin * 0.5 * FOutputDPI);
   rEnd := Round(CAnalyzeAreaEnd * 0.5 * FOutputDPI);
 
-  pos := DoAngle(0, 0, base);
+  pos := DoAngle(FInputScans[0], 0, base);
 
   SetLength(base, pos);
 
   ProcThreadPool.DoParallelLocalProc(@DoScan, 1, High(FInputScans));
-end;
-
-function TScanCorrelator.PowellAnalyze(const arg: TVector; obj: Pointer): TScalar;
-begin
-  GradientAnalyze(arg, Result, nil, obj);
 end;
 
 function TScanCorrelator.PrepareAnalyze: TDoubleDynArray;
@@ -295,7 +291,7 @@ var
   sinCosLUT: TSinCosDynArray;
   scan: TInputScan;
 begin
-  cnt := Ceil(CAnalyzeAreaWidth * CAnalyzeAreaGroovesPerInch * FPointsPerRevolution);
+  cnt := Ceil(CAnalyzeAreaWidth * FOutputDPI * FPointsPerRevolution);
   SetLength(Result, cnt);
 
   scan := FInputScans[0];
@@ -308,7 +304,7 @@ begin
 
   pos := 0;
   rBeg := CAnalyzeAreaBegin * 0.5 * FOutputDPI;
-  ri := FOutputDPI / (CAnalyzeAreaGroovesPerInch * FPointsPerRevolution);
+  ri := 1.0 / FPointsPerRevolution;
   for iRadius := 0 to High(Result) do
   begin
     cs := sinCosLUT[pos].Cos;
@@ -321,7 +317,7 @@ begin
 
     if scan.InRangePointD(py, px) then
     begin
-      Result[iRadius] := scan.GetWorkPointD(py, px);
+      Result[iRadius] := scan.GetPointD_Linear(scan.LeveledImage, py, px);
     end
     else
     begin
@@ -335,20 +331,18 @@ begin
   end;
 end;
 
-procedure TScanCorrelator.GradientAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
+function TScanCorrelator.PowellAnalyze(const arg: TVector; obj: Pointer): TScalar;
 var
   coords: PCorrectCoords absolute obj;
 
   i, iRadius, iArg, pos, cnt: Integer;
-  t, rBeg, px, py, cx, cy, r, ri, sn, cs, mseInt, gInt, gimgx, gimgy, gr, gt, gcx, gcy: Double;
+  t, rBeg, px, py, cx, cy, r, ri, sn, cs: Double;
   sinCosLUT: TSinCosDynArray;
   scan: TInputScan;
 begin
-  func := 0.0;
-  if Assigned(grad) then
-    FillQWord(grad[0], Length(grad), 0);
+  Result := 0.0;
 
-  cnt := Ceil(CAnalyzeAreaWidth * CAnalyzeAreaGroovesPerInch * FPointsPerRevolution);
+  cnt := Ceil(CAnalyzeAreaWidth * FOutputDPI * FPointsPerRevolution);
 
   scan := FInputScans[coords^.ScanIdx];
 
@@ -360,7 +354,7 @@ begin
 
   pos := 0;
   rBeg := CAnalyzeAreaBegin * 0.5 * FOutputDPI;
-  ri := FOutputDPI / (CAnalyzeAreaGroovesPerInch * FPointsPerRevolution);
+  ri := 1.0 / FPointsPerRevolution;
   for iRadius := 0 to cnt - 1 do
   begin
     cs := sinCosLUT[pos].Cos;
@@ -373,29 +367,11 @@ begin
 
     if scan.InRangePointD(py, px) then
     begin
-      mseInt := coords^.PreparedData[iRadius] - scan.GetWorkPointD(py, px);
-
-      func += Sqr(mseInt);
-
-      if Assigned(grad) then
-      begin
-        scan.GetGradientsD(py, px, gimgy, gimgx);
-
-        gInt := -2.0 * mseInt;
-        gr := r;
-
-        gt := (gimgx * -sn + gimgy * cs) * gr;
-        gcx := gimgx;
-        gcy := gimgy;
-
-        grad[0] += gt * gInt;
-        grad[1] += gcx * gInt;
-        grad[2] += gcy * gInt;
-      end;
+      Result += Sqr(coords^.PreparedData[iRadius] - scan.GetPointD_Linear(scan.LeveledImage, py, px));
     end
     else
     begin
-      func += 1000.0;
+      Result += 1e6;
     end;
 
     Inc(pos);
@@ -404,18 +380,15 @@ begin
       pos := 0;
   end;
 
-  func /= cnt;
-  if Assigned(grad) then
-    for iArg := 0 to High(grad) do
-      grad[iArg] /= cnt;
+  Result /= cnt;
 
   if not coords^.Silent then
   begin
-    scan.Objective := Sqrt(func);
+    scan.Objective := Sqrt(Result);
 
     SpinEnter(@FLock);
     try
-      Write('RMSES: ');
+      Write('RMSEs: ');
       for i := 1 to High(FInputScans) do
         Write(FInputScans[i].Objective:12:9);
       Write(#13);
@@ -425,71 +398,10 @@ begin
   end;
 end;
 
-procedure TScanCorrelator.GradientAnalyzeXY(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
-var
-  coords: PCorrectCoords absolute obj;
-  lgrad: TVector;
-begin
-  if Assigned(grad) then
-  begin
-    SetLength(lgrad, 3);
-  end;
-
-  GradientAnalyze([FInputScans[coords^.ScanIdx].RelativeAngle, arg[0], arg[1]], func, lgrad, obj);
-
-  if Assigned(grad) then
-  begin
-    grad[0] := lgrad[1];
-    grad[1] := lgrad[2];
-  end;
-end;
-
-procedure TScanCorrelator.GradientAnalyzeAngle(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
-var
-  coords: PCorrectCoords absolute obj;
-  lgrad: TVector;
-begin
-  if Assigned(grad) then
-  begin
-    SetLength(lgrad, 3);
-  end;
-
-  GradientAnalyze([arg[0], FInputScans[coords^.ScanIdx].Center.X, FInputScans[coords^.ScanIdx].Center.Y], func, lgrad, obj);
-
-  if Assigned(grad) then
-  begin
-    grad[0] := lgrad[0];
-  end;
-end;
-
 procedure TScanCorrelator.Analyze;
 const
-  CEpsX = 1e-12;
-
-  function Minimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Data: Pointer): Double;
-  begin
-    Result := NaN;
-
-    case Method of
-      mmBFGS:
-      begin
-        Result := LBFGSScaledMinimize(Func, X, [Pi / FOutputDPI, 1.0, 1.0], CEpsX, 3, Data);
-      end;
-      mmNS:
-      begin
-        Result := NonSmoothMinimize(Func, X, CEpsX, Data);
-      end;
-      mmAll:
-      begin
-        LBFGSScaledMinimize(Func, X, [Pi / FOutputDPI, 1.0, 1.0], CEpsX, 3, Data);
-        Result := NonSmoothMinimize(Func, X, CEpsX, Data);
-      end;
-      else
-      begin
-        Result := PowellAnalyze(X, Data);
-      end;
-    end;
-  end;
+  CEpsX = 1e-6;
+  CScale = 1e-9;
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
@@ -509,7 +421,7 @@ const
     coords.PreparedData := PrepareAnalyze;
 
     x := [scan.RelativeAngle, scan.Center.X, scan.Center.Y];
-    Minimize(@GradientAnalyze, x, @coords);
+    PowellMinimize(@PowellAnalyze, x, CScale, CEpsX, 0.0, MaxInt, @coords);
     scan.RelativeAngle := x[0];
     p.X := x[1];
     p.Y := x[2];
@@ -545,14 +457,14 @@ begin
   endAngle := angle + angleExtents;
   angleInc := FRadiansPerRevolutionPoint;
 
-  radiusCnt := Ceil(CCorrectAreaWidth * CCorrectAreaGroovesPerInch);
+  radiusCnt := Ceil(CCorrectAreaWidth * FOutputDPI);
   angleCnt := Ceil((endAngle - startAngle + angleInc) / angleInc);
 end;
 
 procedure TScanCorrelator.PrepareCorrect(var coords: TCorrectCoords);
 var
   iRadius, iAngle, iScan, cnt, radiusCnt, angleCnt, v, best: Integer;
-  t, rBeg, r, ri, sn, cs, px, py, cx, cy, startAngle, endAngle, angleInc: Double;
+  t, rBeg, r, sn, cs, px, py, cx, cy, startAngle, endAngle, angleInc: Double;
   scan: TInputScan;
 begin
   CorrectAnglesFromCoords(coords, startAngle, endAngle, angleInc, radiusCnt, angleCnt);
@@ -605,10 +517,9 @@ begin
 
   cnt := 0;
   rBeg := CCorrectAreaBegin * 0.5 * FOutputDPI;
-  ri := FOutputDPI / CCorrectAreaGroovesPerInch;
   for iRadius := 0 to radiusCnt - 1 do
   begin
-    r := rBeg + iRadius * ri;
+    r := rBeg + iRadius;
 
     for iAngle := 0 to angleCnt - 1 do
     begin
@@ -619,7 +530,7 @@ begin
       py := sn * r + cy;
 
       if scan.InRangePointD(py, px) then
-        coords.PreparedData[cnt] := scan.GetWorkPointD(py, px)
+        coords.PreparedData[cnt] := scan.GetPointD_Linear(scan.LeveledImage, py, px)
       else
         coords.PreparedData[cnt] := 1000.0;
 
@@ -634,7 +545,7 @@ function TScanCorrelator.PowellCorrect(const arg: TVector; obj: Pointer): TScala
 var
   coords: PCorrectCoords absolute obj;
   cnt, iRadius, iScan, iAngle, radiusCnt, angleCnt: Integer;
-  t, r, ri, rBeg, sn, cs, px, py, cx, cy, rsk, startAngle, endAngle, angleInc: Double;
+  t, r, rBeg, sn, cs, px, py, cx, cy, rsk, startAngle, endAngle, angleInc: Double;
   scan: TInputScan;
 begin
   CorrectAnglesFromCoords(coords^, startAngle, endAngle, angleInc, radiusCnt, angleCnt);
@@ -655,10 +566,9 @@ begin
   Result := 0;
   cnt := 0;
   rBeg := CCorrectAreaBegin * 0.5 * FOutputDPI;
-  ri := FOutputDPI / CCorrectAreaGroovesPerInch;
   for iRadius := 0 to radiusCnt - 1 do
   begin
-    r := rBeg + iRadius * ri;
+    r := rBeg + iRadius;
 
     rsk := r + r * arg[1] + arg[0];
 
@@ -672,7 +582,7 @@ begin
 
       if scan.InRangePointD(py, px) then
       begin
-        Result += Sqr((scan.GetWorkPointD(py, px) - coords^.PreparedData[cnt]) * coords^.WeightsLUT[iAngle]);
+        Result += Sqr((coords^.PreparedData[cnt] - scan.GetPointD_Linear(scan.LeveledImage, py, px)) * coords^.WeightsLUT[iAngle]);
       end
       else
       begin
@@ -705,7 +615,7 @@ end;
 procedure TScanCorrelator.Correct;
 const
   CConstCorrectExtents = 0.02; // inches
-  CConstCorrectHalfCount = 200;
+  CConstCorrectHalfCount = 100;
   CMulCorrectExtents = 0.01;
   CMulCorrectHalfCount = 100;
 var
@@ -757,23 +667,6 @@ var
       end;
     end;
 
-    //SetLength(x, 1);
-    //
-    //f := Infinity;
-    //
-    //repeat
-    //  prevf := f;
-    //
-    //  x[0] := coords.MulSkew;
-    //  PowellMinimize(@PowellCorrectMul, x, 1e-9, 1e-6, 0.0, MaxInt, @coords);
-    //  coords.MulSkew := x[0];
-    //
-    //  x[0] := coords.ConstSkew;
-    //  f := PowellMinimize(@PowellCorrectConst, x, 1e-9, 1e-3, 0.0, MaxInt, @coords)[0];
-    //  coords.ConstSkew := x[0];
-    //
-    //until SameValue(f, prevf, 1e-2);
-
     // free up memory
     SetLength(coords.PreparedData, 0);
     SetLength(coords.SinCosLUT, 0);
@@ -783,7 +676,6 @@ var
     rmses[AIndex] := Sqrt(f);
     coordsArray[AIndex] := coords;
 
-    //Write(FInputScans[coords.ScanIdx].ImageShortName, ', Angle:', (coords.AngleIdx / CCorrectAngleCount) * 360.0:9:3, ', Correlation:', -f:12:6, ', ', x[0]:12:6, ', ', x[1]:12:6, #13);
     Write(InterlockedIncrement(doneCount):4, ' / ', Length(FPerAngleX), #13);
   end;
 
@@ -880,9 +772,9 @@ var
 
   procedure InterpolateX(tau: Double; scanIdx: Integer; var x: TVector);
   var
-    ci, i, x1, x2, so: Integer;
+    ci, iX, iSerp, so: Integer;
     c, alpha: Double;
-    y1, y2: TVector;
+    coeffs, serpData: TSerpCoeffs9;
   begin
     if (Length(FPerAngleX) = 0) or (scanIdx <= 0) then
     begin
@@ -898,14 +790,13 @@ var
     alpha := c - ci;
     so := (scanIdx - 1) * CCorrectAngleCount;
 
-    x1 := (ci + 0) mod CCorrectAngleCount;
-    x2 := (ci + 1) mod CCorrectAngleCount;
-
-    y1 := FPerAngleX[x1 + so];
-    y2 := FPerAngleX[x2 + so];
-
-    for i := 0 to High(x) do
-      x[i] := lerp(y1[i], y2[i], alpha);
+    serpCoeffs(alpha, coeffs);
+    for iX := 0 to High(x) do
+    begin
+      for iSerp := -4 to 4 do
+        serpData[iSerp] := FPerAngleX[(ci + iSerp + CCorrectAngleCount) mod CCorrectAngleCount + so, iX];
+      x[iX] := serpFromCoeffs(coeffs, serpData);
+    end;
   end;
 
   procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
@@ -913,6 +804,7 @@ var
     x: TVector;
     i, ox, cnt: Integer;
     r, sn, cs, px, py, t, cx, cy, acc, bt, ct, rsk: Double;
+    scan: TInputScan;
   begin
     SetLength(x, 2);
 
@@ -928,9 +820,11 @@ var
         acc := 0;
         for i := 0 to High(FInputScans) do
         begin
-          t  := FInputScans[i].RelativeAngle;
-          cx := FInputScans[i].Center.X;
-          cy := FInputScans[i].Center.Y;
+          scan := FInputScans[i];
+
+          t  := scan.RelativeAngle;
+          cx := scan.Center.X;
+          cy := scan.Center.Y;
 
           InterpolateX(bt, i, x);
 
@@ -942,12 +836,12 @@ var
           px := cs * rsk + cx;
           py := sn * rsk + cy;
 
-          if FInputScans[i].InRangePointD(py, px) and
-              (not InNormalizedAngle(ct, FInputScans[i].CropData.StartAngle, FInputScans[i].CropData.EndAngle) and
-               not InNormalizedAngle(ct, FInputScans[i].CropData.StartAngleMirror, FInputScans[i].CropData.EndAngleMirror) or
+          if scan.InRangePointD(py, px) and
+              (not InNormalizedAngle(ct, scan.CropData.StartAngle, scan.CropData.EndAngle) and
+               not InNormalizedAngle(ct, scan.CropData.StartAngleMirror, scan.CropData.EndAngleMirror) or
                (r < rLbl)) then
           begin
-            acc += FInputScans[i].GetFinalPointD(py, px);
+            acc += scan.GetPointD_Sinc(scan.Image, py, px);
             Inc(cnt);
             if not FRebuildBlended then
               Break;

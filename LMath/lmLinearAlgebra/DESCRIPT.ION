@@ -1,3 +1,0 @@
-"ueigsym.pas" uses uSVD
-"ueigval.pas" uses ubalance, uelmhes, uhqr;
-"ueigvec.pas" ubalance, uelmhes, ueltran, uhqr2, ubalbak

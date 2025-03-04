@@ -22,7 +22,6 @@ type
     chkCorrect: TCheckBox;
     cbDPI: TComboBox;
     cbSR: TComboBox;
-    cbMethod: TComboBox;
     chkBrickLim: TCheckBox;
     edInputPNG: TEdit;
     edOutputPNG: TEdit;
@@ -120,7 +119,6 @@ var
 begin
   sc := TScanCorrelator.Create(mmInputPNGs.Lines, StrToIntDef(cbDPI.Text, 2400));
   try
-    sc.Method := TMinimizeMethod(cbMethod.ItemIndex);
     sc.OutputPNGFileName := edOutputPNG.Text;
     sc.BrickwallLimitScans := chkBrickLim.Checked;
     sc.CorrectAngles := chkCorrect.Checked;
@@ -155,7 +153,6 @@ var
   fltLP: TFilterIIRLPBessel;
   fltHP: TFilterIIRHPBessel;
   smps: TSmallIntDynArray;
-  mm: TMinimizeMethod;
 begin
   SetLength(smps, 48000 * 2);
   fltLP := TFilterIIRLPBessel.Create(nil);
@@ -229,22 +226,18 @@ begin
     sl.Add('data\think_mock2.png');
     sl.Add('data\think_mock3.png');
 
-    for mm := Succ(mmNone) to High(TMinimizeMethod) do
-    begin
-      scm := TScanCorrelator.Create(sl);
-      try
-        scm.OutputPNGFileName := fn;
-        scm.Method := mm;
-        scm.CorrectAngles := True;
-        scm.RebuildBlended := True;
+    scm := TScanCorrelator.Create(sl);
+    try
+      scm.OutputPNGFileName := fn;
+      scm.CorrectAngles := True;
+      scm.RebuildBlended := True;
 
-        scm.LoadScans;
-        scm.Process;
-        DrawImage(scm.OutputImage);
-        scm.Save;
-      finally
-        scm.Free;
-      end;
+      scm.LoadScans;
+      scm.Process;
+      DrawImage(scm.OutputImage);
+      scm.Save;
+    finally
+      scm.Free;
     end;
 
   finally

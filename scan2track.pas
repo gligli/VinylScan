@@ -90,7 +90,7 @@ begin
 
     sample := 0;
     if Scan.InRangePointD(py, px) then
-      sample := Scan.GetFinalPointD(py, px);
+      sample := Scan.GetPointD_Sinc(Scan.Image, py, px);
 
     sampleMin := Min(sampleMin, sample);
     sampleMax := Max(sampleMax, sample);

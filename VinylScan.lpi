@@ -141,9 +141,6 @@
     </RunParams>
     <RequiredPackages>
       <Item>
-        <PackageName Value="lmoptimum"/>
-      </Item>
-      <Item>
         <PackageName Value="MultiThreadProcsLaz"/>
       </Item>
       <Item>

@@ -24,11 +24,6 @@ type
     Sin, Cos, Angle: Double;
   end;
 
-  TMinimizeMethod = (mmNone, mmBFGS, mmNS, mmAll);
-
-  TImageDerivationOperator = (idoPrewitt, idoSobel, idoScharr);
-  TConvolutionKernel = array[-1..1, -1..1] of integer;
-
   TPointDDynArray = array of TPointD;
   TPointDDynArray2 = array of TPointDDynArray;
   TByteDynArray2 = array of TByteDynArray;
@@ -62,8 +57,9 @@ const
   C45RpmOuterSize = 6.875;
   C45RpmInnerSize = 1.504;
   C45RpmLabelOuterSize = 3.5;
-  C45RpmMinConcentricGroove = 3.875 - C45RpmLeadOutGrooveWidth - 0.078;
-  C45RpmMaxConcentricGroove = 3.875 + C45RpmLeadOutGrooveWidth;
+  C45RpmConcentricGroove = 3.875;
+  C45RpmMinConcentricGroove = C45RpmConcentricGroove - 0.1;
+  C45RpmMaxConcentricGroove = C45RpmConcentricGroove;
   C45RpmFirstMusicGroove = 6.625;
   C45RpmLastMusicGroove = 4.25;
   C45RpmAdapterSize = 1.496;
@@ -85,12 +81,6 @@ const
 
   cPhi = (1 + sqrt(5)) / 2;
   cInvPhi = 1 / cPhi;
-
-  CImageDerivationKernels: array[TImageDerivationOperator, Boolean {Y?}] of TConvolutionKernel = (
-    (((-1, 0, 1), (-1, 0, 1), (-1, 0, 1)),   ((-1, -1, -1), (0, 0, 0), (1, 1, 1))),  // ckoPrewitt
-    (((-1, 0, 1), (-2, 0, 2), (-1, 0, 1)),   ((-1, -2, -1), (0, 0, 0), (1, 2, 1))),  // ckoSobel
-    (((-3, 0, 3), (-10, 0, 10), (-3, 0, 3)), ((-3, -10, -3), (0, 0, 0), (3, 10, 3))) // ckoScharr
-  );
 
 procedure SpinEnter(Lock: PSpinLock); assembler;
 procedure SpinLeave(Lock: PSpinLock); assembler;
@@ -132,19 +122,9 @@ function serpFromCoeffs(const coeffs, data: TSerpCoeffs9): Single;
 function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
-function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double = 0.01; EpsilonG: Double = 1e-9; Data: Pointer = nil): Double;
-function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
-function LBFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; M: Integer = 5; Data: Pointer = nil): Double;
-function LBFGSScaledMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Scale: array of Double; Epsilon: Double = 1e-12; M: Integer = 5; Data: Pointer = nil): Double;
-function NonSmoothMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
-function NonSmoothBoundedMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 
-function Convolve(const image:TWordDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Integer;
-
+function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
-function PearsonCorrelationGradient(const a: TDoubleDynArray; const b: TDoubleDynArray; const gb: TDoubleDynArray): Double;
-function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray; var gint: TDoubleDynArray): Double;
-function MSEGradient(const gint: TDoubleDynArray; const gb: TDoubleDynArray): Double;
 function SpearmanRankCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 
 function Make16BitSample(smp: Double): SmallInt;
@@ -162,8 +142,6 @@ procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFun
 function GetTIFFSize(AStream: TStream; out AWidth, AHeight: DWord; out dpiX, dpiY: Double): Boolean;
 
 implementation
-uses utypes, ubfgs;
-
 var GSerpCoeffs9ByWord: TSerpCoeffs9ByWord;
 
 function alglib_NonSmoothBoundedMinimize(Func: Pointer; n: Integer; X, LowBound, UpBound: PDouble; Epsilon, Radius, Penalty: Double; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
@@ -598,188 +576,20 @@ begin
   end;
 end;
 
-function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: Double;
-  EpsilonG: Double; Data: Pointer): Double;
+function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 var
-  gm, f: Double;
-  grad, bestX: TDoubleDynArray;
   i: Integer;
-  iter: Integer;
 begin
-  SetLength(grad, Length(X));
-  SetLength(bestX, Length(X));
+  Assert(Length(a) = Length(b));
 
-  f := NaN;
-  Result := Infinity;
-  iter := 0;
-  repeat
-    Func(X, f, grad, Data);
+  Result := 0.0;
+  if not Assigned(a) then
+    Exit;
 
-    if f <= Result then
-    begin
-      for i := 0 to High(X) do
-        bestX[i] := X[i];
-      Result := f;
-    end;
+  for i := 0 to High(a) do
+    Result += Sqr(a[i] - b[i]);
 
-    gm := 0.0;
-    for i := 0 to High(X) do
-    begin
-      X[i] -= LearningRate * grad[i];
-      gm := max(gm, Abs(grad[i]));
-    end;
-
-    Inc(iter);
-
-    Write(Result:16:9, gm:16:9);
-    for i := 0 to High(X) do
-      Write(X[i]:16:9);
-    for i := 0 to High(grad) do
-      Write(grad[i]:16:9);
-    WriteLn;
-
-  until gm <= EpsilonG;
-
-  for i := 0 to High(X) do
-    X[i] := bestX[i];
-
-  WriteLn(iter:8);
-end;
-
-threadvar
-  GBFGSData: Pointer;
-  GBFGSFunc: TGradientEvalFunc;
-
-  function BFGSX(X : TVector) : Float;
-  begin
-    GBFGSFunc(X, Result, nil, GBFGSData);
-  end;
-
-  procedure BFGSG(X, G : TVector);
-  var
-    dummy: Double;
-  begin
-    dummy := NaN;
-    GBFGSFunc(X, dummy, G, GBFGSData);
-  end;
-
-function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double; Data: Pointer): Double;
-var
-  G: TVector;
-  H: TMatrix;
-begin
-  SetLength(G, Length(X));
-  SetLength(H, Length(X), Length(X));
-
-  GBFGSData := Data;
-  GBFGSFunc := Func;
-  try
-    BFGS(@BFGSX, @BFGSG, X, 0, High(X), MaxInt, Epsilon, Result, G, H);
-  finally
-    GBFGSData := nil;
-    GBFGSFunc := nil;
-  end;
-end;
-
-threadvar
-  GLBFGSFunc: TGradientEvalFunc;
-
-  procedure LBFGSFunc(n: Integer; arg: PDouble; func: PDouble; grad: PDouble; obj: Pointer);
-  var
-    i: Integer;
-    lfunc: Double;
-    larg: TDoubleDynArray;
-    lgrad: TDoubleDynArray;
-  begin
-    lfunc := NaN;
-    SetLength(larg, n);
-    SetLength(lgrad, n);
-    for i := 0 to n - 1 do
-      larg[i] := arg[i];
-
-    GLBFGSFunc(larg, lfunc, lgrad, obj);
-
-    for i := 0 to n - 1 do
-      grad[i] := lgrad[i];
-
-    func^ := lfunc;
-  end;
-
-function LBFGSScaledMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Scale: array of Double; Epsilon: Double;
-  M: Integer; Data: Pointer): Double;
-begin
-  GLBFGSFunc := Func;
-  try
-    M := min(Length(X), M);
-    Result := alglib_LBFGSMinimize(@LBFGSFunc, Length(X), @X[0], @Scale[0], Epsilon, M, Data);
-  finally
-    GLBFGSFunc := nil;
-  end;
-end;
-
-function LBFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double; M: Integer; Data: Pointer): Double;
-begin
-  GLBFGSFunc := Func;
-  try
-    M := min(Length(X), M);
-    Result := alglib_LBFGSMinimize(@LBFGSFunc, Length(X), @X[0], nil, Epsilon, M, Data);
-  finally
-    GLBFGSFunc := nil;
-  end;
-end;
-
-threadvar
-  GNSFunc: TGradientEvalFunc;
-
-  procedure NSFunc(n: Integer; arg: PDouble; fi: PDouble; jac: PPDouble; obj: Pointer);
-  var
-    i: Integer;
-    lfunc: Double;
-    larg: TDoubleDynArray;
-    lgrad: TDoubleDynArray;
-  begin
-    lfunc := NaN;
-    SetLength(larg, n);
-    SetLength(lgrad, n);
-    for i := 0 to n - 1 do
-      larg[i] := arg[i];
-
-    GNSFunc(larg, lfunc, lgrad, obj);
-
-    for i := 0 to n - 1 do
-      jac[0, i] := lgrad[i];
-
-    fi[0] := lfunc;
-  end;
-
-function NonSmoothMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double; Data: Pointer): Double;
-begin
-  GNSFunc := Func;
-  try
-    Result := alglib_NonSmoothBoundedMinimize(@NSFunc, Length(X), @X[0], nil, nil, Epsilon, 1e-3, 0.0, Data);
-  finally
-    GNSFunc := nil;
-  end;
-end;
-
-function NonSmoothBoundedMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double; Data: Pointer): Double;
-begin
-  GNSFunc := Func;
-  try
-    Result := alglib_NonSmoothBoundedMinimize(@NSFunc, Length(X), @X[0], @LowBound[0], @UpBound[0], Epsilon, 1e-3, 50.0, Data);
-  finally
-    GNSFunc := nil;
-  end;
-end;
-
-function Convolve(const image:TWordDynArray2; const kernel: TConvolutionKernel; row, col: Integer): Integer;
-var
-  y, x: Integer;
-begin
-  Result := 0;
-  for y := -1 to 1 do
-    for x := -1 to 1 do
-      Result += image[y + row, x + col] * kernel[y, x];
+  Result /= Length(a);
 end;
 
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
@@ -810,83 +620,6 @@ begin
 
   if den <> 0.0 then
     Result := num / den;
-end;
-
-function PearsonCorrelationGradient(const a: TDoubleDynArray; const b: TDoubleDynArray; const gb: TDoubleDynArray): Double;
-var
-  ma, mb, mgb, num, den, dena, denb: Double;
-  i: Integer;
-begin
-  Assert(Length(a) = Length(b));
-  Assert(Length(a) = Length(gb));
-
-  Result := 0.0;
-  if not Assigned(a) then
-    Exit;
-
-  ma := mean(a);
-  mb := mean(b);
-
-  num := 0.0;
-  dena := 0.0;
-  denb := 0.0;
-  for i := 0 to High(a) do
-  begin
-    num += (a[i] - ma) * (b[i] - mb);
-    dena += sqr(a[i] - ma);
-    denb += sqr(b[i] - mb);
-  end;
-
-  den := sqrt(dena * denb);
-
-  mgb := mean(gb);
-
-  if den <> 0.0 then
-  begin
-    if denb <> 0.0 then
-      for i := 0 to High(a) do
-        Result += ((a[i] - ma) - num / denb * (b[i] - mb)) * gb[i];
-
-    Result /= den;
-  end;
-end;
-
-function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray; var gint: TDoubleDynArray): Double;
-var
-  i: Integer;
-  d: Double;
-begin
-  Assert(Length(a) = Length(b));
-
-  Result := 0.0;
-  if not Assigned(a) then
-    Exit;
-
-  for i := 0 to High(a) do
-  begin
-    d := a[i] - b[i];
-    Result += Sqr(d);
-    if Assigned(gint) then
-      gint[i] := d;
-  end;
-
-  Result /= Length(a);
-end;
-
-function MSEGradient(const gint: TDoubleDynArray; const gb: TDoubleDynArray): Double;
-var
-  i: Integer;
-begin
-  Assert(Length(gint) = Length(gb));
-
-  Result := 0.0;
-  if not Assigned(gint) then
-    Exit;
-
-  for i := 0 to High(gint) do
-    Result -= 2.0 * gint[i] * gb[i];
-
-  Result /= Length(gint);
 end;
 
 function SpearmanRankCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
@@ -1162,7 +895,7 @@ initialization
   ProcThreadPool.MaxThreadCount := 1;
 {$else}
   SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
-  ProcThreadPool.MaxThreadCount := NumberOfProcessors;
+  ProcThreadPool.MaxThreadCount := Max(1, NumberOfProcessors - 1);
 {$endif}
 
   serpCoeffsBuilsLUT(GSerpCoeffs9ByWord);
