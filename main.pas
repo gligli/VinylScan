@@ -48,7 +48,7 @@ type
     FLastTickCount: QWord;
     FPoints: TPointFList;
 
-    function OnSample(Sender: TScan2Track; X, Y, Percent: Double): Boolean;
+    function OnSample(Sender: TScan2Track; X, Y, Percent: Double; Finished: Boolean): Boolean;
   public
     procedure UnitTests;
 
@@ -241,17 +241,17 @@ begin
   end;
 end;
 
-function TMainForm.OnSample(Sender: TScan2Track; X, Y, Percent: Double): Boolean;
+function TMainForm.OnSample(Sender: TScan2Track; X, Y, Percent: Double; Finished: Boolean): Boolean;
 const
   CSecondsAtATime = 0.1;
 var
   tc: QWord;
 begin
-  Result := (GetAsyncKeyState(VK_ESCAPE) and $0001) = 0;
+  Result := not ((GetForegroundWindow = Handle) and (GetAsyncKeyState(VK_ESCAPE) and $8000 <> 0));
 
   FPoints.Add(TPointF.Create(X, Y));
 
-  if not Result or not InRange(Percent, -1.0, 99.99) or (FPoints.Count >= Sender.SampleRate * CSecondsAtATime) then
+  if not Result or Finished or (FPoints.Count >= Sender.SampleRate * CSecondsAtATime) then
   begin
     DrawPoints(FPoints, clLime);
 

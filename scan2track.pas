@@ -15,7 +15,7 @@ const
 type
   TScan2Track = class;
 
-  TSampleEvent = function(Sender: TScan2Track; X, Y, Percent: Double): Boolean of object;
+  TSampleEvent = function(Sender: TScan2Track; X, Y, Percent: Double; Finished: Boolean): Boolean of object;
 
   { TScan2Track }
 
@@ -79,18 +79,22 @@ var
 begin
   cxa := C45RpmRecordingGrooveWidth * Scan.DPI / CSampleDecoderMax;
 
+  r := radius + CSampleDecoderMax * cxa;
+  px := angleCos * r + Scan.Center.X;
+  py := angleSin * r + Scan.Center.Y;
+
+  if not Scan.InRangePointD(py, px) then
+    Exit(0.0);
+
   sampleMin := Infinity;
   sampleMax := -Infinity;
   for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
   begin
     r := radius + ismp * cxa;
-
     px := angleCos * r + Scan.Center.X;
     py := angleSin * r + Scan.Center.Y;
 
-    sample := 0;
-    if Scan.InRangePointD(py, px) then
-      sample := Scan.GetPointD_Sinc(Scan.Image, py, px);
+    sample := Scan.GetPointD_Sinc(Scan.Image, py, px);
 
     sampleMin := Min(sampleMin, sample);
     sampleMax := Max(sampleMax, sample);
@@ -130,8 +134,9 @@ var
   end;
 
 var
-  radius, rOuter, sn, cs, px, py, fbRatio, fSmp, ffSmp: Double;
+  radius, rOuter, sn, cs, px, py, fbRatio, fSmp, ffSmp, pct: Double;
   iSample, iLut: Integer;
+  validSample: Boolean;
   fltSample: TFilterIIRHPBessel;
   sinCosLut: TSinCosDynArray;
 begin
@@ -173,10 +178,17 @@ begin
       if iLut >= FPointsPerRevolution then
         iLut := 0;
 
-      if Assigned(FOnSample) and not FOnSample(Self, px, py, 100.0 - (radius - Scan.ConcentricGrooveRadius) * 100.0 / (Scan.FirstGrooveRadius - Scan.ConcentricGrooveRadius)) then
-        Break;
+      validSample := InRange(radius, Scan.ConcentricGrooveRadius, rOuter);
 
-    until not InRange(radius, Scan.ConcentricGrooveRadius, rOuter);
+      if Assigned(FOnSample) then
+      begin
+        pct := (radius - Scan.ConcentricGrooveRadius) / (Scan.FirstGrooveRadius - Scan.ConcentricGrooveRadius);
+        pct := EnsureRange(1.0 - pct, 0.0, 1.0) * 100.0;
+
+        validSample := validSample and FOnSample(Self, px, py, pct, not validSample);
+      end;
+
+    until not validSample;
 
     SetLength(samples, iSample);
     CreateWAV(1, 16, FSampleRate, FOutputWAVFileName, samples);
