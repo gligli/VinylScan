@@ -160,28 +160,24 @@ begin
     repeat
       cs := sinCosLut[iLut].Cos;
       sn := sinCosLut[iLut].Sin;
-
-      fSmp := DecodeSample(radius, sn, cs);
-
-      ffSmp := fltSample.FilterFilter(fSmp);
-
-      StoreSample(ffSmp, iSample);
-
-      radius += fSmp * fbRatio;
-
-      px := cs * radius + Scan.Center.X;
-      py := sn * radius + Scan.Center.Y;
-
-      Inc(iSample);
-
       Inc(iLut);
       if iLut >= FPointsPerRevolution then
         iLut := 0;
+
+      fSmp := DecodeSample(radius, sn, cs);
+      radius += fSmp * fbRatio;
+
+      ffSmp := fltSample.FilterFilter(fSmp);
+      StoreSample(ffSmp, iSample);
+      Inc(iSample);
 
       validSample := InRange(radius, Scan.ConcentricGrooveRadius, rOuter);
 
       if Assigned(FOnSample) then
       begin
+        px := cs * radius + Scan.Center.X;
+        py := sn * radius + Scan.Center.Y;
+
         pct := (radius - Scan.ConcentricGrooveRadius) / (Scan.FirstGrooveRadius - Scan.ConcentricGrooveRadius);
         pct := EnsureRange(1.0 - pct, 0.0, 1.0) * 100.0;
 
