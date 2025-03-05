@@ -335,7 +335,7 @@ function TScanCorrelator.PowellAnalyze(const arg: TVector; obj: Pointer): TScala
 var
   coords: PCorrectCoords absolute obj;
 
-  i, iRadius, iArg, pos, cnt: Integer;
+  i, iRadius, pos, cnt: Integer;
   t, rBeg, px, py, cx, cy, r, ri, sn, cs: Double;
   sinCosLUT: TSinCosDynArray;
   scan: TInputScan;
@@ -402,6 +402,8 @@ procedure TScanCorrelator.Analyze;
 const
   CEpsX = 1e-6;
   CScale = 1e-9;
+var
+  preparedData: TDoubleDynArray;
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
@@ -418,7 +420,7 @@ const
     coords.AngleIdx := -1;
     coords.ScanIdx := AIndex;
     coords.Silent := False;
-    coords.PreparedData := PrepareAnalyze;
+    coords.PreparedData := preparedData;
 
     x := [scan.RelativeAngle, scan.Center.X, scan.Center.Y];
     PowellMinimize(@PowellAnalyze, x, CScale, CEpsX, 0.0, MaxInt, @coords);
@@ -435,6 +437,8 @@ begin
 
   if Length(FInputScans) <= 1 then
     Exit;
+
+  preparedData := PrepareAnalyze;
 
   for i := 0 to High(FInputScans) do
     WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (before)');
