@@ -104,9 +104,9 @@ function lerp(x, y: Word; alpha: Double): Double; overload;
 function lerp(x, y: Integer; alpha: Double): Double; overload;
 
 procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
-procedure serpCoeffs(alpha: Double; var res: TSerpCoeffs9); overload;
-procedure serpFromCoeffsXY(const coeffs: TSerpCoeffs9; const img: TWordDynArray; stride, ix, iy: Integer; var res: TSerpCoeffs9);
-function serpFromCoeffs(const coeffs, data: TSerpCoeffs9): Single;
+function serpCoeffs(alpha: Double): PSingle;
+procedure serpFromCoeffsXY(coeffs: PSingle; centerPx: PWORD; stride: Integer; res: PSingle);
+function serpFromCoeffs(coeffs, data: PSingle): Single;
 
 function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
 
@@ -277,100 +277,188 @@ begin
   end;
 end;
 
-procedure serpCoeffs(alpha: Double; var res: TSerpCoeffs9);
+function serpCoeffs(alpha: Double): PSingle;
 begin
-  res := GSerpCoeffs9ByWord[round(alpha * High(word))];
-end;
-
-function serpFromCoeffsX(const coeffs: TSerpCoeffs9; const img: TWordDynArray2; ix, iy: Integer): Single;
-var
-  pp: PWord;
-begin
-  pp := @img[iy, ix];
-
-  Result := pp[-4] * coeffs[-4];
-  Result += pp[-3] * coeffs[-3];
-  Result += pp[-2] * coeffs[-2];
-  Result += pp[-1] * coeffs[-1];
-  Result += pp[ 0] * coeffs[ 0];
-  Result += pp[ 1] * coeffs[ 1];
-  Result += pp[ 2] * coeffs[ 2];
-  Result += pp[ 3] * coeffs[ 3];
-  Result += pp[ 4] * coeffs[ 4];
+  Result := @GSerpCoeffs9ByWord[round(alpha * High(word)), 0];
 end;
 
 {$ifdef CPUX64}
 
-function serpFromCoeffsX_asm(const coeffs_rcx: PSingle; const img_rdx: PWORD; ix_r8: Integer): Single; register; assembler;
+function serpFromCoeffsX_asm(img_rcx: PWORD): Single; register; assembler;
 asm
-  push rax
+  movdqu xmm11, [rcx - 4 * 2]
+  movdqa xmm0, xmm11
 
-  sub rsp, 16 * 2
-  movdqu oword ptr [rsp], xmm1
-  movdqu oword ptr [rsp], xmm2
+  punpckhwd xmm11, xmm12
+  punpcklwd xmm0, xmm12
 
-  pxor xmm2, xmm2
-
-  movdqu xmm1, [rdx + r8 * 2 - 4 * 2]
-  movdqa xmm0, xmm1
-
-  punpckhwd xmm1, xmm2
-  punpcklwd xmm0, xmm2
-
-  movdqa xmm2, [rcx - 4 * 4]
-
-  cvtdq2ps xmm1, xmm1
+  cvtdq2ps xmm11, xmm11
   cvtdq2ps xmm0, xmm0
 
-  mulps xmm1, [rcx]
-  mulps xmm0, xmm2
+  mulps xmm11, xmm14
+  mulps xmm0, xmm13
+
+  addps xmm0, xmm11
+
+  haddps xmm0, xmm0
+  haddps xmm0, xmm0
+
+  movzx r15d, word ptr [rcx + 4 * 2]
+  cvtsi2ss xmm11, r15d
+  mulss xmm11, xmm15
+  addss xmm0, xmm11
+end;
+
+{$else}
+
+function serpFromCoeffsX(coeffs: PSingle; img: PWORD): Single;
+begin
+  Result := img[-4] * coeffs[-4];
+  Result += img[-3] * coeffs[-3];
+  Result += img[-2] * coeffs[-2];
+  Result += img[-1] * coeffs[-1];
+  Result += img[ 0] * coeffs[ 0];
+  Result += img[ 1] * coeffs[ 1];
+  Result += img[ 2] * coeffs[ 2];
+  Result += img[ 3] * coeffs[ 3];
+  Result += img[ 4] * coeffs[ 4];
+end;
+
+{$endif}
+
+{$ifdef CPUX64}
+procedure serpFromCoeffsXY(coeffs: PSingle; centerPx: PWORD; stride: Integer; res: PSingle); register; assembler;
+asm
+  sub rsp, 16 * 5
+  movdqa oword ptr [rsp], xmm11
+  movdqa oword ptr [rsp + $10], xmm12
+  movdqa oword ptr [rsp + $20], xmm13
+  movdqa oword ptr [rsp + $30], xmm14
+  movdqa oword ptr [rsp + $40], xmm15
+
+  pxor xmm12, xmm12
+  movdqu xmm13, [rcx - 4 * 4]
+  movdqu xmm14, [rcx]
+  movss xmm15, [rcx + 4 * 4]
+
+  push rax
+  push rcx
+  push r15
+
+  mov rax, r8
+  shl rax, 2
+
+  lea rcx, [rdx + rax * 2]
+  call serpFromCoeffsX_asm
+  movss [r9 + 4 * 4], xmm0
+
+  sub rax, r8
+
+  lea rcx, [rdx + rax * 2]
+  call serpFromCoeffsX_asm
+  movss [r9 + 3 * 4], xmm0
+
+  sub rax, r8
+
+  lea rcx, [rdx + rax * 2]
+  call serpFromCoeffsX_asm
+  movss [r9 + 2 * 4], xmm0
+
+  sub rax, r8
+
+  lea rcx, [rdx + rax * 2]
+  call serpFromCoeffsX_asm
+  movss [r9 + 1 * 4], xmm0
+
+  sub rax, r8
+
+  lea rcx, [rdx + rax * 2]
+  call serpFromCoeffsX_asm
+  movss [r9 + 0 * 4], xmm0
+
+  sub rax, r8
+
+  lea rcx, [rdx + rax * 2]
+  call serpFromCoeffsX_asm
+  movss [r9 + -1 * 4], xmm0
+
+  sub rax, r8
+
+  lea rcx, [rdx + rax * 2]
+  call serpFromCoeffsX_asm
+  movss [r9 + -2 * 4], xmm0
+
+  sub rax, r8
+
+  lea rcx, [rdx + rax * 2]
+  call serpFromCoeffsX_asm
+  movss [r9 + -3 * 4], xmm0
+
+  sub rax, r8
+
+  lea rcx, [rdx + rax * 2]
+  call serpFromCoeffsX_asm
+  movss [r9 + -4 * 4], xmm0
+
+  pop r15
+  pop rcx
+  pop rax
+
+  movdqa xmm11, oword ptr [rsp]
+  movdqa xmm12, oword ptr [rsp + $10]
+  movdqa xmm13, oword ptr [rsp + $20]
+  movdqa xmm14, oword ptr [rsp + $30]
+  movdqa xmm15, oword ptr [rsp + $40]
+  add rsp, 16 * 5
+end;
+{$else}
+procedure serpFromCoeffsXY(coeffs: PSingle; centerPx: PWORD; stride: Integer; res: PSingle);
+var
+  pp: PWORD;
+begin
+  pp := @centerPx[4 * stride]; res[+4] := serpFromCoeffsX(coeffs, pp);
+  Dec(pp, stride);             res[+3] := serpFromCoeffsX(coeffs, pp);
+  Dec(pp, stride);             res[+2] := serpFromCoeffsX(coeffs, pp);
+  Dec(pp, stride);             res[+1] := serpFromCoeffsX(coeffs, pp);
+  Dec(pp, stride);             res[+0] := serpFromCoeffsX(coeffs, pp);
+  Dec(pp, stride);             res[-1] := serpFromCoeffsX(coeffs, pp);
+  Dec(pp, stride);             res[-2] := serpFromCoeffsX(coeffs, pp);
+  Dec(pp, stride);             res[-3] := serpFromCoeffsX(coeffs, pp);
+  Dec(pp, stride);             res[-4] := serpFromCoeffsX(coeffs, pp);
+end;
+{$endif}
+
+{$ifdef CPUX64}
+
+function serpFromCoeffs(coeffs, data: PSingle): Single; register; assembler;
+asm
+  sub rsp, 16 * 1
+  movdqa oword ptr [rsp], xmm1
+
+  movaps xmm0, [rcx - 4 * 4]
+  movaps xmm1, [rcx]
+
+  mulps xmm0, [rdx - 4 * 4]
+  mulps xmm1, [rdx]
 
   addps xmm0, xmm1
 
+  movss xmm1, [rcx + 4 * 4]
+
   haddps xmm0, xmm0
   haddps xmm0, xmm0
 
-  movzx eax, word ptr [rdx + r8 * 2 + 4 * 2]
-  cvtsi2ss xmm1, eax
-  mulss xmm1, [rcx + 4 * 4]
+  mulss xmm1, [rdx + 4 * 4]
+
   addss xmm0, xmm1
 
-  movdqu xmm2, oword ptr [rsp]
-  movdqu xmm1, oword ptr [rsp]
-  add rsp, 16 * 2
-
-  pop rax
+  movdqa xmm1, oword ptr [rsp]
+  add rsp, 16 * 1
 end;
 
-{$endif}
-
-procedure serpFromCoeffsXY(const coeffs: TSerpCoeffs9; const img: TWordDynArray; stride, ix, iy: Integer;
-  var res: TSerpCoeffs9);
-begin
-{$ifdef CPUX64}
-  res[-4] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy - 4) * stride], ix);
-  res[-3] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy - 3) * stride], ix);
-  res[-2] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy - 2) * stride], ix);
-  res[-1] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy - 1) * stride], ix);
-  res[ 0] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy + 0) * stride], ix);
-  res[ 1] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy + 1) * stride], ix);
-  res[ 2] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy + 2) * stride], ix);
-  res[ 3] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy + 3) * stride], ix);
-  res[ 4] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy + 4) * stride], ix);
 {$else}
-  res[-4] := serpFromCoeffsX(coeffs, img, ix, iy - 4);
-  res[-3] := serpFromCoeffsX(coeffs, img, ix, iy - 3);
-  res[-2] := serpFromCoeffsX(coeffs, img, ix, iy - 2);
-  res[-1] := serpFromCoeffsX(coeffs, img, ix, iy - 1);
-  res[ 0] := serpFromCoeffsX(coeffs, img, ix, iy + 0);
-  res[ 1] := serpFromCoeffsX(coeffs, img, ix, iy + 1);
-  res[ 2] := serpFromCoeffsX(coeffs, img, ix, iy + 2);
-  res[ 3] := serpFromCoeffsX(coeffs, img, ix, iy + 3);
-  res[ 4] := serpFromCoeffsX(coeffs, img, ix, iy + 4);
-{$endif}
-end;
 
-function serpFromCoeffs(const coeffs, data: TSerpCoeffs9): Single;
+function serpFromCoeffs(coeffs, data: PSingle): Single;
 begin
   Result := data[-4] * coeffs[-4];
   Result += data[-3] * coeffs[-3];
@@ -382,6 +470,8 @@ begin
   Result += data[ 3] * coeffs[ 3];
   Result += data[ 4] * coeffs[ 4];
 end;
+
+{$endif}
 
 function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
 begin

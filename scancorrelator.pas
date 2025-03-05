@@ -781,7 +781,8 @@ var
   var
     ci, iX, iSerp, so: Integer;
     c, alpha: Double;
-    coeffs, serpData: TSerpCoeffs9;
+    serpData: TSerpCoeffs9;
+    coeffs: PSingle;
   begin
     if (Length(FPerAngleX) = 0) or (scanIdx <= 0) then
     begin
@@ -797,12 +798,12 @@ var
     alpha := c - ci;
     so := (scanIdx - 1) * CCorrectAngleCount;
 
-    serpCoeffs(alpha, coeffs);
+    coeffs := serpCoeffs(alpha);
     for iX := 0 to High(x) do
     begin
       for iSerp := -4 to 4 do
         serpData[iSerp] := FPerAngleX[(ci + iSerp + CCorrectAngleCount) mod CCorrectAngleCount + so, iX];
-      x[iX] := serpFromCoeffs(coeffs, serpData);
+      x[iX] := serpFromCoeffs(coeffs, @serpData[0]);
     end;
   end;
 

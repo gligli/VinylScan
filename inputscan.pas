@@ -675,17 +675,18 @@ end;
 function TInputScan.GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Double;
 var
   ix, iy: Integer;
-  coeffsX, coeffsY, intData: TSerpCoeffs9;
+  intData: TSerpCoeffs9;
+  coeffsX, coeffsY: PSingle;
 begin
   ix := trunc(X);
   iy := trunc(Y);
 
-  serpCoeffs(X - ix, coeffsX);
-  serpCoeffs(Y - iy, coeffsY);
+  coeffsX := serpCoeffs(X - ix);
+  coeffsY := serpCoeffs(Y - iy);
 
-  serpFromCoeffsXY(coeffsX, Image, Width, ix, iy, intData);
+  serpFromCoeffsXY(coeffsX, @Image[iy * Width + ix], Width, @intData[0]);
 
-  Result := serpFromCoeffs(coeffsY, intData) * (1.0 / High(Word));
+  Result := serpFromCoeffs(coeffsY, @intData[0]) * (1.0 / High(Word));
 end;
 
 { TScanImage }
