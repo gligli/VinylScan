@@ -102,21 +102,10 @@ function ToBW(col: Integer): Byte;
 function lerp(x, y, alpha: Double): Double; overload;
 function lerp(x, y: Word; alpha: Double): Double; overload;
 function lerp(x, y: Integer; alpha: Double): Double; overload;
-function ilerp(x, y, alpha, maxAlpha: Integer): Integer;
-function revlerp(x, r, alpha: Double): Double;
-
-function cerp(y0, y1, y2, y3, alpha: Double): Double;
-
-function herp(y0, y1, y2, y3, alpha: Double): Double; overload;
-function herp(y0, y1, y2, y3: Word; alpha: Double): Double; overload;
-function herp(const y: THerpCoeff4; alpha: Double): Integer; overload;
-procedure herpCoeffs(var y: THerpCoeff4); overload;
-procedure herpCoeffs(const img: TWordDynArray2; ix, iy: Integer; out res: THerpCoeff44); overload;
-procedure herpFromCoeffs(const coeffs: THerpCoeff44; var res: THerpCoeff4; alpha: Double);
 
 procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
 procedure serpCoeffs(alpha: Double; var res: TSerpCoeffs9); overload;
-procedure serpFromCoeffsXY(const coeffs: TSerpCoeffs9; const img: TWordDynArray2; ix, iy: Integer; var res: TSerpCoeffs9);
+procedure serpFromCoeffsXY(const coeffs: TSerpCoeffs9; const img: TWordDynArray; stride, ix, iy: Integer; var res: TSerpCoeffs9);
 function serpFromCoeffs(const coeffs, data: TSerpCoeffs9): Single;
 
 function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
@@ -270,143 +259,6 @@ begin
   Result := x + (y - x) * alpha;
 end;
 
-function ilerp(x, y, alpha, maxAlpha: Integer): Integer; inline;
-begin
-  Result := x + ((y - x) * alpha) div maxAlpha;
-end;
-
-function revlerp(x, r, alpha: Double): Double;
-begin
-  Result := x + (r - x) / alpha;
-end;
-
-function herp(y0, y1, y2, y3, alpha: Double): Double;
-var
-  alpha2, alpha3: Double;
-  a0, a1, a2, a3: Double;
-begin
-  alpha2 := alpha * alpha;
-  alpha3 := alpha2 * alpha;
-
-  a3 := 0.5 * (-1 * y0 + +3 * y1 + -3 * y2 + +1 * y3);
-  a2 := 0.5 * (+2 * y0 + -5 * y1 + +4 * y2 + -1 * y3);
-  a1 := 0.5 * (-1 * y0 + +0 * y1 + +1 * y2 + +0 * y3);
-  a0 := y1;
-
-  Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
-end;
-
-function herp(const y: THerpCoeff4; alpha: Double): Integer;
-var
-  alpha2, alpha3: Double;
-  ia1, ia2, ia3: Integer;
-  a0, a1, a2, a3: Integer;
-begin
-  alpha2 := alpha * alpha;
-  alpha3 := alpha2 * alpha;
-
-  ia1 := Round(alpha * (High(SmallInt) + 1));
-  ia2 := Round(alpha2 * (High(SmallInt) + 1));
-  ia3 := Round(alpha3 * (High(SmallInt) + 1));
-
-  a3 := (-1 * y[0] + +3 * y[1] + -3 * y[2] + +1 * y[3]) shr 16;
-  a2 := (+2 * y[0] + -5 * y[1] + +4 * y[2] + -1 * y[3]) shr 16;
-  a1 := (-1 * y[0] + +0 * y[1] + +1 * y[2] + +0 * y[3]) shr 16;
-  a0 := y[1];
-
-  Result := a3 * ia3 + a2 * ia2 + a1 * ia1 + a0;
-end;
-
-function herp(y0, y1, y2, y3: Word; alpha: Double): Double;
-var
-  alpha2, alpha3: Double;
-  a0, a1, a2, a3: Double;
-begin
-  alpha2 := alpha * alpha;
-  alpha3 := alpha2 * alpha;
-
-  a3 := 0.5 * (-1 * y0 + +3 * y1 + -3 * y2 + +1 * y3);
-  a2 := 0.5 * (+2 * y0 + -5 * y1 + +4 * y2 + -1 * y3);
-  a1 := 0.5 * (-1 * y0 + +0 * y1 + +1 * y2 + +0 * y3);
-  a0 := y1;
-
-  Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
-end;
-
-function cerp(y0, y1, y2, y3, alpha: Double): Double;
-var
-  alpha2, alpha3: Double;
-  a0, a1, a2, a3: Double;
-begin
-  alpha2 := alpha * alpha;
-  alpha3 := alpha2 * alpha;
-
-  a3 := y3 - y2 - y0 + y1;
-  a2 := y0 - y1 - a3;
-  a1 := y2 - y0;
-  a0 := y1;
-
-  Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
-end;
-
-procedure herpCoeffs(var y: THerpCoeff4);
-var
-  a0, a1, a2, a3: Integer;
-begin
-  a3 := (-1 * y[0] + +3 * y[1] + -3 * y[2] + +1 * y[3]) shr 1;
-  a2 := (+2 * y[0] + -5 * y[1] + +4 * y[2] + -1 * y[3]) shr 1;
-  a1 := (-1 * y[0] + +0 * y[1] + +1 * y[2] + +0 * y[3]) shr 1;
-  a0 := y[1] shl 15;
-
-  y[3] := a3;
-  y[2] := a2;
-  y[1] := a1;
-  y[0] := a0;
-end;
-
-procedure herpCoeffs(const img: TWordDynArray2; ix, iy: Integer; out res: THerpCoeff44);
-var
-  i, j: Integer;
-  pc: PInteger;
-  pp: PWord;
-begin
-  for j := 0 to 3 do
-  begin
-    pc := @res[j, 0];
-    pp := @img[iy + j - 1, ix - 1];
-    for i := 0 to 3 do
-    begin
-      pc^ := pp^;
-      Inc(pc);
-      Inc(pp);
-    end;
-  end;
-
-  herpCoeffs(res[0]);
-  herpCoeffs(res[1]);
-  herpCoeffs(res[2]);
-  herpCoeffs(res[3]);
-end;
-
-procedure herpFromCoeffs(const coeffs: THerpCoeff44; var res: THerpCoeff4; alpha: Double);
-var
-  f1, f2, f3: Double;
-  a1, a2, a3: Integer;
-begin
-  f1 := alpha * (High(SmallInt) + 1);
-  f2 := alpha * f1;
-  f3 := alpha * f2;
-
-  a1 := round(f1);
-  a2 := round(f2);
-  a3 := round(f3);
-
-  res[0] := coeffs[0, 0] + coeffs[0, 1] * a1 + coeffs[0, 2] * a2 + coeffs[0, 3] * a3;
-  res[1] := coeffs[1, 0] + coeffs[1, 1] * a1 + coeffs[1, 2] * a2 + coeffs[1, 3] * a3;
-  res[2] := coeffs[2, 0] + coeffs[2, 1] * a1 + coeffs[2, 2] * a2 + coeffs[2, 3] * a3;
-  res[3] := coeffs[3, 0] + coeffs[3, 1] * a1 + coeffs[3, 2] * a2 + coeffs[3, 3] * a3;
-end;
-
 function Sinc(x: Double): Double; inline;
 begin
   Result := DivDef(Sin(x), x, 1.0);
@@ -492,19 +344,19 @@ end;
 
 {$endif}
 
-procedure serpFromCoeffsXY(const coeffs: TSerpCoeffs9; const img: TWordDynArray2; ix, iy: Integer; var res: TSerpCoeffs9
-  );
+procedure serpFromCoeffsXY(const coeffs: TSerpCoeffs9; const img: TWordDynArray; stride, ix, iy: Integer;
+  var res: TSerpCoeffs9);
 begin
 {$ifdef CPUX64}
-  res[-4] := serpFromCoeffsX_asm(@coeffs[0], @img[iy - 4, 0], ix);
-  res[-3] := serpFromCoeffsX_asm(@coeffs[0], @img[iy - 3, 0], ix);
-  res[-2] := serpFromCoeffsX_asm(@coeffs[0], @img[iy - 2, 0], ix);
-  res[-1] := serpFromCoeffsX_asm(@coeffs[0], @img[iy - 1, 0], ix);
-  res[ 0] := serpFromCoeffsX_asm(@coeffs[0], @img[iy + 0, 0], ix);
-  res[ 1] := serpFromCoeffsX_asm(@coeffs[0], @img[iy + 1, 0], ix);
-  res[ 2] := serpFromCoeffsX_asm(@coeffs[0], @img[iy + 2, 0], ix);
-  res[ 3] := serpFromCoeffsX_asm(@coeffs[0], @img[iy + 3, 0], ix);
-  res[ 4] := serpFromCoeffsX_asm(@coeffs[0], @img[iy + 4, 0], ix);
+  res[-4] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy - 4) * stride], ix);
+  res[-3] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy - 3) * stride], ix);
+  res[-2] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy - 2) * stride], ix);
+  res[-1] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy - 1) * stride], ix);
+  res[ 0] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy + 0) * stride], ix);
+  res[ 1] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy + 1) * stride], ix);
+  res[ 2] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy + 2) * stride], ix);
+  res[ 3] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy + 3) * stride], ix);
+  res[ 4] := serpFromCoeffsX_asm(@coeffs[0], @img[(iy + 4) * stride], ix);
 {$else}
   res[-4] := serpFromCoeffsX(coeffs, img, ix, iy - 4);
   res[-3] := serpFromCoeffsX(coeffs, img, ix, iy - 3);

@@ -37,7 +37,8 @@ type
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
 
-    FOutputImage: TWordDynArray2;
+    FOutputWidth, FOutputHeight: Integer;
+    FOutputImage: TWordDynArray;
 
     procedure CorrectAnglesFromCoords(const coords: TCorrectCoords; out startAngle, endAngle, angleInc: Double; out radiusCnt, angleCnt: Integer);
 
@@ -69,8 +70,12 @@ type
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
 
+    property OutputDPI: Integer read FOutputDPI;
+    property OutputWidth: Integer read FOutputWidth;
+    property OutputHeight: Integer read FOutputHeight;
+
     property InputScans: TInputScanDynArray read FInputScans;
-    property OutputImage: TWordDynArray2 read FOutputImage;
+    property OutputImage: TWordDynArray read FOutputImage;
   end;
 
   { TDPIAwareWriterPNG }
@@ -181,8 +186,6 @@ begin
     QuickSort(FInputScans[0], 0, High(FInputScans), SizeOf(TInputScan), @CompareInputScansCenterQuality);
     Writeln('Best centering: ', FInputScans[0].ImageShortName);
   end;
-
-  SetLength(FOutputImage, Ceil(C45RpmOuterSize * FOutputDPI), Ceil(C45RpmOuterSize * FOutputDPI));
 end;
 
 procedure TScanCorrelator.AngleInit;
@@ -806,13 +809,15 @@ var
   procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     x: TVector;
-    i, ox, cnt: Integer;
+    i, ox, cnt, yx: Integer;
     r, sn, cs, px, py, t, cx, cy, acc, bt, ct, rsk: Double;
     scan: TInputScan;
   begin
     SetLength(x, 2);
 
-    for ox := 0 to High(FOutputImage[0]) do
+    yx := AIndex * FOutputWidth;
+
+    for ox := 0 to FOutputWidth - 1 do
     begin
       r := Sqrt(Sqr(AIndex - center) + Sqr(ox - center));
 
@@ -855,14 +860,14 @@ var
         acc := DivDef(acc, cnt, 1.0);
 
         if r >= rLbl then
-          FOutputImage[AIndex, ox] := EnsureRange(Round(acc * High(Word)), 0, High(Word))
+          FOutputImage[yx + ox] := EnsureRange(Round(acc * High(Word)), 0, High(Word))
         else
-          FOutputImage[AIndex, ox] := EnsureRange(Round(acc * CLabelDepthMaxValue), 0, CLabelDepthMaxValue) * High(Word) div CLabelDepthMaxValue; // lower bit depth for label
+          FOutputImage[yx + ox] := EnsureRange(Round(acc * CLabelDepthMaxValue), 0, CLabelDepthMaxValue) * High(Word) div CLabelDepthMaxValue; // lower bit depth for label
       end
       else
       begin
         // dark outside the disc, inner inside
-        FOutputImage[AIndex, ox] := IfThen(r >= rLbl, Round(0.25 * High(Word)), Round(1.0 * High(Word)));
+        FOutputImage[yx + ox] := IfThen(r >= rLbl, Round(0.25 * High(Word)), Round(1.0 * High(Word)));
       end;
     end;
   end;
@@ -870,12 +875,16 @@ var
 begin
   WriteLn('Rebuild');
 
-  center := Length(FOutputImage) / 2.0;
+  FOutputWidth := Ceil(C45RpmOuterSize * FOutputDPI);
+  FOutputHeight := FOutputWidth;
+  SetLength(FOutputImage, sqr(FOutputWidth));
+
+  center := FOutputWidth / 2.0;
   rBeg := C45RpmAdapterSize * 0.5 * FOutputDPI;
   rEnd := C45RpmOuterSize * 0.5 * FOutputDPI;
   rLbl := C45RpmLabelOuterSize * 0.5 * FOutputDPI;
 
-  ProcThreadPool.DoParallelLocalProc(@DoY, 0, High(FOutputImage));
+  ProcThreadPool.DoParallelLocalProc(@DoY, 0, FOutputHeight - 1);
 end;
 
 procedure TScanCorrelator.Save;
@@ -888,7 +897,7 @@ begin
   WriteLn('Save ', FOutputPNGFileName);
 
   fs := TFileStream.Create(FOutputPNGFileName, fmCreate or fmShareDenyNone);
-  img := TScanImage.Create(Length(FOutputImage[0]), Length(FOutputImage));
+  img := TScanImage.Create(FOutputWidth, FOutputHeight);
   png := TDPIAwareWriterPNG.Create;
   try
     img.Image := OutputImage;

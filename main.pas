@@ -54,7 +54,7 @@ type
 
     procedure SetReduc(AImageWidth, AImageHeight: Integer);
     procedure DrawExtents(AScan: TInputScan);
-    procedure DrawImage(const Img: TWordDynArray2);
+    procedure DrawImage(const Img: TWordDynArray; AWidth, AHeight: Integer);
     procedure DrawPoints(const APoints: TPointFList; AColor: TColor);
   end;
 
@@ -79,7 +79,7 @@ begin
 
     s2t.LoadPNG;
 
-    DrawImage(s2t.Scan.Image);
+    DrawImage(s2t.Scan.Image, s2t.Scan.Width, s2t.Scan.Height);
     DrawExtents(s2t.Scan);
 
     s2t.EvalTrack;
@@ -128,13 +128,13 @@ begin
 
     if Length(sc.InputScans) > 0 then
     begin
-      DrawImage(sc.InputScans[0].LeveledImage);
+      DrawImage(sc.InputScans[0].LeveledImage, sc.InputScans[0].Width, sc.InputScans[0].Height);
       DrawExtents(sc.InputScans[0]);
     end;
 
     sc.Process;
 
-    DrawImage(sc.OutputImage);
+    DrawImage(sc.OutputImage, sc.OutputWidth, sc.OutputHeight);
 
     if Trim(sc.OutputPNGFileName) <> '' then
       sc.Save;
@@ -145,7 +145,6 @@ end;
 
 procedure TMainForm.UnitTests;
 var
-  img: TWordDynArray2;
   i: Integer;
   fn: String;
   sc1, sc100, scm: TScanCorrelator;
@@ -176,30 +175,6 @@ begin
     fltHP.Free;
   end;
   CreateWAV(1, 16, 48000, 'ut.wav', smps);
-
-  SetLength(img, 2048, 2048);
-
-  img[512, 16 * 2 + 1024] := High(Word);
-  img[1024, 128 * 2 + 1024] := High(Word);
-  img[1536, 64 * 2 + 1024] := High(Word);
-  img[2047, 256 * 2 + 1024] := High(Word);
-
-  for i := 0 to 511 do
-  begin
-    img[i + 512, round(herp(0, 16, 128, 64, i / 512) * 2 + 1024)] := High(Word);
-    img[i + 1024, round(herp(16, 128, 64, 256, i / 512) * 2 + 1024)] := High(Word);
-    img[i + 1536, round(herp(128, 64, 256, 512, i / 512) * 2 + 1024)] := High(Word);
-
-    img[i + 512, round(cerp(0, 16, 128, 64, i / 512) * 2 + 1024) - 256] := High(Word);
-    img[i + 1024, round(cerp(16, 128, 64, 256, i / 512) * 2 + 1024) - 256] := High(Word);
-    img[i + 1536, round(cerp(128, 64, 256, 512, i / 512) * 2 + 1024) - 256] := High(Word);
-
-    img[i + 512, round(lerp(16, 128, i / 512) * 2 + 1024) - 512] := High(Word);
-    img[i + 1024, round(lerp(128, 64, i / 512) * 2 + 1024) - 512] := High(Word);
-    img[i + 1536, round(lerp(64, 256, i / 512) * 2 + 1024) - 512] := High(Word);
-  end;
-
-  DrawImage(img);
 
   fn := GetTempFileName;
   sl := TStringList.Create;
@@ -234,7 +209,7 @@ begin
 
       scm.LoadScans;
       scm.Process;
-      DrawImage(scm.OutputImage);
+      DrawImage(scm.OutputImage, scm.OutputWidth, scm.OutputHeight);
       scm.Save;
     finally
       scm.Free;
@@ -332,18 +307,18 @@ begin
   Application.ProcessMessages;
 end;
 
-procedure TMainForm.DrawImage(const Img: TWordDynArray2);
+procedure TMainForm.DrawImage(const Img: TWordDynArray; AWidth, AHeight: Integer);
 var
   x, y, ix, iy: Integer;
   sc: PCardinal;
   b: Byte;
   acc: Integer;
 begin
-  SetReduc(Length(Img[0]), Length(Img));
+  SetReduc(AWidth, AHeight);
 
   Image.Picture.Bitmap.PixelFormat := pf32bit;
-  Image.Picture.Bitmap.Width := Length(Img[0]) div FReducRatio;
-  Image.Picture.Bitmap.Height := Length(Img) div FReducRatio;
+  Image.Picture.Bitmap.Width := AWidth div FReducRatio;
+  Image.Picture.Bitmap.Height := AHeight div FReducRatio;
 
   Image.Picture.Bitmap.BeginUpdate;
   try
@@ -355,7 +330,7 @@ begin
         acc  := 0;
         for iy := 0 to FReducRatio - 1 do
           for ix := 0 to FReducRatio - 1 do
-            acc += Img[(y * FReducRatio) + iy, (x * FReducRatio) + ix];
+            acc += Img[((y * FReducRatio) + iy) * AWidth + ((x * FReducRatio) + ix)];
 
         b := EnsureRange(Round(acc * (High(Byte)  / (High(Word) * Sqr(FReducRatio)))), 0, High(Byte));
 

@@ -36,14 +36,13 @@ type
     FCenterQuality: Double;
     FObjective: Double;
 
-    FImage: TWordDynArray2;
-    FLeveledImage: TWordDynArray2;
+    FWidth, FHeight: Integer;
+    FImage: TWordDynArray;
+    FLeveledImage: TWordDynArray;
 
     procedure SetRevolutionFromDPI(ADPI: Integer);
     procedure SetRevolutionFromSampleRate(ASampleRate: Integer);
     function GetImageShortName: String;
-    function GetHeight: Integer; inline;
-    function GetWidth: Integer; inline;
 
     function PowellEvalConcentricGrooveXY(const arg: TVector; obj: Pointer): TScalar;
     function PowellCrop(const x: TVector; obj: Pointer): TScalar;
@@ -61,16 +60,16 @@ type
     procedure Crop;
 
     function InRangePointD(Y, X: Double): Boolean;
-    class function GetPointD_Point(const Image: TWordDynArray2; Y, X: Double): Double;
-    class function GetPointD_Linear(const Image: TWordDynArray2; Y, X: Double): Double;
-    class function GetPointD_Sinc(const Image: TWordDynArray2; Y, X: Double): Double;
+    function GetPointD_Point(const Image: TWordDynArray; Y, X: Double): Double;
+    function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
+    function GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Double;
 
     property ImageFileName: String read FImageFileName write FImageFileName;
     property ImageShortName: String read GetImageShortName;
 
     property DPI: Integer read FDPI;
-    property Width: Integer read GetWidth;
-    property Height: Integer read GetHeight;
+    property Width: Integer read FWidth;
+    property Height: Integer read FHeight;
 
     property Center: TPointD read FCenter write FCenter;
     property ConcentricGrooveRadius: Double read FConcentricGrooveRadius;
@@ -85,8 +84,8 @@ type
     property CenterQuality: Double read FCenterQuality;
     property Objective: Double read FObjective write FObjective;
 
-    property Image: TWordDynArray2 read FImage;
-    property LeveledImage: TWordDynArray2 read FLeveledImage;
+    property Image: TWordDynArray read FImage;
+    property LeveledImage: TWordDynArray read FLeveledImage;
   end;
 
   TInputScanDynArray = array of TInputScan;
@@ -95,13 +94,13 @@ type
 
   TScanImage = class(TFPCustomImage)
   private
-    FImage: TWordDynArray2;
+    FImage: TWordDynArray;
   protected
     procedure SetInternalPixel(x,y:integer; Value:integer); override;
     function GetInternalPixel(x,y:integer) : integer; override;
     procedure SetInternalColor (x,y:integer; const Value:TFPColor); override;
   public
-    property Image: TWordDynArray2 read FImage write FImage;
+    property Image: TWordDynArray read FImage write FImage;
   end;
 
   { TDPIAwareReaderPNG }
@@ -334,16 +333,6 @@ begin
   FGrooveStartPoint.Y := besty;
 end;
 
-function TInputScan.GetHeight: Integer;
-begin
-  Result := Length(FImage);
-end;
-
-function TInputScan.GetWidth: Integer;
-begin
-  Result := Length(FImage[0]);
-end;
-
 constructor TInputScan.Create(ADefaultDPI: Integer; ASilent: Boolean);
 begin
   FDPI := ADefaultDPI;
@@ -371,10 +360,12 @@ begin
   png := TDPIAwareReaderPNG.Create;
   try
     sz := png.ImageSize(fs);
+    FWidth := sz.X;
+    FHeight := sz.Y;
 
-    img := TScanImage.Create(sz.X, sz.Y);
+    img := TScanImage.Create(FWidth, FHeight);
     try
-      SetLength(FImage, sz.Y, sz.X);
+      SetLength(FImage, FHeight * FWidth);
       img.Image := FImage;
 
       if not FSilent then WriteLn('Size:', Width:6, 'x', Height:6);
@@ -391,8 +382,8 @@ begin
     end;
 
     FLeveledImage := FImage;
-    FCenter.X := sz.X * 0.5;
-    FCenter.Y := sz.Y * 0.5;
+    FCenter.X := FWidth * 0.5;
+    FCenter.Y := FHeight * 0.5;
   finally
     png.Free;
     fs.Free;
@@ -419,12 +410,14 @@ begin
       dpiX := 0;
       dpiY := 0;
     end;
+    FWidth := szX;
+    FHeight := szY;
 
     fs.Seek(soFromBeginning, 0);
 
-    img := TScanImage.Create(szX, szY);
+    img := TScanImage.Create(FWidth, FHeight);
     try
-      SetLength(FImage, szY, szX);
+      SetLength(FImage, FHeight * FWidth);
       img.Image := FImage;
 
       if not FSilent then WriteLn('Size:', Width:6, 'x', Height:6);
@@ -441,8 +434,8 @@ begin
     end;
 
     FLeveledImage := FImage;
-    FCenter.X := szX * 0.5;
-    FCenter.Y := szY * 0.5;
+    FCenter.X := FWidth * 0.5;
+    FCenter.Y := FHeight * 0.5;
   finally
     tiff.Free;
     fs.Free;
@@ -452,7 +445,7 @@ end;
 procedure TInputScan.BrickwallLimit;
 type
   TSample = record
-    OffsetX, OffsetY, ReverseRadius: Integer;
+    Offset, ReverseRadius: Integer;
   end;
 
 const
@@ -462,7 +455,7 @@ var
   offsets: array of TSample;
   norm: Integer;
 
-  procedure GetL2Extents(ay, ax: Integer; var buf: TIntegerDynArray; out amean, astddev: Integer);
+  procedure GetL2Extents(ayx: Integer; var buf: TIntegerDynArray; out amean, astddev: Integer);
   var
     i: Integer;
     px, mn: Integer;
@@ -474,7 +467,7 @@ var
     for i := 0 to High(buf) do
     begin
       opt := offsets[i];
-      px := FImage[ay + opt.OffsetY, ax + opt.OffsetX] * opt.ReverseRadius;
+      px := FImage[ayx + opt.Offset] * opt.ReverseRadius;
       buf[i] := px;
       mn += px;
     end;
@@ -495,26 +488,28 @@ var
 
   procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
-    px, x, y: Integer;
+    px, x, y, yx: Integer;
     mn, sd: Integer;
     buf: TIntegerDynArray;
   begin
-    if not InRange(AIndex, CRadius, High(FImage) - CRadius) then
+    if not InRange(AIndex, CRadius, FHeight - 1 - CRadius) then
       Exit;
 
     SetLength(buf, Length(offsets));
 
     y := AIndex;
 
-    for x := CRadius to High(FImage[y]) - CRadius do
+    for x := CRadius to FWidth - 1 - CRadius do
     begin
-      px := FImage[y, x];
+      yx := y * Width + x;
 
-      GetL2Extents(y, x, buf, mn, sd);
+      px := FImage[yx];
+
+      GetL2Extents(yx, buf, mn, sd);
       px := (px - mn) * (High(Word) + 1) div (sd + 1) + mn;
       px := EnsureRange(px, 0, High(word));
 
-      FLeveledImage[y, x] := px;
+      FLeveledImage[yx] := px;
     end;
   end;
 
@@ -533,8 +528,7 @@ begin
 
       if r <= CRadius then
       begin
-        offsets[pos].OffsetX := x;
-        offsets[pos].OffsetY := y;
+        offsets[pos].Offset := y * Width + x;
         offsets[pos].ReverseRadius := CRadius - r + 1;
         norm += offsets[pos].ReverseRadius;
         Inc(pos);
@@ -543,9 +537,9 @@ begin
   SetLength(offsets, pos);
 
   FLeveledImage := nil;
-  SetLength(FLeveledImage, Height, Width);
+  SetLength(FLeveledImage, Height * Width);
 
-  ProcThreadPool.DoParallelLocalProc(@DoY, CRadius, High(FImage) - CRadius);
+  ProcThreadPool.DoParallelLocalProc(@DoY, CRadius, FHeight - 1 - CRadius);
 end;
 
 procedure TInputScan.FindTrack(AForcedSampleRate: Integer);
@@ -654,29 +648,31 @@ end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
 begin
-  Result := InRange(Y, 5, Length(FImage) - 7) and InRange(X, 5, Length(FImage[0]) - 7);
+  Result := InRange(Y, 5, Height - 7) and InRange(X, 5, Width - 7);
 end;
 
-class function TInputScan.GetPointD_Point(const Image: TWordDynArray2; Y, X: Double): Double;
+function TInputScan.GetPointD_Point(const Image: TWordDynArray; Y, X: Double): Double;
 begin
-  Result := Image[Trunc(Y), Trunc(X)] * (1.0 / High(Word));
+  Result := Image[Trunc(Y) * Width + Trunc(X)] * (1.0 / High(Word));
 end;
 
-class function TInputScan.GetPointD_Linear(const Image: TWordDynArray2; Y, X: Double): Double;
+function TInputScan.GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
 var
-  ix, iy: Integer;
+  ix, iy, yx: Integer;
   y1, y2: Double;
 begin
   ix := trunc(X);
   iy := trunc(Y);
 
-  y1 := lerp(Image[iy + 0, ix + 0], Image[iy + 0, ix + 1], X - ix);
-  y2 := lerp(Image[iy + 1, ix + 0], Image[iy + 1, ix + 1], X - ix);
+  yx := iy * Width + ix;
+
+  y1 := lerp(Image[yx], Image[yx + 1], X - ix);
+  y2 := lerp(Image[yx + Width], Image[yx + Width + 1], X - ix);
 
   Result := lerp(y1, y2, Y - iy) * (1.0 / High(Word));
 end;
 
-class function TInputScan.GetPointD_Sinc(const Image: TWordDynArray2; Y, X: Double): Double;
+function TInputScan.GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Double;
 var
   ix, iy: Integer;
   coeffsX, coeffsY, intData: TSerpCoeffs9;
@@ -687,7 +683,7 @@ begin
   serpCoeffs(X - ix, coeffsX);
   serpCoeffs(Y - iy, coeffsY);
 
-  serpFromCoeffsXY(coeffsX, Image, ix, iy, intData);
+  serpFromCoeffsXY(coeffsX, Image, Width, ix, iy, intData);
 
   Result := serpFromCoeffs(coeffsY, intData) * (1.0 / High(Word));
 end;
@@ -701,12 +697,12 @@ end;
 
 function TScanImage.GetInternalPixel(x, y: integer): integer;
 begin
-  Result := FImage[y, x];
+  Result := FImage[y * Width + x];
 end;
 
 procedure TScanImage.SetInternalColor(x, y: integer; const Value: TFPColor);
 begin
-  FImage[y, x] := ToLuma(Value.Red, Value.Green, Value.Blue) div cLumaDiv;
+  FImage[y * Width + x] := ToLuma(Value.Red, Value.Green, Value.Blue) div cLumaDiv;
 end;
 
 { TDPIAwareReaderPNG }

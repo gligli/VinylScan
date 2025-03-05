@@ -11,7 +11,7 @@ object MainForm: TMainForm
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 1422
+  ClientHeight = 1461
   ClientWidth = 1296
   Color = 4210752
   DoubleBuffered = True
@@ -19,6 +19,7 @@ object MainForm: TMainForm
   OnCreate = FormCreate
   OnKeyDown = FormKeyDown
   ParentDoubleBuffered = False
+  LCLVersion = '3.8.0.0'
   Scaled = False
   WindowState = wsMaximized
   object Image: TImage
