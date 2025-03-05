@@ -256,7 +256,7 @@ begin
     DrawPoints(FPoints, clLime);
 
     tc := GetTickCount64;
-    Write(Percent:6:2, '%,', DivDef(FPoints.Count / Sender.SampleRate * 1000.0, tc - FLastTickCount, 0.0):6:2, 'x', #13);
+    Write(round(Percent):3, '%,', DivDef(FPoints.Count / Sender.SampleRate * 1000.0, tc - FLastTickCount, 0.0):6:3, 'x', #13);
     FLastTickCount := tc;
 
     FPoints.Clear;
