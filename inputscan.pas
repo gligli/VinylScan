@@ -5,14 +5,18 @@ unit inputscan;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, FPReadPNG, FPReadTiff, FPTiffCmn, FPImage, PNGComn, MTProcs,
+  Classes, SysUtils, Types, Math, Graphics, FPReadPNG, FPReadTiff, FPImage, PNGComn, MTProcs,
   utils, powell;
 
 type
+  TInputScan = class;
+
   TCropData = record
     StartAngle, EndAngle: Double;
     StartAngleMirror, EndAngleMirror: Double;
   end;
+
+  TInputScanDynArray = array of TInputScan;
 
   { TInputScan }
 
@@ -87,8 +91,6 @@ type
     property Image: TWordDynArray read FImage;
     property LeveledImage: TWordDynArray read FLeveledImage;
   end;
-
-  TInputScanDynArray = array of TInputScan;
 
   { TScanImage }
 
