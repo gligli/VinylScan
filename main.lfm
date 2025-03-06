@@ -2,7 +2,7 @@ object MainForm: TMainForm
   Left = -8
   Height = 1461
   Top = -8
-  Width = 1312
+  Width = 1328
   HorzScrollBar.Increment = 240
   HorzScrollBar.Page = 640
   HorzScrollBar.Tracking = True
@@ -11,15 +11,14 @@ object MainForm: TMainForm
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 1461
-  ClientWidth = 1312
+  ClientHeight = 1422
+  ClientWidth = 1328
   Color = 4210752
   DoubleBuffered = True
   KeyPreview = True
   OnCreate = FormCreate
   OnKeyDown = FormKeyDown
   ParentDoubleBuffered = False
-  LCLVersion = '3.8.0.0'
   Scaled = False
   WindowState = wsMaximized
   object Image: TImage

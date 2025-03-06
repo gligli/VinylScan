@@ -6,11 +6,11 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Graphics, GraphType, FPCanvas, FPImage, FPWritePNG, MTProcs, fgl,
-  utils, inputscan, powell, FilterIIRLPBessel, FilterIIRHPBessel;
+  utils, inputscan, FilterIIRLPBessel, FilterIIRHPBessel;
 
 const
-  CSampleDecoderBits = 12;
-  CSampleDecoderMax = 1 shl (CSampleDecoderBits - 2);
+  CSampleDecoderBits = 10;
+  CSampleDecoderMax = 1 shl (CSampleDecoderBits - 1);
 
 type
   TScan2Track = class;
@@ -74,10 +74,10 @@ end;
 function TScan2Track.DecodeSample(radius, angleSin, angleCos: Double): Double;
 var
   ismp, upCnt: Integer;
-  r, px, py, cxa, sample, sampleMin, sampleMax, sampleMiddle, upAcc: Double;
-  smpBuf: array[-CSampleDecoderMax-1 .. CSampleDecoderMax] of Double;
+  r, px, py, cxa, sample, sampleMiddle, upAcc: Double;
+  smpBuf: array[-CSampleDecoderMax .. CSampleDecoderMax - 1] of Double;
 begin
-  cxa := C45RpmRecordingGrooveWidth * Scan.DPI / CSampleDecoderMax;
+  cxa := C45RpmRecordingGrooveWidth * Scan.DPI / (CSampleDecoderMax - 0.5);
 
   r := radius + CSampleDecoderMax * cxa;
   px := angleCos * r + Scan.Center.X;
@@ -86,35 +86,32 @@ begin
   if not Scan.InRangePointD(py, px) then
     Exit(0.0);
 
-  sampleMin := Infinity;
-  sampleMax := -Infinity;
-  for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
+  sampleMiddle := 0.0;
+  for ismp := -CSampleDecoderMax to CSampleDecoderMax - 1 do
   begin
-    r := radius + ismp * cxa;
+    r := radius + (ismp + 0.5) * cxa;
     px := angleCos * r + Scan.Center.X;
     py := angleSin * r + Scan.Center.Y;
 
     sample := Scan.GetPointD_Sinc(Scan.Image, py, px);
 
-    sampleMin := Min(sampleMin, sample);
-    sampleMax := Max(sampleMax, sample);
+    sampleMiddle += sample;
 
     smpBuf[ismp] := sample;
   end;
 
-  sampleMiddle := (sampleMax + sampleMin) * 0.5;
-  //sampleMiddle := Mean(smpBuf);
+  sampleMiddle /= CSampleDecoderMax * 2.0;
 
   upAcc := 0;
   upCnt := 0;
-  for ismp := -CSampleDecoderMax-1 to CSampleDecoderMax do
-    if smpBuf[ismp] >= sampleMiddle then
+  for ismp := -CSampleDecoderMax to CSampleDecoderMax - 1 do
+    if smpBuf[ismp] >= sampleMiddle  then
     begin
-      upAcc += ismp;
+      upAcc += ismp + 0.5;
       Inc(upCnt);
     end;
 
-  Result := DivDef(upAcc, CSampleDecoderMax * upCnt, 0.0);
+  Result := DivDef(upAcc, (CSampleDecoderMax - 0.5) * upCnt, 0.0);
 end;
 
 
@@ -147,11 +144,11 @@ begin
   try
     fltSample.FreqCut1 := CLowCutoffFreq;
     fltSample.SampleRate := FSampleRate;
-    fltSample.Order := 4;
+    fltSample.Order := 1;
 
     BuildSinCosLUT(FPointsPerRevolution, sinCosLut, Scan.GrooveStartAngle, -2.0 * Pi);
 
-    fbRatio := CutoffToFeedbackRatio(C45RpmLowCutoffFreq, FSampleRate) * C45RpmRecordingGrooveWidth * Scan.DPI;
+    fbRatio := CutoffToFeedbackRatio(CLowCutoffFreq, FSampleRate) * C45RpmRecordingGrooveWidth * Scan.DPI;
 
     rOuter := C45RpmOuterSize * 0.5 * Scan.DPI;
     iSample := 0;
@@ -181,7 +178,7 @@ begin
         pct := (radius - Scan.ConcentricGrooveRadius) / (Scan.FirstGrooveRadius - Scan.ConcentricGrooveRadius);
         pct := EnsureRange(1.0 - pct, 0.0, 1.0) * 100.0;
 
-        validSample := validSample and FOnSample(Self, px, py, pct, not validSample);
+        validSample := FOnSample(Self, px, py, pct, not validSample) and validSample;
       end;
 
     until not validSample;
