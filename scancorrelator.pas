@@ -408,6 +408,14 @@ begin
   end;
 end;
 
+function CompareInputScansObjective(Item1, Item2, UserParameter: Pointer): Integer;
+var
+  s1: ^TInputScan absolute Item1;
+  s2: ^TInputScan absolute Item2;
+begin
+  Result := CompareValue(s1^.Objective, s2^.Objective);
+end;
+
 procedure TScanCorrelator.Analyze;
 const
   CEpsX = 1e-6;
@@ -456,10 +464,12 @@ begin
   if FAnalyzeMinimize then
   begin
     ProcThreadPool.DoParallelLocalProc(@DoEval, 1, High(FInputScans));
-
     WriteLn;
+
+    QuickSort(FInputScans[0], 1, High(FInputScans), SizeOf(TInputScan), @CompareInputScansObjective);
+
     for i := 0 to High(FInputScans) do
-      WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (after)');
+      WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', RMSE: ', FInputScans[i].Objective:12:9, ' (after)');
   end;
 end;
 
@@ -480,35 +490,35 @@ end;
 
 procedure TScanCorrelator.PrepareCorrect(var coords: TCorrectCoords);
 var
-  iRadius, iAngle, iScan, cnt, radiusCnt, angleCnt, v, best: Integer;
+  iRadius, iAngle, iBaseScan, cnt, radiusCnt, angleCnt, v, best: Integer;
   t, rBeg, r, sn, cs, px, py, cx, cy, startAngle, endAngle, angleInc: Double;
-  scan: TInputScan;
+  baseScan: TInputScan;
 begin
   CorrectAnglesFromCoords(coords, startAngle, endAngle, angleInc, radiusCnt, angleCnt);
 
   SetLength(coords.PreparedData, radiusCnt * angleCnt);
 
-  // devise best scan
+  // devise best baseScan
 
   best := MaxInt;
   coords.BaseScanIdx := -1;
-  for iScan := 0 to coords.ScanIdx - 1 do
+  for iBaseScan := 0 to coords.ScanIdx - 1 do
   begin
-    scan := FInputScans[iScan];
+    baseScan := FInputScans[iBaseScan];
 
     v := 0;
     for iAngle := round(RadToDeg(startAngle)) to round(RadToDeg(endAngle)) do
     begin
-      t := NormalizeAngle(DegToRad(iAngle) + scan.RelativeAngle);
+      t := NormalizeAngle(DegToRad(iAngle) + baseScan.RelativeAngle);
 
-      v += Ord(InNormalizedAngle(t, scan.CropData.StartAngle, scan.CropData.EndAngle)) +
-           Ord(InNormalizedAngle(t, scan.CropData.StartAngleMirror, scan.CropData.EndAngleMirror));
+      v += Ord(InNormalizedAngle(t, baseScan.CropData.StartAngle, baseScan.CropData.EndAngle)) +
+           Ord(InNormalizedAngle(t, baseScan.CropData.StartAngleMirror, baseScan.CropData.EndAngleMirror));
     end;
 
     if v <= best then
     begin
       best := v;
-      coords.BaseScanIdx := iScan;
+      coords.BaseScanIdx := iBaseScan;
     end;
   end;
 
@@ -516,11 +526,11 @@ begin
 
   // build sin / cos lookup table
 
-  scan := FInputScans[coords.BaseScanIdx];
+  baseScan := FInputScans[coords.BaseScanIdx];
 
-  t  := scan.RelativeAngle;
-  cx := scan.Center.X;
-  cy := scan.Center.Y;
+  t  := baseScan.RelativeAngle;
+  cx := baseScan.Center.X;
+  cy := baseScan.Center.Y;
 
   BuildSinCosLUT(angleCnt, coords.SinCosLUT, startAngle + t, endAngle - startAngle + angleInc);
 
@@ -546,8 +556,8 @@ begin
       px := cs * r + cx;
       py := sn * r + cy;
 
-      if scan.InRangePointD(py, px) then
-        coords.PreparedData[cnt] := scan.GetPointD_Linear(scan.LeveledImage, py, px)
+      if baseScan.InRangePointD(py, px) then
+        coords.PreparedData[cnt] := baseScan.GetPointD_Linear(baseScan.LeveledImage, py, px)
       else
         coords.PreparedData[cnt] := 1000.0;
 
