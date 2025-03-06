@@ -26,6 +26,7 @@ type
   private
     FInputScans: TInputScanDynArray;
     FBrickwallLimitScans: Boolean;
+    FAnalyzeMinimize: Boolean;
     FCorrectAngles: Boolean;
     FRebuildBlended: Boolean;
     FOutputPNGFileName: String;
@@ -64,6 +65,7 @@ type
 
     property OutputPNGFileName: String read FOutputPNGFileName write FOutputPNGFileName;
     property BrickwallLimitScans: Boolean read FBrickwallLimitScans write FBrickwallLimitScans;
+    property AnalyzeMinimize: Boolean read FAnalyzeMinimize write FAnalyzeMinimize;
     property CorrectAngles: Boolean read FCorrectAngles write FCorrectAngles;
     property RebuildBlended: Boolean read FRebuildBlended write FRebuildBlended;
 
@@ -120,6 +122,11 @@ begin
   end;
 
   SpinLeave(@FLock);
+
+  FBrickwallLimitScans := False;
+  FAnalyzeMinimize := True;
+  FCorrectAngles := True;
+  FRebuildBlended := True;
 end;
 
 destructor TScanCorrelator.Destroy;
@@ -446,11 +453,14 @@ begin
   for i := 0 to High(FInputScans) do
     WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (before)');
 
-  ProcThreadPool.DoParallelLocalProc(@DoEval, 1, High(FInputScans));
+  if FAnalyzeMinimize then
+  begin
+    ProcThreadPool.DoParallelLocalProc(@DoEval, 1, High(FInputScans));
 
-  WriteLn;
-  for i := 0 to High(FInputScans) do
-    WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (after)');
+    WriteLn;
+    for i := 0 to High(FInputScans) do
+      WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (after)');
+  end;
 end;
 
 procedure TScanCorrelator.CorrectAnglesFromCoords(const coords: TCorrectCoords; out startAngle, endAngle,
@@ -703,6 +713,7 @@ begin
 
   doneCount := 0;
   ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FPerAngleX));
+  WriteLn;
 
   // cumulate
 
@@ -731,8 +742,6 @@ begin
     end;
 
   // log
-
-  WriteLn;
 
   for iscan := 1 to High(FInputScans) do
     for iangle := 0 to CCorrectAngleCount - 1 do
