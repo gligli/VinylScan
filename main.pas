@@ -23,6 +23,7 @@ type
     cbDPI: TComboBox;
     cbSR: TComboBox;
     chkBrickLim: TCheckBox;
+    chkOptimize: TCheckBox;
     edInputPNG: TEdit;
     edOutputPNG: TEdit;
     edOutputWAV: TEdit;
@@ -121,6 +122,7 @@ begin
   try
     sc.OutputPNGFileName := edOutputPNG.Text;
     sc.BrickwallLimitScans := chkBrickLim.Checked;
+    sc.AnalyzeMinimize := chkOptimize.Checked;
     sc.CorrectAngles := chkCorrect.Checked;
     sc.RebuildBlended := chkBlend.Checked;
 
@@ -222,10 +224,30 @@ begin
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
+var
+  sl: TStringList;
+  sc: TScanCorrelator;
+  s2t: TScan2Track;
 begin
   pnSettings.ControlStyle := pnSettings.ControlStyle + [csOpaque];
   Image.ControlStyle := Image.ControlStyle + [csOpaque];
   FPoints := TPointFList.Create;
+
+  sl := TStringList.Create;
+  sc := TScanCorrelator.Create(sl);
+  s2t := TScan2Track.Create;
+  try
+    chkBrickLim.Checked := sc.BrickwallLimitScans;
+    chkOptimize.Checked := sc.AnalyzeMinimize;
+    chkCorrect.Checked := sc.CorrectAngles;
+    chkBlend.Checked := sc.RebuildBlended;
+    cbDPI.Text := IntToStr(sc.OutputDPI);
+    cbSR.Text := IntToStr(s2t.SampleRate);
+  finally
+    s2t.Free;
+    sc.Free;
+    sl.Free;
+  end;
 end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
