@@ -31,6 +31,7 @@ type
 
     FCenter: TPointD;
     FConcentricGrooveRadius: Double;
+    FSkewY: Double;
     FFirstGrooveRadius: Double;
     FGrooveStartAngle: Double;
     FGrooveStartPoint: TPointD;
@@ -48,7 +49,6 @@ type
     procedure SetRevolutionFromSampleRate(ASampleRate: Integer);
     function GetImageShortName: String;
 
-    function PowellEvalConcentricGrooveXY(const arg: TVector; obj: Pointer): TScalar;
     function PowellCrop(const x: TVector; obj: Pointer): TScalar;
 
     procedure FindConcentricGroove;
@@ -83,6 +83,7 @@ type
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
 
+    property SkewY: Double read FSkewY write FSkewY;
     property RelativeAngle: Double read FRelativeAngle write FRelativeAngle;
     property CropData: TCropData read FCropData write FCropData;
     property CenterQuality: Double read FCenterQuality;
@@ -121,9 +122,6 @@ type
 implementation
 
 const
-  CRadiusXOffsets: array[TValueSign] of Double = (-C45RpmLeadOutGrooveWidth, 0, C45RpmLeadOutGrooveWidth);
-  CRadiusYFactors: array[TValueSign] of Double = (1, -2, 1);
-
   CCropAreaGroovesPerInch = 32;
 
 { TInputScan }
@@ -145,100 +143,19 @@ begin
   Result := ChangeFileExt(ExtractFileName(FImageFileName), '');
 end;
 
-function TInputScan.PowellEvalConcentricGrooveXY(const arg: TVector; obj: Pointer): TScalar;
-var
-  radiusInner, radiusOuter, halfTrackWidth: Integer;
-  results: TDoubleDynArray;
-
-  function DoRadius(ARadius: Double): Double;
-  var
-    iLut, iTrack: Integer;
-    px, py, sn, cs, radius, r, f: Double;
-    vs: TValueSign;
-  begin
-    Result := 0.0;
-
-    for iLut := 0 to High(FSinCosLUT) do
-    begin
-      cs := FSinCosLUT[iLut].Cos;
-      sn := FSinCosLUT[iLut].Sin;
-
-      for vs := Low(TValueSign) to High(TValueSign) do
-      begin
-        r := ARadius + CRadiusXOffsets[vs] * FDPI;
-        f := 0.0;
-
-        for iTrack := -halfTrackWidth to halfTrackWidth do
-        begin
-          radius := r + iTrack;
-
-          px := cs * radius + arg[0];
-          py := sn * radius + arg[1];
-
-          if InRangePointD(py, px) then
-          begin
-            f += GetPointD_Point(FLeveledImage, py, px);
-          end
-          else
-          begin
-            f += 1e6;
-          end;
-        end;
-
-        Result += f * CRadiusYFactors[vs];
-      end;
-    end;
-  end;
-
-  procedure DoThreadedRadius(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
-  begin
-    if not InRange(AIndex, radiusInner, radiusOuter) then
-      Exit;
-
-    results[AIndex - radiusInner] := DoRadius(AIndex);
-  end;
-
-var
-  iRadius: Integer;
-  f: Double;
-begin
-  halfTrackWidth := Ceil(C45RpmLeadOutGrooveWidth * 0.5 * FDPI * 0.5);
-  radiusInner := Round(C45RpmMinConcentricGroove * FDPI * 0.5);
-  radiusOuter := Round(C45RpmMaxConcentricGroove * FDPI * 0.5);
-
-  SetLength(results, radiusOuter - radiusInner + 1);
-  ProcThreadPool.DoParallelLocalProc(@DoThreadedRadius, radiusInner, radiusOuter);
-
-  Result := Infinity;
-  for iRadius := radiusInner to radiusOuter do
-  begin
-    f := results[iRadius - radiusInner];
-
-    if f < Result then
-    begin
-      Result := f;
-      FConcentricGrooveRadius := iRadius;
-    end;
-  end;
-end;
-
 procedure TInputScan.FindConcentricGroove;
 var
-  xx, yy, radiusLimit, xMargin, yMargin, iter: Integer;
-  prevf, bestf, f: Double;
+  cx, cy, k, l, radiusLimit, iLut, px, py: Integer;
+  sky, r, rsk: Double;
+  bestf, f: UInt64;
   x: TDoubleDynArray;
+  sinCosLUT: TSinCosDynArray;
+  pxArr, pyArr: TIntegerDynArray;
   extents: TRect;
 begin
-  BuildSinCosLUT(FPointsPerRevolution, FSinCosLUT);
-
-  xMargin := Width - Round(C45RpmOuterSize * FDPI);
-  yMargin := Height - Round(C45RpmOuterSize * FDPI);
-
-  if (xMargin <= 0) and (yMargin <= 0) then
-  begin
-    FCenterQuality := -PowellEvalConcentricGrooveXY([FCenter.X, FCenter.Y], nil);
-    Exit;
-  end;
+  BuildSinCosLUT(64, sinCosLUT, 0.0, Pi / 2.0);
+  SetLength(pxArr, Length(sinCosLUT));
+  SetLength(pyArr, Length(sinCosLUT));
 
   radiusLimit := Round(C45RpmOuterSize * 0.5 * FDPI) - 1;
 
@@ -247,53 +164,57 @@ begin
   extents.Right := Width - 1 - radiusLimit;
   extents.Bottom := Height - 1 - radiusLimit;
 
-  //writeln(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
+  //WriteLn(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
 
-  x := [extents.CenterPoint.X, extents.CenterPoint.Y];
+  x := [extents.CenterPoint.X, extents.CenterPoint.Y, C45RpmMaxConcentricGroove * FDPI * 0.5, 1.0];
 
-  iter := 0;
-  bestf := Infinity;
-  repeat
-    prevf := bestf;
-
-    bestf := Infinity;
-
-    if Odd(iter) then
+  bestf := 0;
+  for l := 980 to 1020 do
+  begin
+    sky := l / 1000.0;
+    for k := round(C45RpmMinConcentricGroove * FDPI * 0.5) to round(C45RpmMaxConcentricGroove * FDPI * 0.5) do
     begin
-      for xx := extents.Left to extents.Right do
-      begin
-        f := PowellEvalConcentricGrooveXY([xx, x[1]], nil);
+      r := k;
+      rsk := r * sky;
 
-        if f < bestf then
-        begin
-          bestf := f;
-          x[0] := xx;
-        end;
-      end;
-    end
-    else
-    begin
-      for yy := extents.Top to extents.Bottom do
+      for iLut := 0 to High(sinCosLUT) do
       begin
-        f := PowellEvalConcentricGrooveXY([x[0], yy], nil);
-
-        if f < bestf then
-        begin
-          bestf := f;
-          x[1] := yy;
-        end;
+        pxArr[ilut] := round(sinCosLUT[iLut].Cos * r);
+        pyArr[ilut] := round(sinCosLUT[iLut].Sin * rsk);
       end;
+
+      for cy := extents.Top to extents.Bottom do
+        for cx := extents.Left to extents.Right do
+        begin
+          f := 0;
+          for iLut := 0 to High(sinCosLUT) do
+          begin
+            px := pxArr[iLut];
+            py := pyArr[iLut];
+
+            f += FLeveledImage[(cy - py) * Width + cx + px];
+            f += FLeveledImage[(cy - py) * Width + cx - px];
+            f += FLeveledImage[(cy + py) * Width + cx + px];
+            f += FLeveledImage[(cy + py) * Width + cx - px];
+          end;
+
+          if f > bestf then
+          begin
+            bestf := f;
+            x := [cx, cy, r, sky];
+            //writeln(cx:8, cy:8, r:12:3, sky:12:6, f:16);
+          end;
+        end;
     end;
+  end;
 
-    WriteLn(ImageShortName, x[0]:12:3, x[1]:12:3, bestf:12:3);
-
-    Inc(iter);
-
-  until SameValue(bestf, prevf, 0.5);
-
-  FCenterQuality := -PowellEvalConcentricGrooveXY(x, nil); // also needed to get the proper FConcentricGrooveRadius
   FCenter.X := x[0];
   FCenter.Y := x[1];
+  FConcentricGrooveRadius := x[2];
+  FSkewY := x[3];
+  FCenterQuality := bestf;
+
+  WriteLn(ImageShortName, FCenter.X:12:3, FCenter.Y:12:3, FConcentricGrooveRadius:12:3, FSkewY:12:6, FCenterQuality:12:3);
 end;
 
 procedure TInputScan.FindGrooveStart;
@@ -341,6 +262,8 @@ begin
   FSilent := ASilent;
   FCenterQuality := NaN;
   FObjective := NaN;
+  FSkewY := 1.0;
+
   SetRevolutionFromDPI(FDPI);
 end;
 
@@ -561,6 +484,7 @@ begin
   if not FSilent then
   begin
     WriteLn('Center:', FCenter.X:12:3, ',', FCenter.Y:12:3);
+    WriteLn('SkewY:', FSkewY:12:6);
     WriteLn('FirstGrooveRadius:', FFirstGrooveRadius:12:3);
     WriteLn('ConcentricGrooveRadius:', FConcentricGrooveRadius:12:3);
     WriteLn('GrooveStartPoint:', FGrooveStartPoint.X:12:3, ',', FGrooveStartPoint.Y:12:3);

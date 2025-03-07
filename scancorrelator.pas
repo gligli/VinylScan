@@ -206,7 +206,7 @@ var
   function DoAngle(Scan: TInputScan; a: Double; var arr: TDoubleDynArray): Integer;
   var
     iRadius, iAngle, pxAggr: Integer;
-    sn, cs, cy, cx, px, py: Double;
+    sn, cs, cy, cx, px, py, sky: Double;
   begin
     Result := 0;
 
@@ -214,6 +214,7 @@ var
 
     cx := Scan.Center.X;
     cy := Scan.Center.Y;
+    sky := Scan.SkewY;
     for iAngle := 0 to CAngleCount - 1 do
     begin
       SinCos(a + DegToRad(iAngle * (360 / CAngleCount)), sn, cs);
@@ -222,7 +223,7 @@ var
       for iRadius:= rBeg to rEnd do
       begin
         px := cx + cs * iRadius;
-        py := cy + sn * iRadius;
+        py := cy + sn * iRadius * sky;
         if Scan.InRangePointD(py, px) then
           arr[Result] += Scan.GetPointD_Point(Scan.Image, py, px);
 
@@ -297,7 +298,7 @@ end;
 function TScanCorrelator.PrepareAnalyze: TDoubleDynArray;
 var
   iRadius, pos, cnt: Integer;
-  t, rBeg, px, py, cx, cy, r, ri, sn, cs: Double;
+  t, rBeg, px, py, cx, cy, r, ri, sn, cs, sky: Double;
   sinCosLUT: TSinCosDynArray;
   scan: TInputScan;
 begin
@@ -309,6 +310,7 @@ begin
   t   := scan.RelativeAngle;
   cx  := scan.Center.X;
   cy  := scan.Center.Y;
+  sky := scan.SkewY;
 
   BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
 
@@ -323,7 +325,7 @@ begin
     r := rBeg + iRadius * ri;
 
     px := cs * r + cx;
-    py := sn * r + cy;
+    py := sn * r * sky + cy;
 
     if scan.InRangePointD(py, px) then
     begin
@@ -346,7 +348,7 @@ var
   coords: PCorrectCoords absolute obj;
 
   i, iRadius, pos, cnt: Integer;
-  t, rBeg, px, py, cx, cy, r, ri, sn, cs: Double;
+  t, rBeg, px, py, cx, cy, r, ri, sn, cs, sky: Double;
   sinCosLUT: TSinCosDynArray;
   scan: TInputScan;
 begin
@@ -359,6 +361,7 @@ begin
   t := arg[0];
   cx := arg[1];
   cy := arg[2];
+  sky := scan.SkewY;
 
   BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
 
@@ -373,7 +376,7 @@ begin
     r := rBeg + iRadius * ri;
 
     px := cs * r + cx;
-    py := sn * r + cy;
+    py := sn * r * sky + cy;
 
     if scan.InRangePointD(py, px) then
     begin
@@ -466,10 +469,10 @@ begin
     ProcThreadPool.DoParallelLocalProc(@DoEval, 1, High(FInputScans));
     WriteLn;
 
-    QuickSort(FInputScans[0], 1, High(FInputScans), SizeOf(TInputScan), @CompareInputScansObjective);
-
     for i := 0 to High(FInputScans) do
       WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', RMSE: ', FInputScans[i].Objective:12:9, ' (after)');
+
+    QuickSort(FInputScans[0], 1, High(FInputScans), SizeOf(TInputScan), @CompareInputScansObjective);
   end;
 end;
 
@@ -491,7 +494,7 @@ end;
 procedure TScanCorrelator.PrepareCorrect(var coords: TCorrectCoords);
 var
   iRadius, iAngle, iBaseScan, cnt, radiusCnt, angleCnt, v, best: Integer;
-  t, rBeg, r, sn, cs, px, py, cx, cy, startAngle, endAngle, angleInc: Double;
+  t, rBeg, r, sn, cs, px, py, cx, cy, sky, startAngle, endAngle, angleInc: Double;
   baseScan: TInputScan;
 begin
   CorrectAnglesFromCoords(coords, startAngle, endAngle, angleInc, radiusCnt, angleCnt);
@@ -528,9 +531,10 @@ begin
 
   baseScan := FInputScans[coords.BaseScanIdx];
 
-  t  := baseScan.RelativeAngle;
-  cx := baseScan.Center.X;
-  cy := baseScan.Center.Y;
+  t   := baseScan.RelativeAngle;
+  cx  := baseScan.Center.X;
+  cy  := baseScan.Center.Y;
+  sky := baseScan.SkewY;
 
   BuildSinCosLUT(angleCnt, coords.SinCosLUT, startAngle + t, endAngle - startAngle + angleInc);
 
@@ -554,7 +558,7 @@ begin
       sn := coords.SinCosLUT[iAngle].Sin;
 
       px := cs * r + cx;
-      py := sn * r + cy;
+      py := sn * r * sky + cy;
 
       if baseScan.InRangePointD(py, px) then
         coords.PreparedData[cnt] := baseScan.GetPointD_Linear(baseScan.LeveledImage, py, px)
@@ -572,7 +576,7 @@ function TScanCorrelator.PowellCorrect(const arg: TVector; obj: Pointer): TScala
 var
   coords: PCorrectCoords absolute obj;
   cnt, iRadius, iScan, iAngle, radiusCnt, angleCnt: Integer;
-  t, r, rBeg, sn, cs, px, py, cx, cy, rsk, startAngle, endAngle, angleInc: Double;
+  t, r, rBeg, sn, cs, px, py, cx, cy, sky, rsk, startAngle, endAngle, angleInc: Double;
   scan: TInputScan;
 begin
   CorrectAnglesFromCoords(coords^, startAngle, endAngle, angleInc, radiusCnt, angleCnt);
@@ -580,9 +584,10 @@ begin
   iScan := coords^.ScanIdx;
   scan := FInputScans[iScan];
 
-  t  := scan.RelativeAngle;
-  cx := scan.Center.X;
-  cy := scan.Center.Y;
+  t   := scan.RelativeAngle;
+  cx  := scan.Center.X;
+  cy  := scan.Center.Y;
+  sky := scan.SkewY;
 
   // build sin / cos lookup table
 
@@ -605,7 +610,7 @@ begin
       sn := coords^.SinCosLUT[iAngle].Sin;
 
       px := cs * rsk + cx;
-      py := sn * rsk + cy;
+      py := sn * rsk * sky + cy;
 
       if scan.InRangePointD(py, px) then
       begin
@@ -830,7 +835,7 @@ var
   var
     x: TVector;
     i, ox, cnt, yx: Integer;
-    r, sn, cs, px, py, t, cx, cy, acc, bt, ct, rsk: Double;
+    r, sn, cs, px, py, t, cx, cy, sky, acc, bt, ct, rsk: Double;
     scan: TInputScan;
   begin
     SetLength(x, 2);
@@ -851,9 +856,10 @@ var
         begin
           scan := FInputScans[i];
 
-          t  := scan.RelativeAngle;
-          cx := scan.Center.X;
-          cy := scan.Center.Y;
+          t   := scan.RelativeAngle;
+          cx  := scan.Center.X;
+          cy  := scan.Center.Y;
+          sky := scan.SkewY;
 
           InterpolateX(bt, i, x);
 
@@ -863,7 +869,7 @@ var
 
           SinCos(ct, sn, cs);
           px := cs * rsk + cx;
-          py := sn * rsk + cy;
+          py := sn * rsk * sky + cy;
 
           if scan.InRangePointD(py, px) and
               (not InNormalizedAngle(ct, scan.CropData.StartAngle, scan.CropData.EndAngle) and

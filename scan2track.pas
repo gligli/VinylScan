@@ -21,10 +21,11 @@ type
 
   TScan2Track = class
   private
+    FScan: TInputScan;
+
     FOutputWAVFileName: String;
     FOnSample: TSampleEvent;
 
-    FScan: TInputScan;
     FBitsPerSample: Integer;
     FSampleRate: Integer;
     FPointsPerRevolution: Integer;
@@ -81,7 +82,7 @@ begin
 
   r := radius + CSampleDecoderMax * cxa;
   px := angleCos * r + Scan.Center.X;
-  py := angleSin * r + Scan.Center.Y;
+  py := angleSin * r * Scan.SkewY + Scan.Center.Y;
 
   if not Scan.InRangePointD(py, px) then
     Exit(0.0);
@@ -91,7 +92,7 @@ begin
   begin
     r := radius + (ismp + 0.5) * cxa;
     px := angleCos * r + Scan.Center.X;
-    py := angleSin * r + Scan.Center.Y;
+    py := angleSin * r * Scan.SkewY + Scan.Center.Y;
 
     sample := Scan.GetPointD_Sinc(Scan.Image, py, px);
 
@@ -131,7 +132,7 @@ var
   end;
 
 var
-  radius, rOuter, sn, cs, px, py, fbRatio, fSmp, ffSmp, pct: Double;
+  radius, rOuter, sn, cs, ox, oy, fbRatio, fSmp, ffSmp, pct: Double;
   iSample, iLut: Integer;
   validSample: Boolean;
   fltSample: TFilterIIRHPBessel;
@@ -172,13 +173,13 @@ begin
 
       if Assigned(FOnSample) then
       begin
-        px := cs * radius + Scan.Center.X;
-        py := sn * radius + Scan.Center.Y;
+        ox := cs * radius;
+        oy := sn * radius * Scan.SkewY;
 
-        pct := (radius - Scan.ConcentricGrooveRadius) / (Scan.FirstGrooveRadius - Scan.ConcentricGrooveRadius);
+        pct := (Sqrt(Sqr(ox) + Sqr(oy)) - Scan.ConcentricGrooveRadius) / (Scan.FirstGrooveRadius - Scan.ConcentricGrooveRadius);
         pct := EnsureRange(1.0 - pct, 0.0, 1.0) * 100.0;
 
-        validSample := FOnSample(Self, px, py, pct, not validSample) and validSample;
+        validSample := FOnSample(Self, ox + Scan.Center.X, oy + Scan.Center.Y, pct, not validSample) and validSample;
       end;
 
     until not validSample;

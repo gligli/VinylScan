@@ -278,7 +278,7 @@ begin
     DrawPoints(FPoints, clLime);
 
     tc := GetTickCount64;
-    Write(round(Percent):3, '%,', DivDef(FPoints.Count / Sender.SampleRate * 1000.0, tc - FLastTickCount, 0.0):6:3, 'x', #13);
+    Write(Percent:6:2, '%,', DivDef(FPoints.Count / Sender.SampleRate * 1000.0, tc - FLastTickCount, 0.0):6:3, 'x', #13);
     FLastTickCount := tc;
 
     FPoints.Clear;
@@ -307,11 +307,11 @@ begin
   sx := Round(AScan.GrooveStartPoint.X * FReducFactor);
   sy := Round(AScan.GrooveStartPoint.Y * FReducFactor);
   rfx := Round(AScan.FirstGrooveRadius) div FReducRatio;
-  rfy := Round(AScan.FirstGrooveRadius) div FReducRatio;
+  rfy := Round(AScan.FirstGrooveRadius * AScan.SkewY) div FReducRatio;
   rcx := Round(AScan.ConcentricGrooveRadius) div FReducRatio;
-  rcy := Round(AScan.ConcentricGrooveRadius) div FReducRatio;
+  rcy := Round(AScan.ConcentricGrooveRadius * AScan.SkewY) div FReducRatio;
   rax := Round(C45RpmAdapterSize * 0.5 * AScan.DPI) div FReducRatio;
-  ray := Round(C45RpmAdapterSize * 0.5 * AScan.DPI) div FReducRatio;
+  ray := Round(C45RpmAdapterSize * 0.5 * AScan.DPI * AScan.SkewY) div FReducRatio;
 
   C.Line(cx - 8, cy, cx + 9, cy);
   C.Line(cx, cy - 8, cx, cy + 9);
