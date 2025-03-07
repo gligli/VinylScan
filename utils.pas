@@ -58,7 +58,7 @@ const
   C45RpmInnerSize = 1.504;
   C45RpmLabelOuterSize = 3.5;
   C45RpmConcentricGroove = 3.875;
-  C45RpmMinConcentricGroove = C45RpmConcentricGroove - 0.1;
+  C45RpmMinConcentricGroove = C45RpmConcentricGroove - 0.078 * 2;
   C45RpmMaxConcentricGroove = C45RpmConcentricGroove;
   C45RpmFirstMusicGroove = 6.625;
   C45RpmLastMusicGroove = 4.25;
@@ -326,6 +326,7 @@ end;
 {$endif}
 
 {$ifdef CPUX64}
+
 procedure serpFromCoeffsXY(coeffs: PSingle; centerPx: PWORD; stride: Integer; res: PSingle); register; assembler;
 asm
   sub rsp, 16 * 5
