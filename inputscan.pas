@@ -538,7 +538,7 @@ begin
     if InRangePointD(py, px) and
         not InNormalizedAngle(bt, a0a, a0b) and not InNormalizedAngle(bt, a1a, a1b) then
     begin
-      p := GetPointD_Linear(FLeveledImage, py, px);
+      p := GetPointD_Linear(FLeveledImage, py, px) * (1.0 / High(Word));
       stdDevArr[arrPos] := p;
       Inc(arrPos);
     end;
@@ -589,7 +589,7 @@ begin
   y1 := lerp(Image[yx], Image[yx + 1], X - ix);
   y2 := lerp(Image[yx + Width], Image[yx + Width + 1], X - ix);
 
-  Result := lerp(y1, y2, Y - iy) * (1.0 / High(Word));
+  Result := lerp(y1, y2, Y - iy);
 end;
 
 function TInputScan.GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Double;
@@ -606,7 +606,7 @@ begin
 
   serpFromCoeffsXY(coeffsX, @Image[iy * Width + ix], Width, @intData[0]);
 
-  Result := serpFromCoeffs(coeffsY, @intData[0]) * (1.0 / High(Word));
+  Result := serpFromCoeffs(coeffsY, @intData[0]);
 end;
 
 { TScanImage }
