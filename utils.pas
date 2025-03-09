@@ -111,7 +111,8 @@ function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Doubl
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 
-function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
+function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double; overload;
+function MSE(const a: TWordDynArray; const b: TWordDynArray): Double; overload;
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 function SpearmanRankCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 
@@ -534,6 +535,24 @@ begin
   Result /= Length(a);
 end;
 
+function MSE(const a: TWordDynArray; const b: TWordDynArray): Double; overload;
+var
+  i: Integer;
+  acc: UInt64;
+begin
+  Assert(Length(a) = Length(b));
+
+  Result := 0.0;
+  if not Assigned(a) then
+    Exit;
+
+  acc := 0;
+  for i := 0 to High(a) do
+    acc += Sqr(a[i] - b[i]);
+
+  Result := acc / Length(a);
+end;
+
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 var
   ma, mb, num, den, dena, denb: Double;
@@ -703,14 +722,14 @@ begin
     repeat
       P1:=PData;Inc(P1,I*AItemSize);
       P2:=PData;Inc(P2,P*AItemSize);
-      while ACompareFunction(P1, P2, AUserParameter) < 0 do
+      while (I < P) and (ACompareFunction(P1, P2, AUserParameter) < 0) do
       begin
         Inc(I);
         Inc(P1,AItemSize);
       end;
       P1:=PData;Inc(P1,J*AItemSize);
       //P2:=PData;Inc(P2,P*AItemSize); already done
-      while ACompareFunction(P1, P2, AUserParameter) > 0 do
+      while (J > P) and (ACompareFunction(P1, P2, AUserParameter) > 0) do
       begin
         Dec(J);
         Dec(P1,AItemSize);
