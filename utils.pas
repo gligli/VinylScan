@@ -619,7 +619,7 @@ begin
   Assert(InRange(x, -Pi, Pi));
   Assert(InRange(xmin, -Pi, Pi));
   Assert(InRange(xmax, -Pi, Pi));
-  if xmax >= xmin then
+  if xmax > xmin then
     Result := InRange(x, xmin, xmax)
   else
     Result := InRange(x, -Pi, xmax) or InRange(x, xmin, Pi);
