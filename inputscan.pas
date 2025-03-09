@@ -64,7 +64,6 @@ type
     procedure Crop;
 
     function InRangePointD(Y, X: Double): Boolean;
-    function GetPointD_Point(const Image: TWordDynArray; Y, X: Double): Double;
     function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
     function GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Double;
 
@@ -525,7 +524,7 @@ begin
   pos := 0;
   arrPos := 0;
   repeat
-    bt := sinCosLUT[iLut].Angle;
+    bt := NormalizeAngle(sinCosLUT[iLut].Angle);
     cs := sinCosLUT[iLut].Cos;
     sn := sinCosLUT[iLut].Sin;
 
@@ -575,11 +574,6 @@ end;
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
 begin
   Result := InRange(Y, 5, Height - 7) and InRange(X, 5, Width - 7);
-end;
-
-function TInputScan.GetPointD_Point(const Image: TWordDynArray; Y, X: Double): Double;
-begin
-  Result := Image[Trunc(Y) * Width + Trunc(X)] * (1.0 / High(Word));
 end;
 
 function TInputScan.GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;

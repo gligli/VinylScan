@@ -24,6 +24,11 @@ type
     Sin, Cos, Angle: Double;
   end;
 
+  TRadiusAngle = record
+    Radius: Double;
+    Angle: Integer;
+  end;
+
   TPointDDynArray = array of TPointD;
   TPointDDynArray2 = array of TPointDDynArray;
   TByteDynArray2 = array of TByteDynArray;
@@ -32,6 +37,7 @@ type
   TDoubleDynArray2 = array of TDoubleDynArray;
   TDoubleDynArray3 = array of TDoubleDynArray2;
   TSinCosDynArray = array of TSinCos;
+  TRadiusAngleDynArray = array of TRadiusAngle;
 
   TPointFList = specialize TFPGList<TPointF>;
 
@@ -121,6 +127,7 @@ function NormalizeAngle(x: Double): Double;
 function InNormalizedAngle(x, xmin, xmax: Double): Boolean;
 
 procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TSinCosDynArray; AOriginAngle: Double = 0.0; AExtentsAngle: Double = 2.0 * Pi);
+function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle: Double): TRadiusAngleDynArray;
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray); overload;
@@ -627,9 +634,57 @@ begin
   rprp := AExtentsAngle / APointCount;
   for i := 0 to APointCount - 1 do
   begin
-    ASinCosLUT[i].Angle := NormalizeAngle(AOriginAngle + i * rprp);
+    ASinCosLUT[i].Angle := AOriginAngle + i * rprp;
     SinCos(ASinCosLUT[i].Angle, ASinCosLUT[i].Sin, ASinCosLUT[i].Cos);
   end;
+end;
+
+function CompareRadiusAngle(Item1, Item2, UserParameter: Pointer): Integer;
+var
+  ra1: ^TRadiusAngle absolute Item1;
+  ra2: ^TRadiusAngle absolute Item2;
+begin
+  Result := CompareValue(ra1^.Radius, ra2^.Radius);
+  if Result = 0 then
+    Result := CompareValue(ra1^.Angle, ra2^.Angle);
+end;
+
+function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle: Double): TRadiusAngleDynArray;
+var
+  oy, ox, cnt, rEndInt: Integer;
+  r, t, nsa, nea: Double;
+begin
+  rEndInt := Ceil(EndRadius);
+  nsa := NormalizeAngle(startAngle);
+  nea := NormalizeAngle(endAngle);
+
+  SetLength(Result, Round(Sqr(rEndInt * 2 + 1) * (EndAngle - StartAngle) / (2.0 * Pi)));
+
+  cnt := 0;
+  for oy := -rEndInt to rEndInt do
+    for ox := -rEndInt to rEndInt do
+    begin
+      r := Sqrt(sqr(oy) + sqr(ox));
+
+      if InRange(r, StartRadius, EndRadius) then
+      begin
+        t := ArcTan2(oy, ox);
+        if InNormalizedAngle(t, nsa, nea) then
+        begin
+          Assert(cnt < Length(Result));
+
+          if t < 0 then
+            t += 2.0 * Pi;
+
+          Result[cnt].Radius := r;
+          Result[cnt].Angle := Round(t / (2.0 * Pi) * High(Word));
+          Inc(cnt);
+        end;
+      end;
+    end;
+
+  SetLength(Result, cnt);
+  QuickSort(Result[0], 0, cnt - 1, SizeOf(Result[0]), @CompareRadiusAngle);
 end;
 
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
