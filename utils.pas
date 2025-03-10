@@ -664,9 +664,9 @@ var
   ra1: ^TRadiusAngle absolute Item1;
   ra2: ^TRadiusAngle absolute Item2;
 begin
-  Result := CompareValue(ra1^.Radius, ra2^.Radius);
+  Result := CompareValue(ra1^.Angle, ra2^.Angle);
   if Result = 0 then
-    Result := CompareValue(ra1^.Angle, ra2^.Angle);
+    Result := CompareValue(ra1^.Radius, ra2^.Radius);
 end;
 
 function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle: Double): TRadiusAngleDynArray;
