@@ -183,8 +183,8 @@ end;
 
 procedure TScanCorrelator.AngleInit;
 const
-  CAngleCount = 180;
-  CAggregatedPixelsInches = 0.1;
+  CAngleCount = 360;
+  CAggregatedPixelsInches = 0.2;
 var
   rBeg, rEnd, aggregatedPixelCount: Integer;
   base: TDoubleDynArray;
@@ -812,7 +812,7 @@ var
           end;
         end;
 
-        acc := DivDef(acc, cnt, 1.0);
+        acc := DivDef(acc, cnt, High(Word));
 
         if r >= rLbl then
           FOutputImage[yx + ox] := EnsureRange(Round(acc), 0, High(Word))
