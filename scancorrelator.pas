@@ -11,7 +11,7 @@ uses
 type
   TAngleScanCoords = record
     AngleIdx, ScanIdx, BaseScanIdx: Integer;
-    PreparedDataW: TWordDynArray;
+    PreparedData: TDoubleDynArray;
     RadiusAngleLUT: array of TRadiusAngle;
     SinCosLUT: TSinCosDynArray;
     WeightsLUT: TByteDynArray;
@@ -283,8 +283,8 @@ end;
 
 procedure TScanCorrelator.PrepareAnalyze(var Coords: TAngleScanCoords);
 var
-  ilut, rawTInt, ox, oy: Integer;
-  cx, cy, r, sky: Double;
+  ilut, rawTInt: Integer;
+  cx, cy, r, sky, ox, oy: Double;
   sinCosLUT: TSinCosDynArray;
   scan: TInputScan;
 begin
@@ -303,17 +303,17 @@ begin
 
   // parse image using LUTs
 
-  SetLength(Coords.PreparedDataW, Length(Coords.RadiusAngleLUT));
+  SetLength(Coords.PreparedData, Length(Coords.RadiusAngleLUT));
 
   for iLut := 0 to High(Coords.RadiusAngleLUT) do
   begin
     rawTInt := Coords.RadiusAngleLUT[iLut].Angle;
     r := Coords.RadiusAngleLUT[iLut].Radius;
 
-    ox := Round(sinCosLUT[rawTInt].Cos * r + cx);
-    oy := Round(sinCosLUT[rawTInt].Sin * r * sky + cy);
+    ox := sinCosLUT[rawTInt].Cos * r + cx;
+    oy := sinCosLUT[rawTInt].Sin * r * sky + cy;
 
-    Coords.PreparedDataW[iLut] := scan.LeveledImage[oy * scan.Width + ox];
+    Coords.PreparedData[iLut] := scan.GetPointD_Linear(scan.LeveledImage, oy, ox);
   end;
 end;
 
@@ -338,7 +338,7 @@ begin
     ox := sinCosLUT[rawTInt].Cos * r + CenterX;
     oy := sinCosLUT[rawTInt].Sin * r * SkewY + CenterY;
 
-    Result += Sqr(Coords.PreparedDataW[iLut] - scan.GetPointD_Linear(scan.LeveledImage, oy, ox));
+    Result += Sqr(Coords.PreparedData[iLut] - scan.GetPointD_Linear(scan.LeveledImage, oy, ox));
   end;
 
   Result /= Length(Coords.RadiusAngleLUT);
@@ -466,9 +466,10 @@ end;
 
 procedure TScanCorrelator.PrepareCorrect(var Coords: TAngleScanCoords);
 var
-  iAngle, iBaseScan, iLut, v, best, ox, oy, tInt, rawTInt, baseTInt: Integer;
-  cx, cy, r, sky, startAngle, endAngle, nsa, nea, bt, t, alpha: Double;
+  iAngle, iBaseScan, iLut, v, best, rawTInt: Integer;
+  cx, cy, ox, oy, r, sky, startAngle, endAngle, nsa, nea, bt, t, alpha: Double;
   baseScan: TInputScan;
+  sinCosLUT: TSinCosDynArray;
 begin
   CorrectAnglesFromCoords(Coords, startAngle, endAngle);
 
@@ -498,22 +499,25 @@ begin
 
   //WriteLn(Coords.ScanIdx:4, Coords.AngleIdx:4, Coords.BaseScanIdx:4, best:8);
 
+  baseScan := FInputScans[Coords.BaseScanIdx];
+
   // build radius / angle lookup table
 
   Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * FOutputDPI, CCorrectAreaEnd * 0.5 * FOutputDPI, startAngle, endAngle);
 
-  // build sin / cos lookup table
+  // build sin / cos lookup tables
 
-  BuildSinCosLUT(High(Word) + 1, Coords.SinCosLUT);
+  BuildSinCosLUT(High(Word) + 1, sinCosLUT, baseScan.RelativeAngle);
+  BuildSinCosLUT(High(Word) + 1, Coords.SinCosLUT, FInputScans[Coords.ScanIdx].RelativeAngle);
 
   // build weights lookup table
 
   nsa := NormalizeAngle(startAngle);
   nea := NormalizeAngle(endAngle);
-  SetLength(Coords.WeightsLUT, Length(Coords.SinCosLUT));
-  for iAngle := 0 to High(Coords.SinCosLUT) do
+  SetLength(Coords.WeightsLUT, Length(sinCosLUT));
+  for iAngle := 0 to High(sinCosLUT) do
   begin
-    bt := Coords.SinCosLUT[iAngle].Angle;
+    bt := sinCosLUT[iAngle].Angle - baseScan.RelativeAngle;
     if InNormalizedAngle(NormalizeAngle(bt), nsa, nea) then
     begin
       alpha := 1.0 - 2.0 * abs((bt - startAngle) / (endAngle - startAngle) - 0.5);
@@ -523,11 +527,8 @@ begin
 
   // parse image using LUTs
 
-  baseScan := FInputScans[Coords.BaseScanIdx];
+  SetLength(Coords.PreparedData, Length(Coords.RadiusAngleLUT));
 
-  SetLength(Coords.PreparedDataW, Length(Coords.RadiusAngleLUT));
-
-  baseTInt := Round(baseScan.RelativeAngle / (2.0 * Pi) * High(Word));
   cx := baseScan.Center.X;
   cy := baseScan.Center.Y;
   sky := baseScan.SkewY;
@@ -537,51 +538,46 @@ begin
     rawTInt := Coords.RadiusAngleLUT[iLut].Angle;
     r := Coords.RadiusAngleLUT[iLut].Radius;
 
-    tInt := (rawTInt + baseTInt) and High(Word);
+    ox := sinCosLUT[rawTInt].Cos * r + cx;
+    oy := sinCosLUT[rawTInt].Sin * r * sky + cy;
 
-    ox := Round(Coords.SinCosLUT[tInt].Cos * r + cx);
-    oy := Round(Coords.SinCosLUT[tInt].Sin * r * sky + cy);
-
-    Coords.PreparedDataW[iLut] := baseScan.LeveledImage[oy * baseScan.Width + ox];
+    Coords.PreparedData[iLut] := baseScan.GetPointD_Linear(baseScan.LeveledImage, oy, ox);
   end;
 end;
 
 function TScanCorrelator.GridSearchCorrect(ConstSkew, MulSkew: Double; const Coords: TAngleScanCoords): Double;
 var
-  iScan, iLut, tInt, rawTInt, baseTInt: Integer;
+  iScan, iLut, rawTInt: Integer;
   cx, cy, r, sky, ox, oy: Double;
-  acc: UInt64;
   scan: TInputScan;
 begin
   iScan := Coords.ScanIdx;
   scan := FInputScans[iScan];
 
-  baseTInt := Round(scan.RelativeAngle / (2.0 * Pi) * High(Word));
   cx  := scan.Center.X;
   cy  := scan.Center.Y;
   sky := scan.SkewY;
 
-  acc := 0;
+  Result := 0;
   for iLut := 0 to High(Coords.RadiusAngleLUT) do
   begin
     rawTInt := Coords.RadiusAngleLUT[iLut].Angle;
     r := Coords.RadiusAngleLUT[iLut].Radius;
 
-    tInt := (rawTInt + baseTInt) and High(Word);
     r := r + r * MulSkew + ConstSkew;
 
-    ox := Coords.SinCosLUT[tInt].Cos * r + cx;
-    oy := Coords.SinCosLUT[tInt].Sin * r * sky + cy;
+    ox := Coords.SinCosLUT[rawTInt].Cos * r + cx;
+    oy := Coords.SinCosLUT[rawTInt].Sin * r * sky + cy;
 
-    acc += Sqr((Coords.PreparedDataW[iLut] - scan.LeveledImage[Round(oy) * scan.Width + Round(ox)]) * Coords.WeightsLUT[rawTInt]);
+    Result += Sqr((Coords.PreparedData[iLut] - scan.GetPointD_Linear(scan.LeveledImage, oy, ox)) * Coords.WeightsLUT[rawTInt]);
   end;
 
-  Result := acc / Length(Coords.RadiusAngleLUT);
+  Result := Result / Length(Coords.RadiusAngleLUT);
 end;
 
 procedure TScanCorrelator.Correct;
 const
-  CConstCorrectExtents = 0.01; // inches
+  CConstCorrectExtents = 0.02; // inches
   CConstCorrectHalfCount = 100;
   CMulCorrectExtents = 0.01;
   CMulCorrectHalfCount = 100;
@@ -649,7 +645,7 @@ var
     until SameValue(prevf, bestf);
 
     // free up memory
-    SetLength(coords.PreparedDataW, 0);
+    SetLength(coords.PreparedData, 0);
     SetLength(coords.RadiusAngleLUT, 0);
     SetLength(coords.SinCosLUT, 0);
     SetLength(coords.WeightsLUT, 0);
