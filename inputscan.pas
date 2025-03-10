@@ -121,7 +121,7 @@ type
 implementation
 
 const
-  CCropAreaGroovesPerInch = 32;
+  CCropAreaGroovesPerInch = 100;
 
 { TInputScan }
 
@@ -144,11 +144,76 @@ end;
 
 procedure TInputScan.FindConcentricGroove;
 const
-  CCorneringThres = High(Byte);
+  CCorneringThres = 500;
   CPointsPerRevolution = 512;
+  CMinSkew = 985;
+  CMaxSkew = 1015;
 var
   startBuf: TWordDynArray;
   cornerbuf: TWordDynArray;
+  sinCosLUT: TSinCosDynArray;
+  stencilX: array[TValueSign] of Double;
+  stencilY: array[TValueSign] of Integer;
+  extents: TRect;
+  results: array[CMinSkew .. CMaxSkew] of record
+    Objective: Int64;
+    X: TVector;
+  end;
+
+  procedure DoSkew(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  var
+    cx, cy, k, iLut, px, py, ff: Integer;
+    sky, r: Double;
+    f: Int64;
+    vs: TValueSign;
+    pxArr, pyArr: array[TValueSign, 0 .. CPointsPerRevolution div 4 - 1] of Integer;
+  begin
+    if not InRange(AIndex, CMinSkew, CMaxSkew) then
+      Exit;
+
+    results[AIndex].Objective := Low(Int64);
+    sky := AIndex / 1000.0;
+    for k := round(C45RpmMinConcentricGroove * FDPI * 0.5) to round(C45RpmMaxConcentricGroove * FDPI * 0.5) do
+    begin
+      r := k;
+
+      for vs := Low(TValueSign) to High(TValueSign) do
+        for iLut := 0 to High(sinCosLUT) do
+        begin
+          pxArr[vs, ilut] := round(sinCosLUT[iLut].Cos * (r + stencilX[vs]));
+          pyArr[vs, ilut] := round(sinCosLUT[iLut].Sin * (r + stencilX[vs]) * sky);
+        end;
+
+      for cy := extents.Top to extents.Bottom do
+        for cx := extents.Left to extents.Right do
+        begin
+          f := 0;
+          for vs := Low(TValueSign) to High(TValueSign) do
+          begin
+            ff := 0;
+
+            for iLut := 0 to High(sinCosLUT) do
+            begin
+              px := pxArr[vs, iLut];
+              py := pyArr[vs, iLut];
+
+              ff += FLeveledImage[(cy - py) * Width + cx + px];
+              ff += FLeveledImage[(cy - py) * Width + cx - px];
+              ff += FLeveledImage[(cy + py) * Width + cx + px];
+              ff += FLeveledImage[(cy + py) * Width + cx - px];
+            end;
+
+            f += ff * stencilY[vs];
+          end;
+
+          if f > results[AIndex].Objective then
+          begin
+            results[AIndex].Objective := f;
+            results[AIndex].X := [cx, cy, r, sky];
+          end;
+        end;
+    end;
+  end;
 
   function DoXBuf(var buf: TWordDynArray; y: Integer; corr: Boolean): Double;
   var
@@ -175,16 +240,9 @@ var
   end;
 
 var
-  cx, cy, k, l, radiusLimit, maxCorner, iLut, px, py, xx, yy, ff: Integer;
-  sky, r: Double;
-  bestf, f: Int64;
-  vs: TValueSign;
+  iSkew, radiusLimit, maxCorner, xx, yy: Integer;
+  bestf: Int64;
   x: TDoubleDynArray;
-  sinCosLUT: TSinCosDynArray;
-  pxArr, pyArr: array[TValueSign] of TIntegerDynArray;
-  stencilX: array[TValueSign] of Double;
-  stencilY: array[TValueSign] of Integer;
-  extents: TRect;
 begin
   // init
 
@@ -197,56 +255,57 @@ begin
 
   // corner L/T/R/B until the record edges are reached
 
-  SetLength(startBuf, Height);
-  SetLength(cornerbuf, Height);
-  maxCorner := Width - radiusLimit * 2;
+  if extents.Left <> extents.Right then
+  begin
+    SetLength(startBuf, Height);
+    SetLength(cornerbuf, Height);
+    maxCorner := Width - radiusLimit * 2;
 
-  DoYBuf(startBuf, 0, False);
-  for xx := 0 to maxCorner do
-    if (DoYBuf(cornerbuf, xx, True) > CCorneringThres) or (xx = maxCorner) then
-    begin
-      extents.Left := xx + radiusLimit;
-      Break;
-    end;
+    DoYBuf(startBuf, 0, False);
+    for xx := 0 to maxCorner do
+      if (DoYBuf(cornerbuf, xx, True) > CCorneringThres) or (xx = maxCorner) then
+      begin
+        extents.Left := xx + radiusLimit;
+        Break;
+      end;
 
-  DoYBuf(startBuf, Width - 1, False);
-  for xx := Width - 1 downto Width - 1 - maxCorner do
-    if (DoYBuf(cornerbuf, xx, True) > CCorneringThres) or (xx = Width - 1 - maxCorner) then
-    begin
-      extents.Right := xx - radiusLimit;
-      Break;
-    end;
+    DoYBuf(startBuf, Width - 1, False);
+    for xx := Width - 1 downto Width - 1 - maxCorner do
+      if (DoYBuf(cornerbuf, xx, True) > CCorneringThres) or (xx = Width - 1 - maxCorner) then
+      begin
+        extents.Right := xx - radiusLimit;
+        Break;
+      end;
+  end;
 
-  SetLength(startBuf, Width);
-  SetLength(cornerbuf, Width);
-  maxCorner := Height - radiusLimit * 2;
+  if extents.Top <> extents.Bottom then
+  begin
+    SetLength(startBuf, Width);
+    SetLength(cornerbuf, Width);
+    maxCorner := Height - radiusLimit * 2;
 
-  DoXBuf(startBuf, 0, False);
-  for yy := 0 to maxCorner do
-    if (DoXBuf(cornerbuf, yy, True) > CCorneringThres) or (yy = maxCorner) then
-    begin
-      extents.Top := yy + radiusLimit;
-      Break;
-    end;
+    DoXBuf(startBuf, 0, False);
+    for yy := 0 to maxCorner do
+      if (DoXBuf(cornerbuf, yy, True) > CCorneringThres) or (yy = maxCorner) then
+      begin
+        extents.Top := yy + radiusLimit;
+        Break;
+      end;
 
-  DoXBuf(startBuf, Height - 1, False);
-  for yy := Height - 1 downto Height - 1 - maxCorner do
-    if (DoXBuf(cornerbuf, yy, True) > CCorneringThres) or (yy = Height - 1 - maxCorner) then
-    begin
-      extents.Bottom := yy - radiusLimit;
-      Break;
-    end;
+    DoXBuf(startBuf, Height - 1, False);
+    for yy := Height - 1 downto Height - 1 - maxCorner do
+      if (DoXBuf(cornerbuf, yy, True) > CCorneringThres) or (yy = Height - 1 - maxCorner) then
+      begin
+        extents.Bottom := yy - radiusLimit;
+        Break;
+      end;
+  end;
 
   WriteLn(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
 
   // grid search algorithm to find the concentric groove
 
   BuildSinCosLUT(CPointsPerRevolution div 4, sinCosLUT, 0.0, Pi / 2.0);
-  for vs := Low(TValueSign) to High(TValueSign) do
-  begin
-    SetLength(pxArr[vs], Length(sinCosLUT));
-    SetLength(pyArr[vs], Length(sinCosLUT));
-  end;
 
   stencilY[NegativeValue] := -1;
   stencilY[ZeroValue] := 2;
@@ -258,46 +317,15 @@ begin
 
   x := [extents.CenterPoint.X, extents.CenterPoint.Y, C45RpmConcentricGroove * FDPI * 0.5, 1.0];
 
+  ProcThreadPool.DoParallelLocalProc(@DoSkew, CMinSkew, CMaxSkew);
+
   bestf := Low(Int64);
-  for l := 980 to 1020 do
+  for iSkew := CMinSkew to CMaxSkew do
   begin
-    sky := l / 1000.0;
-    for k := round(C45RpmMinConcentricGroove * FDPI * 0.5) to round(C45RpmMaxConcentricGroove * FDPI * 0.5) do
+    if results[iSkew].Objective > bestf then
     begin
-      r := k;
-
-      for vs := Low(TValueSign) to High(TValueSign) do
-        for iLut := 0 to High(sinCosLUT) do
-        begin
-          pxArr[vs, ilut] := round(sinCosLUT[iLut].Cos * (r + stencilX[vs]));
-          pyArr[vs, ilut] := round(sinCosLUT[iLut].Sin * (r + stencilX[vs]) * sky);
-        end;
-
-      for cy := extents.Top to extents.Bottom do
-        for cx := extents.Left to extents.Right do
-        begin
-          f := 0;
-          for vs := Low(TValueSign) to High(TValueSign) do
-            for iLut := 0 to High(sinCosLUT) do
-            begin
-              px := pxArr[vs, iLut];
-              py := pyArr[vs, iLut];
-
-              ff := FLeveledImage[(cy - py) * Width + cx + px];
-              ff += FLeveledImage[(cy - py) * Width + cx - px];
-              ff += FLeveledImage[(cy + py) * Width + cx + px];
-              ff += FLeveledImage[(cy + py) * Width + cx - px];
-
-              f += ff * stencilY[vs];
-            end;
-
-          if f > bestf then
-          begin
-            bestf := f;
-            x := [cx, cy, r, sky];
-            //writeln(cx:8, cy:8, r:12:3, sky:12:6, f:16);
-          end;
-        end;
+      bestf := results[iSkew].Objective;
+      x := results[iSkew].X;
     end;
   end;
 
@@ -468,12 +496,12 @@ type
 
 const
   CRadius = 16;
-  CSigma = 0.1;
+  CSigma = 0.5;
 var
   offsets: array of TSample;
   norm: Integer;
 
-  procedure GetL2Extents(ayx: Integer; var buf: TIntegerDynArray; out amean, astddev: Integer);
+  procedure GetL2Extents(ayx: Integer; buf: PInteger; out amean, astddev: Integer);
   var
     i: Integer;
     px, mn: Integer;
@@ -482,7 +510,7 @@ var
     opt: TSample;
   begin
     mn := 0;
-    for i := 0 to High(buf) do
+    for i := 0 to High(offsets) do
     begin
       opt := offsets[i];
       px := FImage[ayx + opt.Offset] * opt.ReverseRadius;
@@ -492,7 +520,7 @@ var
     mn := mn div norm;
 
     sdAcc := 0;
-    for i := 0 to High(buf) do
+    for i := 0 to High(offsets) do
     begin
       px := buf[i];
       px -= mn;
@@ -523,7 +551,7 @@ var
 
       px := FImage[yx];
 
-      GetL2Extents(yx, buf, mn, sd);
+      GetL2Extents(yx, @buf[0], mn, sd);
       px := (px - mn) * (High(Word) + 1) div (sd + 1) + mn;
       px := EnsureRange(px, 0, High(word));
 
@@ -632,7 +660,7 @@ begin
     if InRangePointD(py, px) and
         not InNormalizedAngle(bt, a0a, a0b) and not InNormalizedAngle(bt, a1a, a1b) then
     begin
-      p := GetPointD_Linear(FLeveledImage, py, px) * (1.0 / High(Word));
+      p := GetPointD_Linear(FLeveledImage, py, px);
       stdDevArr[arrPos] := p;
       Inc(arrPos);
     end;
@@ -657,7 +685,7 @@ begin
   x[0] := NormalizeAngle(DegToRad(-30.0));
   x[1] := NormalizeAngle(DegToRad(30.0));
 
-  PowellMinimize(@PowellCrop, x, 1.0 / 360.0, 1e-6, 1e-6, MaxInt);
+  PowellMinimize(@PowellCrop, x, 1.0, 1e-6, 0.0, MaxInt);
 
   FCropData.StartAngle := NormalizeAngle(x[0]);
   FCropData.EndAngle := NormalizeAngle(x[1]);
