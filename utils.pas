@@ -65,7 +65,7 @@ const
   C45RpmLabelOuterSize = 3.5;
   C45RpmConcentricGroove = 3.875;
   C45RpmMinConcentricGroove = C45RpmConcentricGroove - 0.078 * 2;
-  C45RpmMaxConcentricGroove = C45RpmConcentricGroove;
+  C45RpmMaxConcentricGroove = C45RpmConcentricGroove + 0.078;
   C45RpmFirstMusicGroove = 6.625;
   C45RpmLastMusicGroove = 4.25;
   C45RpmAdapterSize = 1.496;
@@ -117,6 +117,7 @@ function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Doubl
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 
+function MAE(const a: TWordDynArray; const b: TWordDynArray): Double;
 function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double; overload;
 function MSE(const a: TWordDynArray; const b: TWordDynArray): Double; overload;
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
@@ -525,6 +526,25 @@ begin
       Result := x;
   end;
 end;
+
+function MAE(const a: TWordDynArray; const b: TWordDynArray): Double;
+var
+  i: Integer;
+  acc: Cardinal;
+begin
+  Assert(Length(a) = Length(b));
+
+  Result := 0.0;
+  if not Assigned(a) then
+    Exit;
+
+  acc := 0;
+  for i := 0 to High(a) do
+    acc += Abs(a[i] - b[i]);
+
+  Result := acc / Length(a);
+end;
+
 
 function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 var
