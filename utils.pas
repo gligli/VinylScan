@@ -797,14 +797,14 @@ begin
     repeat
       P1:=PData;Inc(P1,I*AItemSize);
       P2:=PData;Inc(P2,P*AItemSize);
-      while (I < P) and (ACompareFunction(P1, P2, AUserParameter) < 0) do
+      while ACompareFunction(P1, P2, AUserParameter) < 0 do
       begin
         Inc(I);
         Inc(P1,AItemSize);
       end;
       P1:=PData;Inc(P1,J*AItemSize);
       //P2:=PData;Inc(P2,P*AItemSize); already done
-      while (J > P) and (ACompareFunction(P1, P2, AUserParameter) > 0) do
+      while ACompareFunction(P1, P2, AUserParameter) > 0 do
       begin
         Dec(J);
         Dec(P1,AItemSize);
