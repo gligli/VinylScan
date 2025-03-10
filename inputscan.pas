@@ -143,59 +143,153 @@ begin
 end;
 
 procedure TInputScan.FindConcentricGroove;
+const
+  CCorneringThres = High(Byte);
+  CPointsPerRevolution = 512;
 var
-  cx, cy, k, l, radiusLimit, iLut, px, py: Integer;
-  sky, r, rsk: Double;
-  bestf, f: UInt64;
+  startBuf: TWordDynArray;
+  cornerbuf: TWordDynArray;
+
+  function DoXBuf(var buf: TWordDynArray; y: Integer; corr: Boolean): Double;
+  var
+    i: Integer;
+  begin
+    for i := 0 to Width - 1 do
+     buf[i] := FImage[y * Width + i];
+
+    Result := NaN;
+    if corr then
+      Result := MAE(startBuf, cornerbuf);
+  end;
+
+  function DoYBuf(var buf: TWordDynArray; x: Integer; corr: Boolean): Double;
+  var
+    i: Integer;
+  begin
+    for i := 0 to Height - 1 do
+     buf[i] := FImage[i * Width + x];
+
+    Result := NaN;
+    if corr then
+      Result := MAE(startBuf, cornerbuf);
+  end;
+
+var
+  cx, cy, k, l, radiusLimit, maxCorner, iLut, px, py, xx, yy, ff: Integer;
+  sky, r: Double;
+  bestf, f: Int64;
+  vs: TValueSign;
   x: TDoubleDynArray;
   sinCosLUT: TSinCosDynArray;
-  pxArr, pyArr: TIntegerDynArray;
+  pxArr, pyArr: array[TValueSign] of TIntegerDynArray;
+  stencilX: array[TValueSign] of Double;
+  stencilY: array[TValueSign] of Integer;
   extents: TRect;
 begin
-  BuildSinCosLUT(64, sinCosLUT, 0.0, Pi / 2.0);
-  SetLength(pxArr, Length(sinCosLUT));
-  SetLength(pyArr, Length(sinCosLUT));
+  // init
 
-  radiusLimit := Round(C45RpmOuterSize * 0.5 * FDPI) - 1;
+  radiusLimit := Round(C45RpmOuterSize * 0.5 * FDPI);
 
   extents.Left := radiusLimit;
   extents.Top := radiusLimit;
   extents.Right := Width - 1 - radiusLimit;
   extents.Bottom := Height - 1 - radiusLimit;
 
-  //WriteLn(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
+  // corner L/T/R/B until the record edges are reached
 
-  x := [extents.CenterPoint.X, extents.CenterPoint.Y, C45RpmMaxConcentricGroove * FDPI * 0.5, 1.0];
+  SetLength(startBuf, Height);
+  SetLength(cornerbuf, Height);
+  maxCorner := Width - radiusLimit * 2;
 
-  bestf := 0;
+  DoYBuf(startBuf, 0, False);
+  for xx := 0 to maxCorner do
+    if (DoYBuf(cornerbuf, xx, True) > CCorneringThres) or (xx = maxCorner) then
+    begin
+      extents.Left := xx + radiusLimit;
+      Break;
+    end;
+
+  DoYBuf(startBuf, Width - 1, False);
+  for xx := Width - 1 downto Width - 1 - maxCorner do
+    if (DoYBuf(cornerbuf, xx, True) > CCorneringThres) or (xx = Width - 1 - maxCorner) then
+    begin
+      extents.Right := xx - radiusLimit;
+      Break;
+    end;
+
+  SetLength(startBuf, Width);
+  SetLength(cornerbuf, Width);
+  maxCorner := Height - radiusLimit * 2;
+
+  DoXBuf(startBuf, 0, False);
+  for yy := 0 to maxCorner do
+    if (DoXBuf(cornerbuf, yy, True) > CCorneringThres) or (yy = maxCorner) then
+    begin
+      extents.Top := yy + radiusLimit;
+      Break;
+    end;
+
+  DoXBuf(startBuf, Height - 1, False);
+  for yy := Height - 1 downto Height - 1 - maxCorner do
+    if (DoXBuf(cornerbuf, yy, True) > CCorneringThres) or (yy = Height - 1 - maxCorner) then
+    begin
+      extents.Bottom := yy - radiusLimit;
+      Break;
+    end;
+
+  WriteLn(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
+
+  // grid search algorithm to find the concentric groove
+
+  BuildSinCosLUT(CPointsPerRevolution div 4, sinCosLUT, 0.0, Pi / 2.0);
+  for vs := Low(TValueSign) to High(TValueSign) do
+  begin
+    SetLength(pxArr[vs], Length(sinCosLUT));
+    SetLength(pyArr[vs], Length(sinCosLUT));
+  end;
+
+  stencilY[NegativeValue] := -1;
+  stencilY[ZeroValue] := 2;
+  stencilY[PositiveValue] := -1;
+
+  stencilX[NegativeValue] := -C45RpmLeadOutGrooveWidth * FDPI;
+  stencilX[ZeroValue] := 0;
+  stencilX[PositiveValue] := C45RpmLeadOutGrooveWidth * FDPI;
+
+  x := [extents.CenterPoint.X, extents.CenterPoint.Y, C45RpmConcentricGroove * FDPI * 0.5, 1.0];
+
+  bestf := Low(Int64);
   for l := 980 to 1020 do
   begin
     sky := l / 1000.0;
     for k := round(C45RpmMinConcentricGroove * FDPI * 0.5) to round(C45RpmMaxConcentricGroove * FDPI * 0.5) do
     begin
       r := k;
-      rsk := r * sky;
 
-      for iLut := 0 to High(sinCosLUT) do
-      begin
-        pxArr[ilut] := round(sinCosLUT[iLut].Cos * r);
-        pyArr[ilut] := round(sinCosLUT[iLut].Sin * rsk);
-      end;
+      for vs := Low(TValueSign) to High(TValueSign) do
+        for iLut := 0 to High(sinCosLUT) do
+        begin
+          pxArr[vs, ilut] := round(sinCosLUT[iLut].Cos * (r + stencilX[vs]));
+          pyArr[vs, ilut] := round(sinCosLUT[iLut].Sin * (r + stencilX[vs]) * sky);
+        end;
 
       for cy := extents.Top to extents.Bottom do
         for cx := extents.Left to extents.Right do
         begin
           f := 0;
-          for iLut := 0 to High(sinCosLUT) do
-          begin
-            px := pxArr[iLut];
-            py := pyArr[iLut];
+          for vs := Low(TValueSign) to High(TValueSign) do
+            for iLut := 0 to High(sinCosLUT) do
+            begin
+              px := pxArr[vs, iLut];
+              py := pyArr[vs, iLut];
 
-            f += FLeveledImage[(cy - py) * Width + cx + px];
-            f += FLeveledImage[(cy - py) * Width + cx - px];
-            f += FLeveledImage[(cy + py) * Width + cx + px];
-            f += FLeveledImage[(cy + py) * Width + cx - px];
-          end;
+              ff := FLeveledImage[(cy - py) * Width + cx + px];
+              ff += FLeveledImage[(cy - py) * Width + cx - px];
+              ff += FLeveledImage[(cy + py) * Width + cx + px];
+              ff += FLeveledImage[(cy + py) * Width + cx - px];
+
+              f += ff * stencilY[vs];
+            end;
 
           if f > bestf then
           begin
@@ -213,7 +307,7 @@ begin
   FSkewY := x[3];
   FCenterQuality := bestf;
 
-  WriteLn(ImageShortName, FCenter.X:12:3, FCenter.Y:12:3, FConcentricGrooveRadius:12:3, FSkewY:12:6, FCenterQuality:12:3);
+  WriteLn(ImageShortName, FCenter.X:12:3, FCenter.Y:12:3, FConcentricGrooveRadius:12:3, FSkewY:12:6, FCenterQuality:12:0);
 end;
 
 procedure TInputScan.FindGrooveStart;
@@ -374,7 +468,7 @@ type
 
 const
   CRadius = 16;
-  CSigma = 0.5;
+  CSigma = 0.1;
 var
   offsets: array of TSample;
   norm: Integer;
