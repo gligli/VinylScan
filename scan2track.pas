@@ -146,7 +146,7 @@ begin
   try
     fltSample.FreqCut1 := CLowCutoffFreq;
     fltSample.SampleRate := FSampleRate;
-    fltSample.Order := 1;
+    fltSample.Order := 4;
 
     BuildSinCosLUT(FPointsPerRevolution, sinCosLut, Scan.GrooveStartAngle, -2.0 * Pi);
 
