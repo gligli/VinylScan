@@ -75,8 +75,9 @@ end;
 function TScan2Track.DecodeSample(radius, angleSin, angleCos: Double): Double;
 var
   ismp, upCnt: Integer;
-  r, px, py, cxa, sample, sampleMiddle, upAcc: Double;
-  smpBuf: array[-CSampleDecoderMax .. CSampleDecoderMax - 1] of Double;
+  r, px, py, cxa: Double;
+  sample, sampleMiddle, upAcc: Single;
+  smpBuf: array[-CSampleDecoderMax .. CSampleDecoderMax - 1] of Single;
 begin
   cxa := C45RpmRecordingGrooveWidth * Scan.DPI / (CSampleDecoderMax - 0.5);
 

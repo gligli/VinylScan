@@ -65,7 +65,7 @@ type
 
     function InRangePointD(Y, X: Double): Boolean;
     function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
-    function GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Double;
+    function GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single;
 
     property ImageFileName: String read FImageFileName write FImageFileName;
     property ImageShortName: String read GetImageShortName;
@@ -250,8 +250,8 @@ begin
 
   extents.Left := radiusLimit;
   extents.Top := radiusLimit;
-  extents.Right := Width - 1 - radiusLimit;
-  extents.Bottom := Height - 1 - radiusLimit;
+  extents.Right := Width - radiusLimit;
+  extents.Bottom := Height - radiusLimit;
 
   // corner L/T/R/B until the record edges are reached
 
@@ -714,7 +714,7 @@ begin
   Result := lerp(y1, y2, Y - iy);
 end;
 
-function TInputScan.GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Double;
+function TInputScan.GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single;
 var
   ix, iy: Integer;
   intData: TSerpCoeffs9;
