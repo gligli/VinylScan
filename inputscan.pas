@@ -144,10 +144,10 @@ end;
 
 procedure TInputScan.FindConcentricGroove;
 const
-  CCorneringThres = 500;
+  CCorneringThres = 1.5 * (High(Byte) + 1);
   CPointsPerRevolution = 512;
-  CMinSkew = 985;
-  CMaxSkew = 1015;
+  CMinSkew = 980;
+  CMaxSkew = 1020;
 var
   startBuf: TWordDynArray;
   cornerbuf: TWordDynArray;
@@ -489,44 +489,35 @@ begin
 end;
 
 procedure TInputScan.BrickwallLimit;
-type
-  TSample = record
-    Offset, ReverseRadius: Integer;
-  end;
-
 const
   CRadius = 16;
-  CSigma = 0.5;
+  CSigma = 1;
 var
-  offsets: array of TSample;
-  norm: Integer;
+  offsets: TIntegerDynArray;
 
-  procedure GetL2Extents(ayx: Integer; buf: PInteger; out amean, astddev: Integer);
+  procedure GetL2Extents(ayx: Integer; out amean, astddev: Integer);
   var
     i: Integer;
     px, mn: Integer;
     sd: Single;
     sdAcc: UInt64;
-    opt: TSample;
   begin
     mn := 0;
     for i := 0 to High(offsets) do
     begin
-      opt := offsets[i];
-      px := FImage[ayx + opt.Offset] * opt.ReverseRadius;
-      buf[i] := px;
+      px := FImage[ayx + offsets[i]];
       mn += px;
     end;
-    mn := mn div norm;
+    mn := mn div Length(offsets);
 
     sdAcc := 0;
     for i := 0 to High(offsets) do
     begin
-      px := buf[i];
+      px := FImage[ayx + offsets[i]];
       px -= mn;
       sdAcc += px * px;
     end;
-    sd := Sqrt(sdAcc div norm);
+    sd := Sqrt(sdAcc div Length(offsets));
 
     amean := mn;
     astddev := round(CSigma * sd);
@@ -536,12 +527,9 @@ var
   var
     px, x, y, yx: Integer;
     mn, sd: Integer;
-    buf: TIntegerDynArray;
   begin
     if not InRange(AIndex, CRadius, FHeight - 1 - CRadius) then
       Exit;
-
-    SetLength(buf, Length(offsets));
 
     y := AIndex;
 
@@ -551,7 +539,7 @@ var
 
       px := FImage[yx];
 
-      GetL2Extents(yx, @buf[0], mn, sd);
+      GetL2Extents(yx, mn, sd);
       px := (px - mn) * (High(Word) + 1) div (sd + 1) + mn;
       px := EnsureRange(px, 0, High(word));
 
@@ -566,7 +554,6 @@ begin
 
   SetLength(offsets, Sqr(CRadius * 2 + 1));
   pos := 0;
-  norm := 0;
   for y := -CRadius to CRadius do
     for x := -CRadius to CRadius do
     begin
@@ -574,9 +561,7 @@ begin
 
       if r <= CRadius then
       begin
-        offsets[pos].Offset := y * Width + x;
-        offsets[pos].ReverseRadius := CRadius - r + 1;
-        norm += offsets[pos].ReverseRadius;
+        offsets[pos] := y * Width + x;
         Inc(pos);
       end;
     end;
