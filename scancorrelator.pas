@@ -28,6 +28,7 @@ type
     FAnalyzeMinimize: Boolean;
     FCorrectAngles: Boolean;
     FRebuildBlended: Boolean;
+    FRebuildScaled: Boolean;
     FOutputPNGFileName: String;
     FOutputDPI: Integer;
     FLock: TSpinlock;
@@ -63,6 +64,7 @@ type
     property AnalyzeMinimize: Boolean read FAnalyzeMinimize write FAnalyzeMinimize;
     property CorrectAngles: Boolean read FCorrectAngles write FCorrectAngles;
     property RebuildBlended: Boolean read FRebuildBlended write FRebuildBlended;
+    property RebuildScaled: Boolean read FRebuildScaled write FRebuildScaled;
 
     property OutputDPI: Integer read FOutputDPI;
     property OutputWidth: Integer read FOutputWidth;
@@ -117,6 +119,7 @@ begin
   FAnalyzeMinimize := True;
   FCorrectAngles := True;
   FRebuildBlended := True;
+  FRebuildScaled := True;
 end;
 
 destructor TScanCorrelator.Destroy;
@@ -158,7 +161,7 @@ procedure TScanCorrelator.LoadScans;
   end;
 
 var
-  i: Integer;
+  i, dpi: Integer;
 begin
   WriteLn('LoadScans');
 
@@ -166,9 +169,11 @@ begin
 
   if Length(FInputScans) > 0 then
   begin
-    FOutputDPI := FInputScans[0].DPI;
+    dpi := FInputScans[0].DPI;
     for i := 1 to High(FInputScans) do
-      Assert(FInputScans[i].DPI = FOutputDPI, 'InputScans mixed DPIs!');
+      Assert(FInputScans[i].DPI = dpi, 'InputScans mixed DPIs!');
+    if FRebuildScaled then
+      FOutputDPI := dpi;
   end;
 
   WriteLn('DPI:', FOutputDPI:6);
@@ -270,9 +275,9 @@ begin
 
   SetLength(base, FInputScans[0].Width * CAngleCount);
 
-  aggregatedPixelCount := Round(CAggregatedPixelsInches * FOutputDPI);
-  rBeg := Round(CAnalyzeAreaBegin * 0.5 * FOutputDPI);
-  rEnd := Round(CAnalyzeAreaEnd * 0.5 * FOutputDPI);
+  aggregatedPixelCount := Round(CAggregatedPixelsInches * FInputScans[0].DPI);
+  rBeg := Round(CAnalyzeAreaBegin * 0.5 * FInputScans[0].DPI);
+  rEnd := Round(CAnalyzeAreaEnd * 0.5 * FInputScans[0].DPI);
 
   pos := DoAngle(FInputScans[0], 0, base);
 
@@ -295,7 +300,7 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * FOutputDPI, CAnalyzeAreaEnd * 0.5 * FOutputDPI, 0.0, 2.0 * Pi);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * scan.DPI, CAnalyzeAreaEnd * 0.5 * scan.DPI, 0.0, 2.0 * Pi);
 
   // build sin / cos lookup table
 
@@ -503,7 +508,7 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * FOutputDPI, CCorrectAreaEnd * 0.5 * FOutputDPI, startAngle, endAngle);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, startAngle, endAngle);
 
   // build sin / cos lookup tables
 
@@ -614,7 +619,7 @@ var
       begin
         for c := -CConstCorrectHalfCount to CConstCorrectHalfCount do
         begin
-          ConstSkew := c * CConstCorrectExtents / CConstCorrectHalfCount * FOutputDPI;
+          ConstSkew := c * CConstCorrectExtents / CConstCorrectHalfCount * FInputScans[coords.ScanIdx].DPI;
 
           f := GridSearchCorrect(ConstSkew, bestMulSkew, coords);
 
@@ -760,7 +765,7 @@ var
   var
     x: TVector;
     i, ox, cnt, yx: Integer;
-    r, sn, cs, px, py, t, cx, cy, sky, acc, bt, ct, rsk: Double;
+    r, sn, cs, px, py, t, cx, cy, sky, acc, bt, ct, rsk, d2d: Double;
     scan: TInputScan;
   begin
     SetLength(x, 2);
@@ -781,6 +786,8 @@ var
         begin
           scan := FInputScans[i];
 
+          d2d := scan.DPI / FOutputDPI;
+
           t   := scan.RelativeAngle;
           cx  := scan.Center.X;
           cy  := scan.Center.Y;
@@ -788,7 +795,7 @@ var
 
           InterpolateX(bt, i, x);
 
-          rsk := r + r * x[1] + x[0];
+          rsk := r * d2d + r * d2d * x[1] + x[0];
 
           ct := NormalizeAngle(bt + t);
 

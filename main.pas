@@ -19,6 +19,7 @@ type
     btScan2Track: TButton;
     btScansCorrelator: TButton;
     chkBlend: TCheckBox;
+    chkDefaultDPI: TCheckBox;
     chkCorrect: TCheckBox;
     cbDPI: TComboBox;
     cbSR: TComboBox;
@@ -125,6 +126,7 @@ begin
     sc.AnalyzeMinimize := chkOptimize.Checked;
     sc.CorrectAngles := chkCorrect.Checked;
     sc.RebuildBlended := chkBlend.Checked;
+    sc.RebuildScaled := not chkDefaultDPI.Checked;
 
     sc.LoadScans;
 
@@ -241,6 +243,7 @@ begin
     chkOptimize.Checked := sc.AnalyzeMinimize;
     chkCorrect.Checked := sc.CorrectAngles;
     chkBlend.Checked := sc.RebuildBlended;
+    chkDefaultDPI.Checked := not sc.RebuildScaled;
     cbDPI.Text := IntToStr(sc.OutputDPI);
     cbSR.Text := IntToStr(s2t.SampleRate);
   finally

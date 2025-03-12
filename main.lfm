@@ -2,7 +2,7 @@ object MainForm: TMainForm
   Left = -8
   Height = 1461
   Top = -8
-  Width = 1328
+  Width = 1344
   HorzScrollBar.Increment = 240
   HorzScrollBar.Page = 640
   HorzScrollBar.Tracking = True
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
   ClientHeight = 1422
-  ClientWidth = 1328
+  ClientWidth = 1344
   Color = 4210752
   DoubleBuffered = True
   KeyPreview = True
@@ -104,7 +104,7 @@ object MainForm: TMainForm
       Top = 104
       Width = 131
       Caption = 'Scans correlator'
-      TabOrder = 12
+      TabOrder = 13
       OnClick = btScansCorrelatorClick
     end
     object btScan2Track: TButton
@@ -113,7 +113,7 @@ object MainForm: TMainForm
       Top = 168
       Width = 131
       Caption = 'Scan to track'
-      TabOrder = 15
+      TabOrder = 16
       OnClick = btScan2TrackClick
     end
     object cbDPI: TComboBox
@@ -132,7 +132,7 @@ object MainForm: TMainForm
       )
       ParentShowHint = False
       ShowHint = True
-      TabOrder = 13
+      TabOrder = 14
       Text = '2400'
     end
     object btInPNGs: TButton
@@ -187,13 +187,13 @@ object MainForm: TMainForm
       )
       ParentShowHint = False
       ShowHint = True
-      TabOrder = 14
+      TabOrder = 15
       Text = '48000'
     end
     object chkCorrect: TCheckBox
       Left = 264
       Height = 19
-      Top = 48
+      Top = 46
       Width = 94
       Caption = 'Correct angles'
       TabOrder = 10
@@ -201,7 +201,7 @@ object MainForm: TMainForm
     object chkBlend: TCheckBox
       Left = 264
       Height = 19
-      Top = 68
+      Top = 65
       Width = 104
       Caption = 'Rebuild blended'
       TabOrder = 11
@@ -217,10 +217,18 @@ object MainForm: TMainForm
     object chkOptimize: TCheckBox
       Left = 264
       Height = 19
-      Top = 28
+      Top = 27
       Width = 116
       Caption = 'Analyze minimizes'
       TabOrder = 9
+    end
+    object chkDefaultDPI: TCheckBox
+      Left = 264
+      Height = 19
+      Top = 84
+      Width = 133
+      Caption = 'Rebuild to default DPI'
+      TabOrder = 12
     end
   end
   object odInPNGs: TOpenDialog
