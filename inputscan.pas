@@ -582,7 +582,7 @@ begin
   else
     SetRevolutionFromDPI(FDPI);
 
-  FFirstGrooveRadius := C45RpmFirstMusicGroove * FDPI * 0.5;
+  FFirstGrooveRadius := (C45RpmFirstMusicGroove + C45RpmOuterSize) * 0.5 * FDPI * 0.5;
 
   FindConcentricGroove;
   FindGrooveStart;
