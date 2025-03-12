@@ -96,7 +96,7 @@ const
 
   CCorrectAngleCount = 36;
   CCorrectAreaBegin = C45RpmInnerSize;
-  CCorrectAreaEnd = C45RpmFirstMusicGroove;
+  CCorrectAreaEnd = C45RpmOuterSize;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
@@ -211,7 +211,7 @@ var
         px := cx + cs * iRadius;
         py := cy + sn * iRadius * sky;
         if Scan.InRangePointD(py, px) then
-          arr[Result] += Scan.Image[Round(py) * Scan.Width + Round(px)];
+          arr[Result] += Scan.GetPointD_Linear(Scan.LeveledImage, py, px);
 
         Inc(pxAggr);
         if pxAggr >= aggregatedPixelCount then
@@ -373,8 +373,8 @@ end;
 
 procedure TScanCorrelator.Analyze;
 const
-  CEpsX = 1e-5;
-  CScale = 1e-9;
+  CEpsX = 1e-6;
+  CScale = 1e-8;
 var
   baseCoords: TAngleScanCoords;
 
