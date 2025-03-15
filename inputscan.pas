@@ -693,7 +693,7 @@ begin
   end
   else
   begin
-    WriteLn(ImageFileName, ', CenterX:', FCenter.X:10:3, ', CenterY:', FCenter.Y:10:3, ', ConcentricGrooveRadius:', FConcentricGrooveRadius:10:3, ', SkewY:', FSkewY:9:6, ', CenterQuality:', FCenterQuality:12:3);
+    WriteLn(ImageFileName, ', CenterX:', FCenter.X:9:3, ', CenterY:', FCenter.Y:9:3, ', ConcentricGroove:', FConcentricGrooveRadius:10:3, ', SkewY:', FSkewY:9:6, ', Quality:', FCenterQuality:12:3);
   end;
 end;
 
@@ -705,6 +705,7 @@ var
   isGoodPart: Boolean;
   partsPos: array[Boolean] of Integer;
   partsSDArr: array[Boolean] of TDoubleDynArray;
+  ra: ^TRadiusAngle;
 begin
   Result := 1e6;
 
@@ -726,10 +727,12 @@ begin
 
   for iLut := 0 to High(radiusAngleLut^) do
   begin
-    bt := radiusAngleLut^[iLut].Angle;
-    cs := radiusAngleLut^[iLut].Cos;
-    sn := radiusAngleLut^[iLut].Sin;
-    r := radiusAngleLut^[iLut].Radius;
+    ra := @radiusAngleLut^[iLut];
+
+    bt := ra^.Angle;
+    cs := ra^.Cos;
+    sn := ra^.Sin;
+    r := ra^.Radius;
 
     px := cs * r + cx;
     py := sn * r + cy;

@@ -287,6 +287,7 @@ var
   ilut: Integer;
   cx, cy, r, sky, ox, oy: Double;
   scan: TInputScan;
+  ra: ^TRadiusAngle;
 begin
   scan := FInputScans[0];
   cx  := scan.Center.X;
@@ -302,11 +303,13 @@ begin
 
   for iLut := 0 to High(Coords.RadiusAngleLUT) do
   begin
-    r := Coords.RadiusAngleLUT[iLut].Radius;
-    ox := Coords.RadiusAngleLUT[iLut].Cos * r + cx;
-    oy := Coords.RadiusAngleLUT[iLut].Sin * r * sky + cy;
+    ra := @Coords.RadiusAngleLUT[iLut];
 
-    Coords.RadiusAngleLUT[iLut].TagValue := scan.GetPointD_Linear(scan.LeveledImage, oy, ox);
+    r := ra^.Radius;
+    ox := ra^.Cos * r + cx;
+    oy := ra^.Sin * r * sky + cy;
+
+    ra^.TagValue := scan.GetPointD_Linear(scan.LeveledImage, oy, ox);
   end;
 end;
 
@@ -317,6 +320,7 @@ var
   iScan, iGrad, ilut: Integer;
   r, px, py, sn, cs, angle, centerX, centerY, skewY, mseInt, gix, giy, gmseInt: Double;
   scan: TInputScan;
+  ra: ^TRadiusAngle;
 begin
   centerX := arg[0];
   centerY := arg[1];
@@ -333,16 +337,18 @@ begin
 
   for iLut := 0 to High(coords^.RadiusAngleLUT) do
   begin
-    r := coords^.RadiusAngleLUT[iLut].Radius;
-    cs := coords^.RadiusAngleLUT[iLut].Cos;
-    sn := coords^.RadiusAngleLUT[iLut].Sin;
+    ra := @coords^.RadiusAngleLUT[iLut];
+
+    r := ra^.Radius;
+    cs := ra^.Cos;
+    sn := ra^.Sin;
 
     px := cs * r + centerX;
     py := sn * r * skewY + centerY;
 
     if scan.InRangePointD(py, px) then
     begin
-      mseInt := coords^.RadiusAngleLUT[iLut].TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px);
+      mseInt := ra^.TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px);
       func += Sqr(mseInt);
 
       if Assigned(grad) then
@@ -571,6 +577,7 @@ var
   iAngle, iBaseScan, iLut, v, best: Integer;
   cx, cy, px, py, r, sky, startAngle, endAngle, bt, t, alpha: Double;
   baseScan: TInputScan;
+  ra: ^TRadiusAngle;
 begin
   Result := True;
   Coords.BaseScanIdx := 0;
@@ -621,11 +628,13 @@ begin
 
   for iLut := 0 to High(Coords.RadiusAngleLUT) do
   begin
-    bt := Coords.RadiusAngleLUT[iLut].Angle;
+    ra := @Coords.RadiusAngleLUT[iLut];
+
+    bt := ra^.Angle;
     if InNormalizedAngle(bt, startAngle, endAngle) then
     begin
       alpha := 1.0 - 2.0 * abs(NormalizedAngleDiff(startAngle, bt) / NormalizedAngleDiff(startAngle, endAngle) - 0.5);
-      Coords.RadiusAngleLUT[iLut].TagWeight := alpha;
+      ra^.TagWeight := alpha;
     end;
   end;
 
@@ -639,14 +648,16 @@ begin
 
   for iLut := 0 to High(Coords.RadiusAngleLUT) do
   begin
-    r := Coords.RadiusAngleLUT[iLut].Radius;
-    px := Coords.RadiusAngleLUT[iLut].Cos * r + cx;
-    py := Coords.RadiusAngleLUT[iLut].Sin * r * sky + cy;
+    ra := @Coords.RadiusAngleLUT[iLut];
+
+    r := ra^.Radius;
+    px := ra^.Cos * r + cx;
+    py := ra^.Sin * r * sky + cy;
 
     if baseScan.InRangePointD(py, px) then
-      Coords.RadiusAngleLUT[iLut].TagValue := baseScan.GetPointD_Linear(baseScan.LeveledImage, py, px)
+      ra^.TagValue := baseScan.GetPointD_Linear(baseScan.LeveledImage, py, px)
     else
-      Coords.RadiusAngleLUT[iLut].TagValue += 1e6;
+      ra^.TagValue += 1e6;
   end;
 
   // prepare for iterations
@@ -659,6 +670,7 @@ var
   iScan, iLut: Integer;
   cx, cy, r, sky, px, py, cs, sn: Double;
   scan: TInputScan;
+  ra: ^TRadiusAngle;
 begin
   iScan := Coords.ScanIdx;
   scan := FInputScans[iScan];
@@ -670,9 +682,11 @@ begin
   Result := 0;
   for iLut := 0 to High(Coords.RadiusAngleLUT) do
   begin
-    r := Coords.RadiusAngleLUT[iLut].Radius;
-    cs := Coords.RadiusAngleLUT[iLut].Cos;
-    sn := Coords.RadiusAngleLUT[iLut].Sin;
+    ra := @Coords.RadiusAngleLUT[iLut];
+
+    r := ra^.Radius;
+    cs := ra^.Cos;
+    sn := ra^.Sin;
 
     r := r + r * (MulSkew + r * SqrSkew) + ConstSkew;
 
@@ -680,7 +694,7 @@ begin
     py := sn * r * sky + cy;
 
     if scan.InRangePointD(py, px) then
-      Result += Sqr((Coords.RadiusAngleLUT[iLut].TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px)) * Coords.RadiusAngleLUT[iLut].TagWeight)
+      Result += Sqr((ra^.TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px)) * ra^.TagWeight)
     else
       Result += Sqr(1e6);
   end;
