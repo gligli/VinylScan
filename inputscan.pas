@@ -404,7 +404,7 @@ begin
 
   X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius, FSkewY];
 
-  ff := GradientDescentMinimize(@GradientConcentricGroove, X, [0.0005, 0.0005, 0.0002, 0.0000005], 1e-8, True);
+  ff := GradientDescentMinimize(@GradientConcentricGroove, X, [0.0005, 0.0005, 0.0002, 0.0000005], 1e-6, True);
 
   FCenter.X := X[0];
   FCenter.Y := X[1];
