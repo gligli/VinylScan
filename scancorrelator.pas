@@ -555,11 +555,11 @@ begin
     startAngle := NaN;
     endAngle := NaN;
 
-    WriteLn(scan.ImageShortName, RadToDeg(angle):12:6, startAngle:12:6, endAngle:12:6);
+    //WriteLn(scan.ImageShortName, RadToDeg(angle):12:6, startAngle:12:6, endAngle:12:6);
   end
   else
   begin
-    WriteLn(scan.ImageShortName, RadToDeg(angle):12:6, RadToDeg(startAngle):12:6, RadToDeg(endAngle):12:6);
+    //WriteLn(scan.ImageShortName, RadToDeg(angle):12:6, RadToDeg(startAngle):12:6, RadToDeg(endAngle):12:6);
   end;
 
   AStartAngle := startAngle;
@@ -569,7 +569,7 @@ end;
 function TScanCorrelator.PrepareCorrect(var Coords: TAngleScanCoords): Boolean;
 var
   iAngle, iBaseScan, iLut, v, best: Integer;
-  cx, cy, px, py, r, sky, startAngle, endAngle, middleAngle, bt, t, alpha: Double;
+  cx, cy, px, py, r, sky, startAngle, endAngle, bt, t, alpha: Double;
   baseScan: TInputScan;
 begin
   Result := True;

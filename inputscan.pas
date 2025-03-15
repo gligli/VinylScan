@@ -679,7 +679,7 @@ begin
   end
   else
   begin
-    WriteLn(ImageFileName, ', CenterX:', FCenter.X:12:3, ', CenterY:', FCenter.Y:12:3, ', ConcentricGrooveRadius:', FConcentricGrooveRadius:12:3, ', SkewY:', FSkewY:9:6, ', CenterQuality:', FCenterQuality:9:3);
+    WriteLn(ImageFileName, ', CenterX:', FCenter.X:10:3, ', CenterY:', FCenter.Y:10:3, ', ConcentricGrooveRadius:', FConcentricGrooveRadius:10:3, ', SkewY:', FSkewY:9:6, ', CenterQuality:', FCenterQuality:12:3);
   end;
 end;
 
