@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Graphics, FPReadPNG, FPReadTiff, FPImage, PNGComn, MTProcs,
-  utils, powell, minasa, Ap, conv;
+  utils, powell;
 
 type
   TInputScan = class;
@@ -52,8 +52,8 @@ type
     procedure GradientConcentricGroove(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
     function PowellCrop(const x: TVector; obj: Pointer): TScalar;
 
-    procedure FindConcentricGroove;
-    procedure FindConcentricGroove2;
+    procedure FindConcentricGroove_GridSearch(ALowPrecision: Boolean);
+    procedure FindConcentricGroove_Gradient;
     procedure FindGrooveStart;
   public
     constructor Create(ADefaultDPI: Integer = 2400; ASilent: Boolean = False);
@@ -142,12 +142,13 @@ begin
   Result := ChangeFileExt(ExtractFileName(FImageFileName), '');
 end;
 
-procedure TInputScan.FindConcentricGroove;
+procedure TInputScan.FindConcentricGroove_GridSearch(ALowPrecision: Boolean);
 const
   CCorneringThres = 1.5 * (High(Byte) + 1);
   CPointsPerRevolution = 512;
-  CMinSkew = 980;
-  CMaxSkew = 1020;
+  CSkewDivisor = 1000.0;
+  CMinSkew = round(0.98 * CSkewDivisor);
+  CMaxSkew = round(1.02 * CSkewDivisor);
 var
   startBuf: TWordDynArray;
   cornerbuf: TWordDynArray;
@@ -162,19 +163,24 @@ var
 
   procedure DoSkew(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
-    cx, cy, k, iLut, px, py, ff: Integer;
+    cx, cy, k, iLut, px, py, ff, resIdx: Integer;
     sky, r: Double;
     f: Int64;
     vs: TValueSign;
     pxArr, pyArr: array[TValueSign, 0 .. CPointsPerRevolution div 4 - 1] of Integer;
   begin
-    if not InRange(AIndex, CMinSkew, CMaxSkew) then
+    resIdx := AIndex * (1 + Ord(ALowPrecision));
+    if not InRange(resIdx, CMinSkew, CMaxSkew) then
       Exit;
 
-    results[AIndex].Objective := Low(Int64);
-    sky := AIndex / 1000.0;
+    results[resIdx].Objective := Low(Int64);
+
+    sky := resIdx / CSkewDivisor;
     for k := round(C45RpmMinConcentricGroove * FDPI * 0.5) to round(C45RpmMaxConcentricGroove * FDPI * 0.5) do
     begin
+      if ALowPrecision and Odd(k) then
+        Continue;
+
       r := k;
 
       for vs := Low(TValueSign) to High(TValueSign) do
@@ -185,8 +191,15 @@ var
         end;
 
       for cy := extents.Top to extents.Bottom do
+      begin
+        if ALowPrecision and Odd(cy) then
+          Continue;
+
         for cx := extents.Left to extents.Right do
         begin
+          if ALowPrecision and Odd(cx) then
+            Continue;
+
           f := 0;
           for vs := Low(TValueSign) to High(TValueSign) do
           begin
@@ -206,12 +219,13 @@ var
             f += ff * stencilY[vs];
           end;
 
-          if f > results[AIndex].Objective then
+          if f > results[resIdx].Objective then
           begin
-            results[AIndex].Objective := f;
-            results[AIndex].X := [cx, cy, r, sky];
+            results[resIdx].Objective := f;
+            results[resIdx].X := [cx, cy, r, sky];
           end;
         end;
+      end;
     end;
   end;
 
@@ -240,7 +254,7 @@ var
   end;
 
 var
-  iSkew, radiusLimit, maxCorner, xx, yy: Integer;
+  iRes, radiusLimit, maxCorner, xx, yy: Integer;
   bestf: Int64;
   x: TDoubleDynArray;
 begin
@@ -319,15 +333,18 @@ begin
 
   x := [extents.CenterPoint.X, extents.CenterPoint.Y, C45RpmConcentricGroove * FDPI * 0.5, 1.0];
 
-  ProcThreadPool.DoParallelLocalProc(@DoSkew, CMinSkew, CMaxSkew);
+  ProcThreadPool.DoParallelLocalProc(@DoSkew, CMinSkew div (1 + Ord(ALowPrecision)), CMaxSkew div (1 + Ord(ALowPrecision)));
 
   bestf := Low(Int64);
-  for iSkew := CMinSkew to CMaxSkew do
+  for iRes := CMinSkew to CMaxSkew do
   begin
-    if results[iSkew].Objective > bestf then
+    if ALowPrecision and Odd(iRes) then
+      Continue;
+
+    if results[iRes].Objective > bestf then
     begin
-      bestf := results[iSkew].Objective;
-      x := results[iSkew].X;
+      bestf := results[iRes].Objective;
+      x := results[iRes].X;
     end;
   end;
 
@@ -395,7 +412,7 @@ begin
   end;
 end;
 
-procedure TInputScan.FindConcentricGroove2;
+procedure TInputScan.FindConcentricGroove_Gradient;
 var
   ff: Double;
   X: TDoubleDynArray;
@@ -404,7 +421,7 @@ begin
 
   X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius, FSkewY];
 
-  ff := GradientDescentMinimize(@GradientConcentricGroove, X, [0.0005, 0.0005, 0.0002, 0.0000005], 1e-6, True);
+  ff := GradientDescentMinimize(@GradientConcentricGroove, X, [0.0005, 0.0005, 0.0002, 0.0000001], 1e-6, True);
 
   FCenter.X := X[0];
   FCenter.Y := X[1];
@@ -660,8 +677,8 @@ begin
   FFirstGrooveRadius := (C45RpmFirstMusicGroove + C45RpmOuterSize) * 0.5 * FDPI * 0.5;
   FConcentricGrooveRadius := C45RpmConcentricGroove * FDPI * 0.5;
 
-  FindConcentricGroove;
-  FindConcentricGroove2;
+  FindConcentricGroove_GridSearch(True);
+  FindConcentricGroove_Gradient;
   FindGrooveStart;
 
   if not FSilent then
