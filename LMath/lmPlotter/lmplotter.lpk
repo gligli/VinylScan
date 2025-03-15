@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <Package Version="4">
+    <PathDelim Value="\"/>
+    <Name Value="lmplotter"/>
+    <Type Value="RunAndDesignTime"/>
+    <CompilerOptions>
+      <Version Value="11"/>
+      <PathDelim Value="\"/>
+      <SearchPaths>
+        <OtherUnitFiles Value="units"/>
+        <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
+      </SearchPaths>
+      <CodeGeneration>
+        <Optimizations>
+          <OptimizationLevel Value="2"/>
+        </Optimizations>
+      </CodeGeneration>
+      <Linking>
+        <Debugging>
+          <GenerateDebugInfo Value="False"/>
+        </Debugging>
+      </Linking>
+    </CompilerOptions>
+    <Version Minor="6" Release="1"/>
+    <Files Count="4">
+      <Item1>
+        <Filename Value="uhsvrgb.pas"/>
+        <UnitName Value="uhsvrgb"/>
+      </Item1>
+      <Item2>
+        <Filename Value="uplot.pas"/>
+        <UnitName Value="uplot"/>
+      </Item2>
+      <Item3>
+        <Filename Value="utexplot.pas"/>
+        <UnitName Value="utexplot"/>
+      </Item3>
+      <Item4>
+        <Filename Value="uwinplot.pas"/>
+        <UnitName Value="uwinplot"/>
+      </Item4>
+    </Files>
+    <RequiredPkgs Count="3">
+      <Item1>
+        <PackageName Value="lmMathUtil"/>
+      </Item1>
+      <Item2>
+        <PackageName Value="LCL"/>
+      </Item2>
+      <Item3>
+        <PackageName Value="FCL"/>
+      </Item3>
+    </RequiredPkgs>
+    <UsageOptions>
+      <UnitPath Value="$(PkgOutDir)"/>
+    </UsageOptions>
+    <PublishOptions>
+      <Version Value="2"/>
+    </PublishOptions>
+  </Package>
+</CONFIG>

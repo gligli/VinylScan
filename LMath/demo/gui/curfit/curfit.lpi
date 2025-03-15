@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="11"/>
+    <PathDelim Value="\"/>
+    <General>
+      <Flags>
+        <MainUnitHasUsesSectionForAllUnits Value="False"/>
+        <MainUnitHasCreateFormStatements Value="False"/>
+        <MainUnitHasTitleStatement Value="False"/>
+        <MainUnitHasScaledStatement Value="False"/>
+      </Flags>
+      <SessionStorage Value="InProjectDir"/>
+      <MainUnit Value="0"/>
+      <Title Value="curfit"/>
+      <UseAppBundle Value="False"/>
+      <ResourceType Value="res"/>
+    </General>
+    <BuildModes Count="1">
+      <Item1 Name="Default" Default="True"/>
+    </BuildModes>
+    <PublishOptions>
+      <Version Value="2"/>
+    </PublishOptions>
+    <RunParams>
+      <FormatVersion Value="2"/>
+      <Modes Count="1">
+        <Mode0 Name="default"/>
+      </Modes>
+    </RunParams>
+    <RequiredPackages Count="5">
+      <Item1>
+        <PackageName Value="lmspecregress"/>
+      </Item1>
+      <Item2>
+        <PackageName Value="lmRegression"/>
+      </Item2>
+      <Item3>
+        <PackageName Value="lmplotter"/>
+      </Item3>
+      <Item4>
+        <PackageName Value="lmgenmath"/>
+      </Item4>
+      <Item5>
+        <PackageName Value="LCL"/>
+      </Item5>
+    </RequiredPackages>
+    <Units Count="8">
+      <Unit0>
+        <Filename Value="curfit.lpr"/>
+        <IsPartOfProject Value="True"/>
+      </Unit0>
+      <Unit1>
+        <Filename Value="main.pas"/>
+        <IsPartOfProject Value="True"/>
+        <ComponentName Value="Form1"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
+        <UnitName Value="Main"/>
+      </Unit1>
+      <Unit2>
+        <Filename Value="..\dialogs\graphopt.pas"/>
+        <IsPartOfProject Value="True"/>
+        <ComponentName Value="GraphOptDlg"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
+        <UnitName Value="GraphOpt"/>
+      </Unit2>
+      <Unit3>
+        <Filename Value="..\dialogs\regfunc.pas"/>
+        <IsPartOfProject Value="True"/>
+        <ComponentName Value="RegFuncDlg"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
+        <UnitName Value="RegFunc"/>
+      </Unit3>
+      <Unit4>
+        <Filename Value="..\dialogs\algorith.pas"/>
+        <IsPartOfProject Value="True"/>
+        <ComponentName Value="AlgorithmDlg"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
+        <UnitName Value="Algorith"/>
+      </Unit4>
+      <Unit5>
+        <Filename Value="..\dialogs\param.pas"/>
+        <IsPartOfProject Value="True"/>
+        <ComponentName Value="ParamDlg"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
+        <UnitName Value="Param"/>
+      </Unit5>
+      <Unit6>
+        <Filename Value="..\dialogs\aspect.pas"/>
+        <IsPartOfProject Value="True"/>
+        <ComponentName Value="AspectDlg"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
+        <UnitName Value="Aspect"/>
+      </Unit6>
+      <Unit7>
+        <Filename Value="..\dialogs\help.pas"/>
+        <IsPartOfProject Value="True"/>
+        <ComponentName Value="HelpDlg"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
+        <UnitName Value="Help"/>
+      </Unit7>
+    </Units>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <PathDelim Value="\"/>
+    <SearchPaths>
+      <IncludeFiles Value="..\dialogs;$(ProjOutDir)"/>
+      <OtherUnitFiles Value="..\dialogs"/>
+      <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
+    </SearchPaths>
+    <Parsing>
+      <SyntaxOptions>
+        <SyntaxMode Value="Delphi"/>
+      </SyntaxOptions>
+    </Parsing>
+    <CodeGeneration>
+      <TargetOS Value="win32"/>
+    </CodeGeneration>
+    <Linking>
+      <Options>
+        <Win32>
+          <GraphicApplication Value="True"/>
+        </Win32>
+      </Options>
+    </Linking>
+  </CompilerOptions>
+  <Debugging>
+    <Exceptions Count="3">
+      <Item1>
+        <Name Value="EAbort"/>
+      </Item1>
+      <Item2>
+        <Name Value="ECodetoolError"/>
+      </Item2>
+      <Item3>
+        <Name Value="EFOpenError"/>
+      </Item3>
+    </Exceptions>
+  </Debugging>
+</CONFIG>

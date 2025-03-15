@@ -1,0 +1,1181 @@
+object GraphOptDlg: TGraphOptDlg
+  Left = 844
+  Height = 274
+  Top = 109
+  Width = 427
+  BorderStyle = bsDialog
+  Caption = 'Graph options'
+  ClientHeight = 274
+  ClientWidth = 427
+  Color = clBtnFace
+  Font.Color = clWindowText
+  Font.Height = -13
+  Font.Name = 'System'
+  OnActivate = FormActivate
+  Position = poMainFormCenter
+  LCLVersion = '1.8.0.6'
+  object TabbedNotebook1: TPageControl
+    Left = 0
+    Height = 274
+    Top = 0
+    Width = 427
+    ActivePage = ts4
+    Align = alClient
+    Font.Color = clBlack
+    Font.Height = -11
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    ParentFont = False
+    TabIndex = 0
+    TabOrder = 0
+    object ts4: TTabSheet
+      Caption = '&Aspect'
+      ClientHeight = 248
+      ClientWidth = 419
+      object LimitGroupBox: TGroupBox
+        Left = 8
+        Height = 81
+        Top = 8
+        Width = 249
+        Caption = 'Graph &limits in % of maximum'
+        ClientHeight = 63
+        ClientWidth = 245
+        TabOrder = 0
+        object Label1: TLabel
+          Left = 0
+          Height = 13
+          Top = 0
+          Width = 28
+          Caption = 'Xmin'
+          ParentColor = False
+        end
+        object Label2: TLabel
+          Left = 0
+          Height = 13
+          Top = 0
+          Width = 31
+          Caption = 'Xmax'
+          ParentColor = False
+        end
+        object Label3: TLabel
+          Left = 142
+          Height = 13
+          Top = 0
+          Width = 28
+          Caption = 'Ymin'
+          ParentColor = False
+        end
+        object Label4: TLabel
+          Left = 142
+          Height = 13
+          Top = 0
+          Width = 31
+          Caption = 'Ymax'
+          ParentColor = False
+        end
+        object XminSpinEdit: TSpinEdit
+          Left = 38
+          Height = 21
+          Top = 0
+          Width = 49
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          MinValue = 1
+          ParentFont = False
+          TabOrder = 0
+          Value = 15
+        end
+        object XmaxSpinEdit: TSpinEdit
+          Left = 38
+          Height = 21
+          Top = 0
+          Width = 49
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          MinValue = 1
+          ParentFont = False
+          TabOrder = 1
+          Value = 85
+        end
+        object YminSpinEdit: TSpinEdit
+          Left = 182
+          Height = 21
+          Top = 0
+          Width = 49
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          MinValue = 1
+          ParentFont = False
+          TabOrder = 2
+          Value = 15
+        end
+        object YmaxSpinEdit: TSpinEdit
+          Left = 182
+          Height = 21
+          Top = 0
+          Width = 49
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          MinValue = 1
+          ParentFont = False
+          TabOrder = 3
+          Value = 80
+        end
+      end
+      object ColorGroupBox: TGroupBox
+        Left = 8
+        Height = 49
+        Top = 96
+        Width = 249
+        Caption = 'Colors'
+        ClientHeight = 31
+        ClientWidth = 245
+        TabOrder = 1
+        object BorderColorShape: TShape
+          Left = 78
+          Height = 25
+          Top = 0
+          Width = 25
+          Shape = stRoundRect
+        end
+        object GraphColorShape: TShape
+          Left = 206
+          Height = 25
+          Top = 0
+          Width = 25
+          Shape = stRoundRect
+        end
+        object BorderColorBtn: TButton
+          Left = 0
+          Height = 25
+          Top = 0
+          Width = 73
+          Caption = '&Border'
+          OnClick = BorderColorBtnClick
+          TabOrder = 0
+        end
+        object GraphColorBtn: TButton
+          Left = 126
+          Height = 25
+          Top = 0
+          Width = 73
+          Caption = '&Graph'
+          OnClick = GraphColorBtnClick
+          TabOrder = 1
+        end
+      end
+      object FrameGroupBox: TGroupBox
+        Left = 8
+        Height = 81
+        Top = 152
+        Width = 121
+        Caption = 'Plot'
+        ClientHeight = 63
+        ClientWidth = 117
+        TabOrder = 2
+        object GraphBorderCheckBox: TCheckBox
+          Left = 0
+          Height = 19
+          Top = 0
+          Width = 57
+          Caption = 'B&order'
+          Checked = True
+          State = cbChecked
+          TabOrder = 0
+        end
+        object LgdBorderCheckBox: TCheckBox
+          Left = 0
+          Height = 19
+          Top = 0
+          Width = 62
+          Caption = 'L&egend'
+          Checked = True
+          State = cbChecked
+          TabOrder = 1
+        end
+      end
+      object GridRadioGroup: TRadioGroup
+        Left = 136
+        Height = 81
+        Top = 152
+        Width = 121
+        AutoFill = True
+        Caption = 'Grid'
+        ChildSizing.LeftRightSpacing = 6
+        ChildSizing.EnlargeHorizontal = crsHomogenousChildResize
+        ChildSizing.EnlargeVertical = crsHomogenousChildResize
+        ChildSizing.ShrinkHorizontal = crsScaleChilds
+        ChildSizing.ShrinkVertical = crsScaleChilds
+        ChildSizing.Layout = cclLeftToRightThenTopToBottom
+        ChildSizing.ControlsPerLine = 1
+        ClientHeight = 63
+        ClientWidth = 117
+        ItemIndex = 3
+        Items.Strings = (
+          '&No grid'
+          '&Horizontal'
+          '&Vertical'
+          'Both g&rids'
+        )
+        TabOrder = 3
+      end
+    end
+    object ts3: TTabSheet
+      Caption = 'A&xes'
+      ClientHeight = 0
+      ClientWidth = 0
+      object XAxisGroupBox: TGroupBox
+        Left = 8
+        Height = 161
+        Top = 8
+        Width = 129
+        Caption = '&Horizontal axis (Ox)'
+        ClientHeight = 143
+        ClientWidth = 125
+        TabOrder = 0
+        object Label5: TLabel
+          Left = 0
+          Height = 13
+          Top = 10
+          Width = 25
+          Caption = 'Min.'
+          ParentColor = False
+        end
+        object Label6: TLabel
+          Left = 0
+          Height = 13
+          Top = 34
+          Width = 28
+          Caption = 'Max.'
+          ParentColor = False
+        end
+        object Label7: TLabel
+          Left = 0
+          Height = 13
+          Top = 58
+          Width = 27
+          Caption = 'Step'
+          ParentColor = False
+        end
+        object Label19: TLabel
+          Left = 38
+          Height = 13
+          Top = 10
+          Width = 22
+          Caption = '10^'
+          ParentColor = False
+          Visible = False
+        end
+        object Label20: TLabel
+          Left = 38
+          Height = 13
+          Top = 34
+          Width = 22
+          Caption = '10^'
+          ParentColor = False
+          Visible = False
+        end
+        object XPlotCheckBox: TCheckBox
+          Left = 0
+          Height = 17
+          Top = 0
+          Width = 89
+          Caption = 'Plot axis'
+          Checked = True
+          State = cbChecked
+          TabOrder = 0
+        end
+        object XScaleCheckBox: TCheckBox
+          Left = 0
+          Height = 17
+          Top = 0
+          Width = 97
+          Caption = 'Log scale'
+          OnClick = XScaleCheckBoxClick
+          TabOrder = 1
+        end
+        object XMinEdit: TEdit
+          Left = 38
+          Height = 21
+          Top = 10
+          Width = 73
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          ParentFont = False
+          TabOrder = 2
+          Text = '0'
+        end
+        object XMaxEdit: TEdit
+          Left = 38
+          Height = 21
+          Top = 34
+          Width = 73
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          ParentFont = False
+          TabOrder = 3
+          Text = '1'
+        end
+        object XStepEdit: TEdit
+          Left = 38
+          Height = 21
+          Top = 58
+          Width = 73
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          ParentFont = False
+          TabOrder = 4
+          Text = '0.2'
+        end
+        object XMinLogSpinEdit: TSpinEdit
+          Left = 62
+          Height = 22
+          Top = 5
+          Width = 49
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          MaxValue = 50
+          MinValue = -50
+          ParentFont = False
+          TabOrder = 5
+          Visible = False
+        end
+        object XMaxLogSpinEdit: TSpinEdit
+          Left = 62
+          Height = 22
+          Top = 29
+          Width = 49
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          MaxValue = 50
+          MinValue = -50
+          ParentFont = False
+          TabOrder = 6
+          Value = 1
+          Visible = False
+        end
+      end
+      object YAxisGroupBox: TGroupBox
+        Left = 152
+        Height = 161
+        Top = 8
+        Width = 129
+        Caption = '&Vertical axis (Oy)'
+        ClientHeight = 143
+        ClientWidth = 125
+        TabOrder = 1
+        object Label8: TLabel
+          Left = 0
+          Height = 13
+          Top = 10
+          Width = 25
+          Caption = 'Min.'
+          ParentColor = False
+        end
+        object Label9: TLabel
+          Left = 0
+          Height = 13
+          Top = 34
+          Width = 28
+          Caption = 'Max.'
+          ParentColor = False
+        end
+        object Label10: TLabel
+          Left = 0
+          Height = 13
+          Top = 58
+          Width = 27
+          Caption = 'Step'
+          ParentColor = False
+        end
+        object Label21: TLabel
+          Left = 38
+          Height = 13
+          Top = 10
+          Width = 22
+          Caption = '10^'
+          ParentColor = False
+          Visible = False
+        end
+        object Label22: TLabel
+          Left = 38
+          Height = 13
+          Top = 34
+          Width = 22
+          Caption = '10^'
+          ParentColor = False
+          Visible = False
+        end
+        object YPlotCheckBox: TCheckBox
+          Left = 0
+          Height = 17
+          Top = 0
+          Width = 89
+          Caption = 'Plot axis'
+          Checked = True
+          State = cbChecked
+          TabOrder = 0
+        end
+        object YScaleCheckBox: TCheckBox
+          Left = 0
+          Height = 17
+          Top = 0
+          Width = 97
+          Caption = 'Log scale'
+          OnClick = YScaleCheckBoxClick
+          TabOrder = 1
+        end
+        object YMinEdit: TEdit
+          Left = 38
+          Height = 21
+          Top = 10
+          Width = 73
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          ParentFont = False
+          TabOrder = 2
+          Text = '0'
+        end
+        object YMaxEdit: TEdit
+          Left = 38
+          Height = 21
+          Top = 34
+          Width = 73
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          ParentFont = False
+          TabOrder = 3
+          Text = '1'
+        end
+        object YStepEdit: TEdit
+          Left = 38
+          Height = 21
+          Top = 58
+          Width = 73
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          ParentFont = False
+          TabOrder = 4
+          Text = '0.2'
+        end
+        object YMinLogSpinEdit: TSpinEdit
+          Left = 62
+          Height = 22
+          Top = 5
+          Width = 49
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          MaxValue = 50
+          MinValue = -50
+          ParentFont = False
+          TabOrder = 5
+          Visible = False
+        end
+        object YMaxLogSpinEdit: TSpinEdit
+          Left = 62
+          Height = 22
+          Top = 29
+          Width = 49
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          MaxValue = 50
+          MinValue = -50
+          ParentFont = False
+          TabOrder = 6
+          Value = 1
+          Visible = False
+        end
+      end
+      object AxisGroupBox: TGroupBox
+        Left = 8
+        Height = 57
+        Top = 176
+        Width = 273
+        Caption = '&Line'
+        ClientHeight = 39
+        ClientWidth = 269
+        TabOrder = 2
+        object AxisColorShape: TShape
+          Left = 78
+          Height = 25
+          Top = 0
+          Width = 25
+          Brush.Color = clBlack
+          Shape = stRoundRect
+        end
+        object Label11: TLabel
+          Left = 150
+          Height = 13
+          Top = 0
+          Width = 34
+          Caption = 'Width'
+          ParentColor = False
+        end
+        object AxisWidthSpinEdit: TSpinEdit
+          Left = 214
+          Height = 22
+          Top = 0
+          Width = 41
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          MaxValue = 10
+          MinValue = 1
+          ParentFont = False
+          TabOrder = 1
+          Value = 1
+        end
+        object AxisColorBtn: TButton
+          Left = 0
+          Height = 25
+          Top = 0
+          Width = 73
+          Caption = 'Color'
+          OnClick = AxisColorBtnClick
+          TabOrder = 0
+        end
+      end
+      object ForceOriginGroupBox: TGroupBox
+        Left = 288
+        Height = 57
+        Top = 176
+        Width = 121
+        Caption = '&Force origin at'
+        ClientHeight = 39
+        ClientWidth = 117
+        TabOrder = 3
+        object ForceOriginCheckBox: TCheckBox
+          Left = 0
+          Height = 17
+          Top = 0
+          Width = 57
+          Caption = ' (0,0)'
+          OnClick = ForceOriginCheckBoxClick
+          TabOrder = 0
+        end
+      end
+    end
+    object ts2: TTabSheet
+      Caption = '&Curves'
+      ClientHeight = 0
+      ClientWidth = 0
+      object Label18: TLabel
+        Left = 288
+        Height = 49
+        Top = 192
+        Width = 129
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'Click an Apply button to make the changes active!'
+        Color = clGreen
+        Font.Color = clYellow
+        Font.Height = -11
+        Font.Name = 'MS Sans Serif'
+        Font.Style = [fsBold]
+        ParentColor = False
+        ParentFont = False
+        Transparent = False
+        WordWrap = True
+      end
+      object PointGroupBox: TGroupBox
+        Left = 8
+        Height = 121
+        Top = 64
+        Width = 129
+        Caption = 'Sy&mbol'
+        ClientHeight = 103
+        ClientWidth = 125
+        TabOrder = 2
+        object PointColorShape: TShape
+          Left = 86
+          Height = 25
+          Top = 0
+          Width = 25
+          Brush.Color = clRed
+          Shape = stRoundSquare
+        end
+        object Label14: TLabel
+          Left = 0
+          Height = 13
+          Top = 22
+          Width = 25
+          Caption = 'Size'
+          ParentColor = False
+        end
+        object PointComboBox: TComboBox
+          Left = 0
+          Height = 21
+          Top = 0
+          Width = 113
+          ItemHeight = 13
+          Items.Strings = (
+            'Point'
+            'Full circle'
+            'Open circle'
+            'Full square'
+            'Open square'
+            'Full triangle'
+            'Open triangle'
+            'Plus (+)'
+            'Cross (x)'
+            'Star (*)'
+          )
+          Style = csDropDownList
+          TabOrder = 0
+        end
+        object PointColorBtn: TButton
+          Left = 0
+          Height = 25
+          Top = 0
+          Width = 81
+          Caption = 'Color'
+          OnClick = PointColorBtnClick
+          TabOrder = 1
+        end
+        object PointSizeSpinEdit: TSpinEdit
+          Left = 62
+          Height = 22
+          Top = 17
+          Width = 49
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          MinValue = 1
+          ParentFont = False
+          TabOrder = 2
+          Value = 1
+        end
+      end
+      object LineGroupBox: TGroupBox
+        Left = 152
+        Height = 121
+        Top = 64
+        Width = 129
+        Caption = '&Line'
+        ClientHeight = 103
+        ClientWidth = 125
+        TabOrder = 3
+        object LineColorShape: TShape
+          Left = 86
+          Height = 25
+          Top = 0
+          Width = 25
+          Brush.Color = clRed
+          Shape = stRoundSquare
+        end
+        object Label15: TLabel
+          Left = 0
+          Height = 13
+          Top = 22
+          Width = 34
+          Caption = 'Width'
+          ParentColor = False
+        end
+        object LineComboBox: TComboBox
+          Left = 0
+          Height = 21
+          Top = 0
+          Width = 113
+          ItemHeight = 13
+          Items.Strings = (
+            '___________'
+            '_ _ _ _ _ _ _'
+            '...................'
+            '_._._._._._._.'
+            '_.._.._.._.._..'
+            '(None)'
+          )
+          Style = csDropDownList
+          TabOrder = 0
+        end
+        object LineColorBtn: TButton
+          Left = 0
+          Height = 25
+          Top = 0
+          Width = 81
+          Caption = 'Color'
+          OnClick = LineColorBtnClick
+          TabOrder = 1
+        end
+        object LineWidthSpinEdit: TSpinEdit
+          Left = 62
+          Height = 22
+          Top = 17
+          Width = 49
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          MinValue = 1
+          ParentFont = False
+          TabOrder = 2
+          Value = 1
+        end
+      end
+      object StepGroupBox: TGroupBox
+        Left = 152
+        Height = 49
+        Top = 8
+        Width = 129
+        Caption = '&Plot'
+        ClientHeight = 31
+        ClientWidth = 125
+        TabOrder = 1
+        object Label12: TLabel
+          Left = 0
+          Height = 13
+          Top = 0
+          Width = 58
+          Caption = '1 pt every'
+          ParentColor = False
+        end
+        object StepSpinEdit: TSpinEdit
+          Left = 70
+          Height = 22
+          Top = 0
+          Width = 41
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          MinValue = 1
+          ParentFont = False
+          TabOrder = 0
+          Value = 1
+        end
+      end
+      object CurvGroupBox: TGroupBox
+        Left = 8
+        Height = 49
+        Top = 192
+        Width = 273
+        Caption = 'Apply to'
+        ClientHeight = 31
+        ClientWidth = 269
+        TabOrder = 4
+        object ApplyBtn1: TButton
+          Left = 0
+          Height = 25
+          Top = 0
+          Width = 121
+          Caption = 'the selected curve'
+          OnClick = ApplyBtn1Click
+          TabOrder = 0
+        end
+        object ApplyBtn2: TButton
+          Left = 134
+          Height = 25
+          Top = 0
+          Width = 121
+          Caption = 'all curves'
+          OnClick = ApplyBtn2Click
+          TabOrder = 1
+        end
+      end
+      object GroupBox3: TGroupBox
+        Left = 8
+        Height = 49
+        Top = 8
+        Width = 129
+        Caption = '&Select curve'
+        ClientHeight = 31
+        ClientWidth = 125
+        TabOrder = 0
+        object CurvParamComboBox: TComboBox
+          Left = 0
+          Height = 21
+          Top = 0
+          Width = 113
+          ItemHeight = 13
+          OnChange = CurvParamComboBoxChange
+          Style = csDropDownList
+          TabOrder = 0
+        end
+      end
+    end
+    object ts1: TTabSheet
+      Caption = '&Titles etc.'
+      ClientHeight = 0
+      ClientWidth = 0
+      object TitleGroupBox: TGroupBox
+        Left = 8
+        Height = 105
+        Top = 8
+        Width = 265
+        Caption = 'T&itles'
+        ClientHeight = 87
+        ClientWidth = 261
+        TabOrder = 0
+        object Label13: TLabel
+          Left = 0
+          Height = 13
+          Top = 0
+          Width = 35
+          Caption = 'Graph'
+          ParentColor = False
+        end
+        object Label16: TLabel
+          Left = 0
+          Height = 13
+          Top = 0
+          Width = 42
+          Caption = 'Ox axis'
+          ParentColor = False
+        end
+        object Label17: TLabel
+          Left = 0
+          Height = 13
+          Top = 2
+          Width = 42
+          Caption = 'Oy axis'
+          ParentColor = False
+        end
+        object GraphTitleEdit: TEdit
+          Left = 46
+          Height = 21
+          Top = 0
+          Width = 201
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          ParentFont = False
+          TabOrder = 0
+        end
+        object XTitleEdit: TEdit
+          Left = 46
+          Height = 21
+          Top = 0
+          Width = 201
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          ParentFont = False
+          TabOrder = 1
+          Text = 'X'
+        end
+        object YTitleEdit: TEdit
+          Left = 46
+          Height = 21
+          Top = 2
+          Width = 201
+          Font.Color = clRed
+          Font.Height = -11
+          Font.Name = 'MS Sans Serif'
+          Font.Style = [fsBold]
+          ParentFont = False
+          TabOrder = 2
+          Text = 'Y'
+        end
+      end
+      object FontGroupBox: TGroupBox
+        Left = 8
+        Height = 113
+        Top = 120
+        Width = 129
+        Caption = 'Fonts'
+        ClientHeight = 95
+        ClientWidth = 125
+        TabOrder = 1
+        object TitleFontBtn: TButton
+          Left = 6
+          Height = 25
+          Top = 0
+          Width = 97
+          Caption = '&Graph title'
+          OnClick = TitleFontBtnClick
+          TabOrder = 0
+        end
+        object AxesfontBtn: TButton
+          Left = 6
+          Height = 25
+          Top = 0
+          Width = 97
+          Caption = 'Ax&es'
+          OnClick = AxesfontBtnClick
+          TabOrder = 1
+        end
+        object LgdFontBtn: TButton
+          Left = 6
+          Height = 25
+          Top = 10
+          Width = 97
+          Caption = '&Legend'
+          OnClick = LgdFontBtnClick
+          TabOrder = 2
+        end
+      end
+      object ConfigGroupBox: TGroupBox
+        Left = 144
+        Height = 113
+        Top = 120
+        Width = 129
+        Caption = 'Configuration file'
+        ClientHeight = 95
+        ClientWidth = 125
+        TabOrder = 2
+        object ConfigReadBtn: TButton
+          Left = 6
+          Height = 25
+          Top = 0
+          Width = 97
+          Caption = '&Open'
+          OnClick = ConfigReadBtnClick
+          TabOrder = 0
+        end
+        object ConfigSaveBtn: TButton
+          Left = 6
+          Height = 25
+          Top = 0
+          Width = 97
+          Caption = '&Save'
+          OnClick = ConfigSaveBtnClick
+          TabOrder = 1
+        end
+      end
+    end
+  end
+  object OKBtn: TBitBtn
+    Left = 328
+    Height = 27
+    Top = 50
+    Width = 77
+    Default = True
+    DefaultCaption = True
+    Font.Color = clBlack
+    Font.Height = -11
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    Kind = bkOK
+    Margin = 2
+    ModalResult = 1
+    OnClick = OKBtnClick
+    ParentFont = False
+    Spacing = -1
+    TabOrder = 1
+  end
+  object CancelBtn: TBitBtn
+    Left = 328
+    Height = 27
+    Top = 82
+    Width = 77
+    Cancel = True
+    DefaultCaption = True
+    Font.Color = clBlack
+    Font.Height = -11
+    Font.Name = 'MS Sans Serif'
+    Font.Style = [fsBold]
+    Kind = bkCancel
+    Margin = 2
+    ModalResult = 2
+    ParentFont = False
+    Spacing = -1
+    TabOrder = 2
+  end
+  object LgdFontDialog: TFontDialog
+    Font.Color = clBlack
+    Font.Height = -13
+    Font.Name = 'Times New Roman'
+    MinFontSize = 0
+    MaxFontSize = 0
+    left = 357
+    top = 114
+  end
+  object AxesFontDialog: TFontDialog
+    Font.Color = clBlack
+    Font.Height = -19
+    Font.Name = 'Times New Roman'
+    MinFontSize = 0
+    MaxFontSize = 0
+    left = 288
+    top = 168
+  end
+  object TitleFontDialog: TFontDialog
+    Font.Color = clBlack
+    Font.Height = -19
+    Font.Name = 'Times New Roman'
+    Font.Style = [fsBold]
+    MinFontSize = 0
+    MaxFontSize = 0
+    left = 293
+    top = 114
+  end
+  object GraphColorDialog: TColorDialog
+    Color = clBlack
+    CustomColors.Strings = (
+      'ColorA=000000'
+      'ColorB=000080'
+      'ColorC=008000'
+      'ColorD=008080'
+      'ColorE=800000'
+      'ColorF=800080'
+      'ColorG=808000'
+      'ColorH=808080'
+      'ColorI=C0C0C0'
+      'ColorJ=0000FF'
+      'ColorK=00FF00'
+      'ColorL=00FFFF'
+      'ColorM=FF0000'
+      'ColorN=FF00FF'
+      'ColorO=FFFF00'
+      'ColorP=FFFFFF'
+      'ColorQ=C0DCC0'
+      'ColorR=F0CAA6'
+      'ColorS=F0FBFF'
+      'ColorT=A4A0A0'
+    )
+    left = 344
+    top = 200
+  end
+  object PointColorDialog: TColorDialog
+    Color = clBlack
+    CustomColors.Strings = (
+      'ColorA=000000'
+      'ColorB=000080'
+      'ColorC=008000'
+      'ColorD=008080'
+      'ColorE=800000'
+      'ColorF=800080'
+      'ColorG=808000'
+      'ColorH=808080'
+      'ColorI=C0C0C0'
+      'ColorJ=0000FF'
+      'ColorK=00FF00'
+      'ColorL=00FFFF'
+      'ColorM=FF0000'
+      'ColorN=FF00FF'
+      'ColorO=FFFF00'
+      'ColorP=FFFFFF'
+      'ColorQ=C0DCC0'
+      'ColorR=F0CAA6'
+      'ColorS=F0FBFF'
+      'ColorT=A4A0A0'
+    )
+    left = 389
+    top = 114
+  end
+  object LineColorDialog: TColorDialog
+    Color = clBlack
+    CustomColors.Strings = (
+      'ColorA=000000'
+      'ColorB=000080'
+      'ColorC=008000'
+      'ColorD=008080'
+      'ColorE=800000'
+      'ColorF=800080'
+      'ColorG=808000'
+      'ColorH=808080'
+      'ColorI=C0C0C0'
+      'ColorJ=0000FF'
+      'ColorK=00FF00'
+      'ColorL=00FFFF'
+      'ColorM=FF0000'
+      'ColorN=FF00FF'
+      'ColorO=FFFF00'
+      'ColorP=FFFFFF'
+      'ColorQ=C0DCC0'
+      'ColorR=F0CAA6'
+      'ColorS=F0FBFF'
+      'ColorT=A4A0A0'
+    )
+    left = 389
+    top = 146
+  end
+  object BorderColorDialog: TColorDialog
+    Color = clBlack
+    CustomColors.Strings = (
+      'ColorA=000000'
+      'ColorB=000080'
+      'ColorC=008000'
+      'ColorD=008080'
+      'ColorE=800000'
+      'ColorF=800080'
+      'ColorG=808000'
+      'ColorH=808080'
+      'ColorI=C0C0C0'
+      'ColorJ=0000FF'
+      'ColorK=00FF00'
+      'ColorL=00FFFF'
+      'ColorM=FF0000'
+      'ColorN=FF00FF'
+      'ColorO=FFFF00'
+      'ColorP=FFFFFF'
+      'ColorQ=C0DCC0'
+      'ColorR=F0CAA6'
+      'ColorS=F0FBFF'
+      'ColorT=A4A0A0'
+    )
+    left = 280
+    top = 208
+  end
+  object ConfigReadDialog: TOpenDialog
+    Filter = 'Graph configuration|*.GCF|All files|*.*'
+    Options = [ofPathMustExist, ofFileMustExist]
+    left = 293
+    top = 50
+  end
+  object ConfigSaveDialog: TSaveDialog
+    Filter = 'Graph configuration|*.GCF|All files|*.*'
+    Options = [ofOverwritePrompt]
+    left = 293
+    top = 82
+  end
+  object AxisColorDialog: TColorDialog
+    Color = clBlack
+    CustomColors.Strings = (
+      'ColorA=000000'
+      'ColorB=000080'
+      'ColorC=008000'
+      'ColorD=008080'
+      'ColorE=800000'
+      'ColorF=800080'
+      'ColorG=808000'
+      'ColorH=808080'
+      'ColorI=C0C0C0'
+      'ColorJ=0000FF'
+      'ColorK=00FF00'
+      'ColorL=00FFFF'
+      'ColorM=FF0000'
+      'ColorN=FF00FF'
+      'ColorO=FFFF00'
+      'ColorP=FFFFFF'
+      'ColorQ=C0DCC0'
+      'ColorR=F0CAA6'
+      'ColorS=F0FBFF'
+      'ColorT=A4A0A0'
+    )
+    left = 357
+    top = 146
+  end
+end
