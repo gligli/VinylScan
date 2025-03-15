@@ -123,9 +123,6 @@ type
 
 implementation
 
-const
-  CCropAreaGroovesPerInch = 100;
-
 { TInputScan }
 
 procedure TInputScan.SetRevolutionFromDPI(ADPI: Integer);
@@ -685,83 +682,74 @@ end;
 
 function TInputScan.PowellCrop(const x: TVector; obj: Pointer): TScalar;
 var
-  rBeg, rEnd, a0a, a1a, a0b, a1b, cx, cy, t, ri, rri, sn, cs, bt, px, py, p: Double;
-  iLut, pos, arrPos: Integer;
-  stdDevArr: TDoubleDynArray;
-  sinCosLUT: TSinCosDynArray;
+  radiusAngleLut: ^TRadiusAngleDynArray absolute obj;
+  a0a, a1a, a0b, a1b, cx, cy, r, sn, cs, px, py, bt: Double;
+  iLut: Integer;
+  isGoodPart: Boolean;
+  partsPos: array[Boolean] of Integer;
+  partsSDArr: array[Boolean] of TDoubleDynArray;
 begin
-  Result := 1000.0;
+  Result := 1e6;
 
   if not InRange(NormalizeAngle(x[1] - x[0]), DegToRad(0.0), DegToRad(120.0)) then
     Exit;
 
   a0a := NormalizeAngle(x[0]);
   a0b := NormalizeAngle(x[1]);
-  a1a := NormalizeAngle(x[0] + Pi);
-  a1b := NormalizeAngle(x[1] + Pi);
+  a1a := NormalizeAngle(a0a + Pi);
+  a1b := NormalizeAngle(a0b + Pi);
 
-  rBeg := C45RpmLastMusicGroove * 0.5 * FDPI;
-  rEnd := C45RpmFirstMusicGroove * 0.5 * FDPI;
+  SetLength(partsSDArr[False], Length(radiusAngleLut^));
+  SetLength(partsSDArr[True], Length(radiusAngleLut^));
+  partsPos[False] := 0;
+  partsPos[True] := 0;
 
-  t := FRelativeAngle;
   cx := FCenter.X;
   cy := FCenter.Y;
 
-  SetLength(stdDevArr, Ceil((rEnd - rBeg) / FDPI * CCropAreaGroovesPerInch) * FPointsPerRevolution);
+  for iLut := 0 to High(radiusAngleLut^) do
+  begin
+    bt := radiusAngleLut^[iLut].Angle;
+    cs := radiusAngleLut^[iLut].Cos;
+    sn := radiusAngleLut^[iLut].Sin;
+    r := radiusAngleLut^[iLut].Radius;
 
-  ri := (rEnd - rBeg) / (CCropAreaGroovesPerInch * FPointsPerRevolution);
+    px := cs * r + cx;
+    py := sn * r + cy;
 
-  BuildSinCosLUT(FPointsPerRevolution, sinCosLUT, t);
-
-  iLut := 0;
-  pos := 0;
-  arrPos := 0;
-  repeat
-    bt := NormalizeAngle(sinCosLUT[iLut].Angle);
-    cs := sinCosLUT[iLut].Cos;
-    sn := sinCosLUT[iLut].Sin;
-
-    rri := rBeg + ri * pos;
-
-    px := cs * rri + cx;
-    py := sn * rri + cy;
-
-    Assert(pos < Length(stdDevArr));
-
-    if InRangePointD(py, px) and
-        not InNormalizedAngle(bt, a0a, a0b) and not InNormalizedAngle(bt, a1a, a1b) then
+    if InRangePointD(py, px) then
     begin
-      p := GetPointD_Linear(FLeveledImage, py, px);
-      stdDevArr[arrPos] := p;
-      Inc(arrPos);
+      isGoodPart := not InNormalizedAngle(bt, a0a, a0b) and not InNormalizedAngle(bt, a1a, a1b);
+      partsSDArr[isGoodPart, partsPos[isGoodPart]] := FLeveledImage[round(py) * FWidth + round(px)];
+      Inc(partsPos[isGoodPart]);
     end;
+  end;
 
-    Inc(iLut);
-    if iLut >= FPointsPerRevolution then
-      iLut := 0;
+  if (partsPos[False] > 0) and (partsPos[True] > 0) then
+    Result := Variance(PDouble(@partsSDArr[False, 0]), partsPos[False]) - Variance(PDouble(@partsSDArr[True, 0]), partsPos[True]);
 
-    Inc(pos);
-  until rri >= rEnd;
-
-  if arrPos > 0 then
-    Result := -StdDev(PDouble(@stdDevArr[0]), arrPos);
+  //WriteLn(ImageShortName, ', begin:', RadToDeg(a0a):9:3, ', end:', RadToDeg(a0b):9:3, result:18:6);
 end;
 
 procedure TInputScan.Crop;
 var
+  rBeg, rEnd: Double;
+  radiusAngleLut: TRadiusAngleDynArray;
   x: TVector;
 begin
-  SetLength(x, 2);
+  x := [NormalizeAngle(DegToRad(-30.0)), NormalizeAngle(DegToRad(30.0))];
 
-  x[0] := NormalizeAngle(DegToRad(-30.0));
-  x[1] := NormalizeAngle(DegToRad(30.0));
+  rBeg := C45RpmLastMusicGroove * 0.5 * FDPI;
+  rEnd := C45RpmFirstMusicGroove * 0.5 * FDPI;
 
-  PowellMinimize(@PowellCrop, x, 1.0, 1e-6, 0.0, MaxInt);
+  radiusAngleLut := BuildRadiusAngleLUT(rBeg, rEnd, 0, 2.0 * Pi);
+
+  PowellMinimize(@PowellCrop, x, 1.0 / 360.0, 1e-3, 0.0, MaxInt, @radiusAngleLut);
 
   FCropData.StartAngle := NormalizeAngle(x[0]);
   FCropData.EndAngle := NormalizeAngle(x[1]);
-  FCropData.StartAngleMirror := NormalizeAngle(x[0] + Pi);
-  FCropData.EndAngleMirror := NormalizeAngle(x[1] + Pi);
+  FCropData.StartAngleMirror := NormalizeAngle(FCropData.StartAngle + Pi);
+  FCropData.EndAngleMirror := NormalizeAngle(FCropData.EndAngle + Pi);
 end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
