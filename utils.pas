@@ -25,8 +25,7 @@ type
   end;
 
   TRadiusAngle = record
-    Radius: Double;
-    Angle: Integer;
+    Radius, Sin, Cos, Angle, TagWeight, TagValue: Double;
   end;
 
   TPointDDynArray = array of TPointD;
@@ -116,6 +115,8 @@ function serpFromCoeffs(coeffs, data: PSingle): Single;
 function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
+function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: array of Double; EpsilonG: Double; Silent: Boolean; Data: Pointer = nil): Double;
+function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 
 function MAE(const a: TWordDynArray; const b: TWordDynArray): Double;
 function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double; overload;
@@ -124,11 +125,15 @@ function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray):
 function SpearmanRankCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 
 function Make16BitSample(smp: Double): SmallInt;
+
 function NormalizeAngle(x: Double): Double;
 function InNormalizedAngle(x, xmin, xmax: Double): Boolean;
+function NormalizedAngleDiff(xmin, xmax: Double): Double;
+function NormalizedAngleTo02Pi(x: Double): Double;
 
 procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TSinCosDynArray; AOriginAngle: Double = 0.0; AExtentsAngle: Double = 2.0 * Pi);
 function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle: Double): TRadiusAngleDynArray;
+procedure OffsetRadiusAngleLUTAngle(var LUT: TRadiusAngleDynArray; AngleOffset: Double);
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray); overload;
@@ -139,6 +144,8 @@ procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFun
 function GetTIFFSize(AStream: TStream; out AWidth, AHeight: DWord; out dpiX, dpiY: Double): Boolean;
 
 implementation
+uses utypes, ubfgs;
+
 var GSerpCoeffs9ByWord: TSerpCoeffs9ByWord;
 
 function alglib_NonSmoothBoundedMinimize(Func: Pointer; n: Integer; X, LowBound, UpBound: PDouble; Epsilon, Radius, Penalty: Double; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
@@ -527,6 +534,93 @@ begin
   end;
 end;
 
+function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: array of Double;
+  EpsilonG: Double; Silent: Boolean; Data: Pointer): Double;
+var
+  gm, f: Double;
+  grad, bestX: TDoubleDynArray;
+  i: Integer;
+  iter: Integer;
+begin
+  SetLength(grad, Length(X));
+  SetLength(bestX, Length(X));
+
+  gm := NaN;
+  f := NaN;
+  Result := Infinity;
+  iter := 0;
+  repeat
+    Func(X, f, grad, Data);
+
+    if not Silent then
+    begin
+      Write(Result:16:9, gm:16:9);
+      for i := 0 to High(X) do
+        Write(X[i]:14:9);
+      for i := 0 to High(grad) do
+        Write(grad[i]:16:9);
+      WriteLn;
+    end;
+
+    if f <= Result then
+    begin
+      for i := 0 to High(X) do
+        bestX[i] := X[i];
+      Result := f;
+    end;
+
+    gm := 0.0;
+    for i := 0 to High(X) do
+    begin
+      X[i] -= LearningRate[i] * grad[i];
+      gm := max(gm, Abs(grad[i]));
+    end;
+
+    Inc(iter);
+  until gm <= EpsilonG;
+
+  for i := 0 to High(X) do
+    X[i] := bestX[i];
+
+  if not Silent then
+    WriteLn(iter:8);
+end;
+
+threadvar
+  GBFGSData: Pointer;
+  GBFGSFunc: TGradientEvalFunc;
+
+  function BFGSX(X : TVector) : Float;
+  begin
+    GBFGSFunc(X, Result, nil, GBFGSData);
+  end;
+
+  procedure BFGSG(X, G : TVector);
+  var
+    dummy: Double;
+  begin
+    dummy := NaN;
+    GBFGSFunc(X, dummy, G, GBFGSData);
+  end;
+
+function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double; Data: Pointer): Double;
+var
+  G: TVector;
+  H: TMatrix;
+begin
+  SetLength(G, Length(X));
+  SetLength(H, Length(X), Length(X));
+
+  GBFGSData := Data;
+  GBFGSFunc := Func;
+  try
+    BFGS(@BFGSX, @BFGSG, X, 0, High(X), MaxInt, Epsilon, Result, G, H);
+  finally
+    GBFGSData := nil;
+    GBFGSFunc := nil;
+  end;
+end;
+
 function MAE(const a: TWordDynArray; const b: TWordDynArray): Double;
 var
   i: Integer;
@@ -645,6 +739,20 @@ begin
     Result := InRange(x, -Pi, xmax) or InRange(x, xmin, Pi);
 end;
 
+function NormalizedAngleDiff(xmin, xmax: Double): Double;
+begin
+  Assert(InRange(xmin, -Pi, Pi));
+  Assert(InRange(xmax, -Pi, Pi));
+  Result := NormalizedAngleTo02Pi(xmax - xmin);
+end;
+
+function NormalizedAngleTo02Pi(x: Double): Double;
+begin
+  Result := x;
+  if Result <= 0 then
+    Result += 2.0 * Pi;
+end;
+
 procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TSinCosDynArray; AOriginAngle: Double; AExtentsAngle: Double);
 var
   i: Integer;
@@ -665,8 +773,6 @@ var
   ra2: ^TRadiusAngle absolute Item2;
 begin
   Result := CompareValue(ra1^.Angle, ra2^.Angle);
-  if Result = 0 then
-    Result := CompareValue(ra1^.Radius, ra2^.Radius);
 end;
 
 function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle: Double): TRadiusAngleDynArray;
@@ -678,7 +784,7 @@ begin
   nsa := NormalizeAngle(startAngle);
   nea := NormalizeAngle(endAngle);
 
-  SetLength(Result, Round(Sqr(rEndInt * 2 + 1) * (EndAngle - StartAngle) / (2.0 * Pi)));
+  SetLength(Result, Round(Sqr(rEndInt * 2 + 1) * NormalizedAngleDiff(nsa, nea) / (2.0 * Pi)));
 
   cnt := 0;
   for oy := -rEndInt to rEndInt do
@@ -693,11 +799,9 @@ begin
         begin
           Assert(cnt < Length(Result));
 
-          if t < 0 then
-            t += 2.0 * Pi;
-
           Result[cnt].Radius := r;
-          Result[cnt].Angle := Round(t / (2.0 * Pi) * High(Word));
+          Result[cnt].Angle := t;
+          SinCos(Result[cnt].Angle, Result[cnt].Sin, Result[cnt].Cos);
           Inc(cnt);
         end;
       end;
@@ -705,6 +809,23 @@ begin
 
   SetLength(Result, cnt);
   QuickSort(Result[0], 0, cnt - 1, SizeOf(Result[0]), @CompareRadiusAngle);
+end;
+
+procedure OffsetRadiusAngleLUTAngle(var LUT: TRadiusAngleDynArray; AngleOffset: Double);
+var
+  i: Integer;
+begin
+  SinCos(LUT[0].Angle + AngleOffset, LUT[0].Sin, LUT[0].Cos);
+  for i := 1 to High(LUT) do
+    if LUT[i].Angle <> LUT[i - 1].Angle then
+    begin
+      SinCos(LUT[i].Angle + AngleOffset, LUT[i].Sin, LUT[i].Cos)
+    end
+    else
+    begin
+      LUT[i].Sin := LUT[i - 1].Sin;
+      LUT[i].Cos := LUT[i - 1].Cos;
+    end;
 end;
 
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;

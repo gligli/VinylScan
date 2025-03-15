@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Graphics, FPReadPNG, FPReadTiff, FPImage, PNGComn, MTProcs,
-  utils, powell;
+  utils, powell, minasa, Ap, conv;
 
 type
   TInputScan = class;
@@ -49,9 +49,11 @@ type
     procedure SetRevolutionFromSampleRate(ASampleRate: Integer);
     function GetImageShortName: String;
 
+    procedure GradientConcentricGroove(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
     function PowellCrop(const x: TVector; obj: Pointer): TScalar;
 
     procedure FindConcentricGroove;
+    procedure FindConcentricGroove2;
     procedure FindGrooveStart;
   public
     constructor Create(ADefaultDPI: Integer = 2400; ASilent: Boolean = False);
@@ -66,6 +68,7 @@ type
     function InRangePointD(Y, X: Double): Boolean;
     function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
     function GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single;
+    procedure GetGradientsD(const Image: TWordDynArray; Y, X: Double; out GY: Double; out GX: Double);
 
     property ImageFileName: String read FImageFileName write FImageFileName;
     property ImageShortName: String read GetImageShortName;
@@ -253,13 +256,15 @@ begin
   extents.Right := Width - radiusLimit;
   extents.Bottom := Height - radiusLimit;
 
+  //WriteLn(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
+
   // corner L/T/R/B until the record edges are reached
 
   if extents.Left <> extents.Right then
   begin
     SetLength(startBuf, Height);
     SetLength(cornerbuf, Height);
-    maxCorner := Width - radiusLimit * 2;
+    maxCorner := Width - radiusLimit * 2 - 1;
 
     DoYBuf(startBuf, 0, False);
     for xx := 0 to maxCorner do
@@ -282,7 +287,7 @@ begin
   begin
     SetLength(startBuf, Width);
     SetLength(cornerbuf, Width);
-    maxCorner := Height - radiusLimit * 2;
+    maxCorner := Height - radiusLimit * 2 - 1;
 
     DoXBuf(startBuf, 0, False);
     for yy := 0 to maxCorner do
@@ -301,7 +306,7 @@ begin
       end;
   end;
 
-  WriteLn(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
+  //WriteLn(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
 
   // grid search algorithm to find the concentric groove
 
@@ -333,9 +338,82 @@ begin
   FCenter.Y := x[1];
   FConcentricGrooveRadius := x[2];
   FSkewY := x[3];
-  FCenterQuality := bestf;
+  FCenterQuality := bestf / High(Word);
 
-  WriteLn(ImageShortName, FCenter.X:12:3, FCenter.Y:12:3, FConcentricGrooveRadius:12:3, FSkewY:12:6, FCenterQuality:12:0);
+  //WriteLn(ImageShortName, FCenter.X:12:3, FCenter.Y:12:3, FConcentricGrooveRadius:12:3, FSkewY:12:6, FCenterQuality:12:0);
+end;
+
+procedure TInputScan.GradientConcentricGroove(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray;
+  obj: Pointer);
+var
+  iLut: Integer;
+  px, py, cx, cy, sky, r, cs, sn, gix, giy, gcx, gcy, gr, gsky: Double;
+begin
+  cx := arg[0];
+  cy := arg[1];
+  r := arg[2];
+  sky := arg[3];
+
+  func := 0.0;
+  if Assigned(grad) then
+    FillQWord(grad[0], Length(grad), 0);
+
+  gcx := 0.0;
+  gcy := 0.0;
+  gr := 0.0;
+  gsky := 0.0;
+
+  for iLut := 0 to High(FSinCosLUT) do
+  begin
+    cs := FSinCosLUT[iLut].Cos;
+    sn := FSinCosLUT[iLut].Sin;
+
+    px := cs * r + cx;
+    py := sn * r * sky + cy;
+
+    if InRangePointD(py, px) then
+    begin
+      func -= GetPointD_Linear(FLeveledImage, py, px);
+
+      if Assigned(grad) then
+      begin
+        GetGradientsD(FLeveledImage, py, px, giy, gix);
+
+        gcx -= gix;
+        gcy -= giy;
+        gr -= gix * cs + giy * sn * sky;
+        gsky -= giy * sn;
+      end;
+    end;
+  end;
+
+  func /= High(Word);
+
+  if Assigned(grad) then
+  begin
+    grad[0] := gcx / High(Word);
+    grad[1] := gcy / High(Word);
+    grad[2] := gr / High(Word);
+    grad[3] := gsky / High(Word);
+  end;
+end;
+
+procedure TInputScan.FindConcentricGroove2;
+var
+  ff: Double;
+  X: TDoubleDynArray;
+begin
+  BuildSinCosLUT(Ceil(Pi * C45RpmConcentricGroove * FDPI), FSinCosLUT);
+
+  X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius, FSkewY];
+
+  ff := GradientDescentMinimize(@GradientConcentricGroove, X, [0.0005, 0.0005, 0.0002, 0.0000005], 1e-8, True);
+
+  FCenter.X := X[0];
+  FCenter.Y := X[1];
+  FConcentricGrooveRadius := X[2];
+  FSkewY := X[3];
+  FCenterQuality := -ff;
 end;
 
 procedure TInputScan.FindGrooveStart;
@@ -583,17 +661,25 @@ begin
     SetRevolutionFromDPI(FDPI);
 
   FFirstGrooveRadius := (C45RpmFirstMusicGroove + C45RpmOuterSize) * 0.5 * FDPI * 0.5;
+  FConcentricGrooveRadius := C45RpmConcentricGroove * FDPI * 0.5;
 
   FindConcentricGroove;
+  FindConcentricGroove2;
   FindGrooveStart;
 
   if not FSilent then
   begin
     WriteLn('Center:', FCenter.X:12:3, ',', FCenter.Y:12:3);
-    WriteLn('SkewY:', FSkewY:12:6);
-    WriteLn('FirstGrooveRadius:', FFirstGrooveRadius:12:3);
     WriteLn('ConcentricGrooveRadius:', FConcentricGrooveRadius:12:3);
+    WriteLn('SkewY:', FSkewY:12:6);
+    WriteLn('CenterQuality:', FCenterQuality:12:6);
+    WriteLn('FirstGrooveRadius:', FFirstGrooveRadius:12:3);
     WriteLn('GrooveStartPoint:', FGrooveStartPoint.X:12:3, ',', FGrooveStartPoint.Y:12:3);
+    Writeln('Inner raw sample rate: ', Round(Pi * C45RpmLastMusicGroove * FDPI * C45RpmRevolutionsPerSecond), ' Hz');
+  end
+  else
+  begin
+    WriteLn(ImageFileName, ', CenterX:', FCenter.X:12:3, ', CenterY:', FCenter.Y:12:3, ', ConcentricGrooveRadius:', FConcentricGrooveRadius:12:3, ', SkewY:', FSkewY:9:6, ', CenterQuality:', FCenterQuality:9:3);
   end;
 end;
 
@@ -680,7 +766,7 @@ end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
 begin
-  Result := InRange(Y, 5, Height - 7) and InRange(X, 5, Width - 7);
+  Result := InRange(Y, 8, Height - 10) and InRange(X, 8, Width - 10);
 end;
 
 function TInputScan.GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
@@ -715,6 +801,59 @@ begin
 
   Result := serpFromCoeffs(coeffsY, @intData[0]);
 end;
+
+procedure TInputScan.GetGradientsD(const Image: TWordDynArray; Y, X: Double; out GY: Double; out GX: Double);
+const
+  CFiniteDifferencesYFactor: array[-7 .. 7] of Double = (-1/24024, 7/10296, -7/1320, 7/264, -7/72, 7/24, -7/8, 0, 7/8, -7/24, 7/72, -7/264, 7/1320, -7/10296, 1/24024);
+  //CFiniteDifferencesYFactor: array[-4 .. 4] of Double = (1/280, -4/105, 1/5, -4/5, 0, 4/5, -1/5, 4/105, -1/280);
+  //CFiniteDifferencesYFactor: array[-2 .. 2] of Double = (1/12, -2/3, 0, 2/3, -1/12);
+var
+  i, iy, ix, xy, iw: Integer;
+  lG00, lG01, lG10, lG11, lgx, lgy, fdy: Double;
+begin
+  ix := trunc(X);
+  iy := trunc(Y);
+
+  xy := iy * FWidth + ix;
+
+  lgx := 0.0;
+  lgy := 0.0;
+
+  lG00 := 0.0; lG01 := 0.0; lG10 := 0.0; lG11 := 0.0;
+  for i := Low(CFiniteDifferencesYFactor) to High(CFiniteDifferencesYFactor) do
+  begin
+    if i = 0 then
+      Continue;
+
+    fdy := CFiniteDifferencesYFactor[i];
+
+    lG00 += Image[xy + i] * fdy;
+    lG01 += Image[xy + 1 + i] * fdy;
+    lG10 += Image[xy + FWidth + i] * fdy;
+    lG11 += Image[xy + FWidth + 1 + i] * fdy;
+  end;
+  lgx += lerp(lerp(lG00, lG01, X - ix), lerp(lG10, lG11, X - ix), Y - iy);
+
+  lG00 := 0.0; lG01 := 0.0; lG10 := 0.0; lG11 := 0.0;
+  for i := Low(CFiniteDifferencesYFactor) to High(CFiniteDifferencesYFactor) do
+  begin
+    if i = 0 then
+      Continue;
+
+    iw := i * FWidth;
+    fdy := CFiniteDifferencesYFactor[i];
+
+    lG00 += Image[xy + iw] * fdy;
+    lG01 += Image[xy + 1 + iw] * fdy;
+    lG10 += Image[xy + FWidth + iw] * fdy;
+    lG11 += Image[xy + FWidth + 1 + iw] * fdy;
+  end;
+  lgy += lerp(lerp(lG00, lG01, X - ix), lerp(lG10, lG11, X - ix), Y - iy);
+
+  GX := lgx;
+  GY := lgy;
+end;
+
 
 { TScanImage }
 
