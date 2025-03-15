@@ -282,23 +282,23 @@ end;
 procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
 var
   w, i: Integer;
-  alpha, p, blackmanWindow: Double;
+  alpha, p, blackmanExactWindow: Double;
 begin
   for w := 0 to High(Word) do
   begin
-    alpha := w * (1 / High(Word));
+    alpha := w * (1 / (High(Word) + 1));
     for i := Low(TSerpCoeffs9) to -Low(TSerpCoeffs9) do
     begin
-      p := ((alpha - i) - Low(TSerpCoeffs9)) / (2 * -Low(TSerpCoeffs9));
-      blackmanWindow := 0.42 - 0.5 * Cos(2.0 * Pi * p) + 0.08 * Cos(4.0 * Pi * p);
-      coeffs[w, i] :=Sinc((alpha - i) * Pi) * blackmanWindow;
+      p := ((i - alpha) - -Low(TSerpCoeffs9)) / (2 * -Low(TSerpCoeffs9));
+      blackmanExactWindow := 7938/18608 - 9240/18608 * Cos(2.0 * Pi * p) + 1430/18608 * Cos(4.0 * Pi * p);
+      coeffs[w, i] :=Sinc((i - alpha) * Pi) * blackmanExactWindow;
     end;
   end;
 end;
 
 function serpCoeffs(alpha: Double): PSingle;
 begin
-  Result := @GSerpCoeffs9ByWord[round(alpha * High(word)), 0];
+  Result := @GSerpCoeffs9ByWord[round(alpha * (High(word) + 1)), 0];
 end;
 
 {$ifdef CPUX64}
