@@ -42,7 +42,6 @@ type
     function PowellAnalyze(const x: TVector; obj: Pointer): TScalar;
     function PrepareCorrect(var Coords: TAngleScanCoords): Boolean;
     function GridSearchCorrect(ConstSkew, MulSkew, SqrSkew: Double; const Coords: TAngleScanCoords): Double;
-    function PowellCorrect(const x: TVector; obj: Pointer): TScalar;
 
     procedure AngleInit;
     procedure Analyze;
@@ -296,7 +295,7 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * scan.DPI, CAnalyzeAreaEnd * 0.5 * scan.DPI, 0.0, 2.0 * Pi);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * scan.DPI, CAnalyzeAreaEnd * 0.5 * scan.DPI, 0.0, 2.0 * Pi, 1);
   OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT , scan.RelativeAngle);
 
   // parse image using LUTs
@@ -480,19 +479,30 @@ begin
 end;
 
 procedure TScanCorrelator.Crop;
+var
+  RadiusAngleLut: TRadiusAngleDynArray;
 
   procedure DoCrop(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   begin
     if not InRange(AIndex, 0, High(FInputScans)) then
       Exit;
 
-    FInputScans[AIndex].Crop;
+    FInputScans[AIndex].Crop(RadiusAngleLut);
   end;
 
 var
   i: Integer;
+  rBeg, rEnd: Double;
 begin
   WriteLn('Crop');
+
+  if Length(FInputScans) <= 0 then
+    Exit;
+
+  rBeg := C45RpmLastMusicGroove * 0.5 * FInputScans[0].DPI;
+  rEnd := C45RpmFirstMusicGroove * 0.5 * FInputScans[0].DPI;
+
+  RadiusAngleLut := BuildRadiusAngleLUT(rBeg, rEnd, 0, 2.0 * Pi, 1);
 
   ProcThreadPool.DoParallelLocalProc(@DoCrop, 0, High(FInputScans));
 
@@ -622,7 +632,7 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, startAngle, endAngle);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, startAngle, endAngle, 0);
 
   // build weights lookup table
 
@@ -702,17 +712,14 @@ begin
   Result := Result / Length(Coords.RadiusAngleLUT);
 end;
 
-function TScanCorrelator.PowellCorrect(const x: TVector; obj: Pointer): TScalar;
-begin
-  Result := GridSearchCorrect(x[0], x[1], x[2], PAngleScanCoords(obj)^);
-end;
-
 procedure TScanCorrelator.Correct;
 const
   CConstCorrectExtents = 0.02; // inches
   CConstCorrectHalfCount = 100;
   CMulCorrectExtents = 0.01;
   CMulCorrectHalfCount = 100;
+  CSqrCorrectExtents = 0.000001;
+  CSqrCorrectHalfCount = 100;
 var
   rmses: TDoubleDynArray;
   coordsArray: array of TAngleScanCoords;
@@ -722,8 +729,7 @@ var
   var
     coords: TAngleScanCoords;
     c: Integer;
-    func, bestFunc, ConstSkew, MulSkew, bestConstSkew, bestMulSkew, bestSqrSkew: Double;
-    X: TVector;
+    func, bestFunc, ConstSkew, MulSkew, SqrSkew, bestConstSkew, bestMulSkew, bestSqrSkew: Double;
   begin
     if not InRange(AIndex, 0, High(FPerAngleX)) then
       Exit;
@@ -768,11 +774,18 @@ var
         end;
       end;
 
-      X := [bestConstSkew, bestMulSkew, bestSqrSkew];
-      bestFunc := PowellMinimize(@PowellCorrect, X, 1e-9, 1e-9, 0.0, MaxInt, @coords)[0];
-      bestConstSkew := X[0];
-      bestMulSkew := X[1];
-      bestSqrSkew := X[2];
+      for c := -CSqrCorrectHalfCount to CSqrCorrectHalfCount do
+      begin
+        SqrSkew := c * CSqrCorrectExtents / CSqrCorrectHalfCount;
+
+        func := GridSearchCorrect(bestConstSkew, bestMulSkew, SqrSkew, coords);
+
+        if func < bestFunc then
+        begin
+          bestFunc := func;
+          bestSqrSkew := SqrSkew;
+        end;
+      end;
 
       // free up memory
       SetLength(coords.RadiusAngleLUT, 0);
@@ -842,7 +855,7 @@ begin
       Write(FInputScans[iscan].ImageShortName);
       Write(', Angle:', (iangle / CCorrectAngleCount) * 360.0:9:3);
       Write(', RMSE:', rmses[ias]:12:6);
-      WriteLn(', ', FPerAngleX[ias, 0]:12:9, ', ', FPerAngleX[ias, 1]:12:9, ', ', FPerAngleX[ias, 2]:16:12);
+      WriteLn(', ', FPerAngleX[ias, 0]:12:6, ', ', FPerAngleX[ias, 1]:12:6, ', ', FPerAngleX[ias, 2]:12:9);
     end;
 
   WriteLn('Worst RMSE: ', MaxValue(rmses):12:9);

@@ -63,7 +63,7 @@ type
     procedure LoadTIFF;
     procedure BrickwallLimit;
     procedure FindTrack(AForcedSampleRate: Integer = -1);
-    procedure Crop;
+    procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray);
 
     function InRangePointD(Y, X: Double): Boolean;
     function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
@@ -751,23 +751,16 @@ begin
   //WriteLn(ImageShortName, ', begin:', RadToDeg(a0a):9:3, ', end:', RadToDeg(a0b):9:3, result:18:6);
 end;
 
-procedure TInputScan.Crop;
+procedure TInputScan.Crop(const RadiusAngleLut: TRadiusAngleDynArray);
 var
-  rBeg, rEnd: Double;
-  radiusAngleLut: TRadiusAngleDynArray;
-  x: TVector;
+  X: TVector;
 begin
-  x := [NormalizeAngle(DegToRad(-30.0)), NormalizeAngle(DegToRad(30.0))];
+  X := [NormalizeAngle(DegToRad(-30.0)), NormalizeAngle(DegToRad(30.0))];
 
-  rBeg := C45RpmLastMusicGroove * 0.5 * FDPI;
-  rEnd := C45RpmFirstMusicGroove * 0.5 * FDPI;
+  PowellMinimize(@PowellCrop, X, 1.0 / 360.0, 1e-6, 0.0, MaxInt, @RadiusAngleLut);
 
-  radiusAngleLut := BuildRadiusAngleLUT(rBeg, rEnd, 0, 2.0 * Pi);
-
-  PowellMinimize(@PowellCrop, x, 1.0 / 360.0, 1e-3, 0.0, MaxInt, @radiusAngleLut);
-
-  FCropData.StartAngle := NormalizeAngle(x[0]);
-  FCropData.EndAngle := NormalizeAngle(x[1]);
+  FCropData.StartAngle := NormalizeAngle(X[0]);
+  FCropData.EndAngle := NormalizeAngle(X[1]);
   FCropData.StartAngleMirror := NormalizeAngle(FCropData.StartAngle + Pi);
   FCropData.EndAngleMirror := NormalizeAngle(FCropData.EndAngle + Pi);
 end;

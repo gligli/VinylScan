@@ -132,7 +132,7 @@ function NormalizedAngleDiff(xmin, xmax: Double): Double;
 function NormalizedAngleTo02Pi(x: Double): Double;
 
 procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TSinCosDynArray; AOriginAngle: Double = 0.0; AExtentsAngle: Double = 2.0 * Pi);
-function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle: Double): TRadiusAngleDynArray;
+function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle: Double; PxCountShift: Byte): TRadiusAngleDynArray;
 procedure OffsetRadiusAngleLUTAngle(var LUT: TRadiusAngleDynArray; AngleOffset: Double);
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
 
@@ -779,7 +779,8 @@ begin
   Result := CompareValue(ra1^.Angle, ra2^.Angle);
 end;
 
-function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle: Double): TRadiusAngleDynArray;
+function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle: Double; PxCountShift: Byte
+  ): TRadiusAngleDynArray;
 var
   oy, ox, cnt, rEndInt: Integer;
   r, t, nsa, nea: Double;
@@ -792,8 +793,15 @@ begin
 
   cnt := 0;
   for oy := -rEndInt to rEndInt do
+  begin
+    if oy and ((1 shl PxCountShift) - 1) <> 0 then
+      Continue;
+
     for ox := -rEndInt to rEndInt do
     begin
+      if ox and ((1 shl PxCountShift) - 1) <> 0 then
+        Continue;
+
       r := Sqrt(sqr(oy) + sqr(ox));
 
       if InRange(r, StartRadius, EndRadius) then
@@ -810,6 +818,7 @@ begin
         end;
       end;
     end;
+  end;
 
   SetLength(Result, cnt);
   QuickSort(Result[0], 0, cnt - 1, SizeOf(Result[0]), @CompareRadiusAngle);
