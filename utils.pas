@@ -107,6 +107,9 @@ function lerp(x, y, alpha: Double): Double; overload;
 function lerp(x, y: Word; alpha: Double): Double; overload;
 function lerp(x, y: Integer; alpha: Double): Double; overload;
 
+function Sinc(x: Double): Double;
+function BlackmanExactWindow(p: Double): Double;
+
 procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
 function serpCoeffs(alpha: Double): PSingle;
 procedure serpFromCoeffsXY(coeffs: PSingle; centerPx: PWORD; stride: Integer; res: PSingle);
@@ -142,6 +145,9 @@ procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string;
 procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFunction:TCompareFunction;AUserParameter:Pointer=nil);
 
 function GetTIFFSize(AStream: TStream; out AWidth, AHeight: DWord; out dpiX, dpiY: Double): Boolean;
+
+procedure BurgAlgorithm(var coeffs: TDoubleDynArray; const x: TSingleDynArray);
+function BurgAlgorithm_PredictOne(const coeffs: TDoubleDynArray; const x: TSingleDynArray): Double;
 
 implementation
 uses utypes, ubfgs;
@@ -274,15 +280,20 @@ begin
   Result := x + (y - x) * alpha;
 end;
 
-function Sinc(x: Double): Double; inline;
+function Sinc(x: Double): Double;
 begin
   Result := DivDef(Sin(x), x, 1.0);
+end;
+
+function BlackmanExactWindow(p: Double): Double;
+begin
+  Result := 7938/18608 - 9240/18608 * Cos(2.0 * Pi * p) + 1430/18608 * Cos(4.0 * Pi * p);
 end;
 
 procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
 var
   w, i: Integer;
-  alpha, p, blackmanExactWindow: Double;
+  alpha, p: Double;
 begin
   for w := 0 to High(Word) do
   begin
@@ -290,8 +301,7 @@ begin
     for i := Low(TSerpCoeffs9) to -Low(TSerpCoeffs9) do
     begin
       p := ((i - alpha) - -Low(TSerpCoeffs9)) / (2 * -Low(TSerpCoeffs9));
-      blackmanExactWindow := 7938/18608 - 9240/18608 * Cos(2.0 * Pi * p) + 1430/18608 * Cos(4.0 * Pi * p);
-      coeffs[w, i] :=Sinc((i - alpha) * Pi) * blackmanExactWindow;
+      coeffs[w, i] :=Sinc((i - alpha) * Pi) * BlackmanExactWindow(p);
     end;
   end;
 end;
@@ -1059,6 +1069,87 @@ begin
 
   Result := true;
 end;
+
+// from https://github.com/cchafe/burgbare/blob/main/burgalgorithm.cpp
+procedure BurgAlgorithm(var coeffs: TDoubleDynArray; const x: TSingleDynArray);
+var
+  i, j, k, m, ni, N: Integer;
+  Ak, f, b: TDoubleDynArray;
+  Dk, mu, t1, t2: Double;
+begin
+  // GET SIZE FROM INPUT VECTORS
+  N := High(x);
+  m := Length(coeffs);
+
+  ////
+  Assert(Length(x) >= m, 'time_series should have more elements than the AR order is');
+
+  // INITIALIZE Ak
+  SetLength(Ak, m + 1);
+  Ak[ 0 ] := 1.0;
+
+  // INITIALIZE f and b
+  SetLength(f, Length(x));
+  SetLength(b, Length(x));
+  for i := 0 to High(x) do
+  begin
+    f[i] := x[i];
+    b[i] := x[i];
+  end;
+
+  // INITIALIZE Dk
+  Dk := 0.0;
+  for j := 0 to N do
+    Dk += 2.0 * f[ j ] * f[ j ];
+  Dk -= f[ 0 ] * f[ 0 ] + b[ N ] * b[ N ];
+
+  // BURG RECURSION
+  for k := 0 to m - 1 do
+  begin
+    // COMPUTE MU
+    mu := 0.0;
+    for ni := 0 to N - k - 1 do
+      mu += f[ni + k + 1] * b[ni];
+    mu *= -2.0 / Dk;
+
+    // UPDATE Ak
+    for ni := 0 to (k + 1) div 2 do
+    begin
+      t1 := Ak[ ni ] + mu * Ak[ k + 1 - ni ];
+      t2 := Ak[ k + 1 - ni ] + mu * Ak[ ni ];
+      Ak[ ni ] := t1;
+      Ak[ k + 1 - ni ] := t2;
+    end;
+
+    // UPDATE f and b
+    for ni := 0 to  N - k - 1 do
+    begin
+      t1 := f[ ni + k + 1 ] + mu * b[ ni ];
+      t2 := b[ ni ] + mu * f[ ni + k + 1 ];
+      f[ ni + k + 1 ] := t1;
+      b[ ni ] := t2;
+    end;
+
+    // UPDATE Dk
+    Dk := ( 1.0 - mu * mu ) * Dk - f[ k + 1 ] * f[ k + 1 ] - b[ N - k - 1 ] * b[ N - k - 1 ];
+  end;
+
+  // ASSIGN COEFFICIENTS
+  for i := 1 to High(Ak) do
+    coeffs[i - 1] := Ak[i];
+end;
+
+function BurgAlgorithm_PredictOne(const coeffs: TDoubleDynArray; const x: TSingleDynArray): Double;
+var
+  m, i: Integer;
+begin
+  m := Length(coeffs);
+
+  Result := 0.0;
+  for i := 0 to m - 1 do
+    Result -= coeffs[ i ] * x[ High(x) - i ];
+end;
+
 
 initialization
 {$ifdef DEBUG}
