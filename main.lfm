@@ -2,7 +2,7 @@ object MainForm: TMainForm
   Left = -8
   Height = 1461
   Top = -8
-  Width = 1344
+  Width = 1360
   HorzScrollBar.Increment = 240
   HorzScrollBar.Page = 640
   HorzScrollBar.Tracking = True
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
   ClientHeight = 1422
-  ClientWidth = 1344
+  ClientWidth = 1360
   Color = 4210752
   DoubleBuffered = True
   KeyPreview = True
@@ -103,7 +103,7 @@ object MainForm: TMainForm
       Height = 25
       Top = 104
       Width = 131
-      Caption = 'Scans correlator'
+      Caption = 'Scans correlator (F10)'
       TabOrder = 13
       OnClick = btScansCorrelatorClick
     end
@@ -112,7 +112,7 @@ object MainForm: TMainForm
       Height = 25
       Top = 168
       Width = 131
-      Caption = 'Scan to track'
+      Caption = 'Scan to track (F11)'
       TabOrder = 16
       OnClick = btScan2TrackClick
     end

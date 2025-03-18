@@ -261,6 +261,10 @@ end;
 procedure TMainForm.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   case Key of
+    VK_F10:
+      btScansCorrelatorClick(nil);
+    VK_F11:
+      btScan2TrackClick(nil);
     VK_F12:
       UnitTests;
   end;
@@ -272,12 +276,14 @@ const
 var
   tc: QWord;
 begin
-  Result := not ((GetForegroundWindow = Handle) and (GetAsyncKeyState(VK_ESCAPE) and $8000 <> 0));
+  Result := True;
 
   FPoints.Add(TPointF.Create(X, Y));
 
-  if not Result or Finished or (FPoints.Count >= Sender.SampleRate * CSecondsAtATime) then
+  if Finished or (FPoints.Count >= Sender.SampleRate * CSecondsAtATime) then
   begin
+    Result := not ((GetForegroundWindow = Handle) and (GetAsyncKeyState(VK_ESCAPE) and $8000 <> 0));
+
     DrawPoints(FPoints, clLime);
 
     tc := GetTickCount64;
