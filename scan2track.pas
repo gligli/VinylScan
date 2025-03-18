@@ -5,7 +5,7 @@ unit scan2track;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, GraphType, FPCanvas, FPImage, FPWritePNG, MTProcs, fgl,
+  Classes, SysUtils, Types, Math, Graphics, GraphType, FPCanvas, FPImage, FPWritePNG, MTProcs,
   utils, inputscan, FilterIIRLPBessel, FilterIIRHPBessel;
 
 const
@@ -31,6 +31,12 @@ type
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
 
+    FPrevSample: Single;
+    FPrevSamples: TSingleDynArray;
+    FPrevSamplePos: Integer;
+    FPrevSampleIdx: Integer;
+
+    procedure AddPrevSample(AValue: Single);
     function DecodeSample(radius, angleSin, angleCos: Double): Double;
 
   public
@@ -55,6 +61,8 @@ implementation
 { TScan2Track }
 
 constructor TScan2Track.Create(ASampleRate: Integer; ABitsPerSample: Integer; ADPI: Integer);
+var
+  i: Integer;
 begin
   FSampleRate := ASampleRate;
   FBitsPerSample := ABitsPerSample;
@@ -63,6 +71,10 @@ begin
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
 
   FScan := TInputScan.Create(ADPI);
+
+  SetLength(FPrevSamples, Ceil(FSampleRate / CLowCutoffFreq));
+  for i := 0 to High(FPrevSamples) do
+    FPrevSamples[i] := NaN;
 end;
 
 destructor TScan2Track.Destroy;
@@ -72,12 +84,28 @@ begin
   inherited Destroy;
 end;
 
-function TScan2Track.DecodeSample(radius, angleSin, angleCos: Double): Double;
+procedure TScan2Track.AddPrevSample(AValue: Single);
 var
-  ismp, upCnt: Integer;
-  r, px, py, cxa: Double;
-  sample, sampleMiddle, upAcc: Single;
-  smpBuf: array[-CSampleDecoderMax .. CSampleDecoderMax - 1] of Single;
+  i: Integer;
+begin
+  FPrevSamples[FPrevSamplePos] := AValue;
+  FPrevSample := AValue;
+
+  Inc(FPrevSamplePos);
+  if FPrevSamplePos >= Length(FPrevSamples) then
+    FPrevSamplePos := 0;
+
+  Inc(FPrevSampleIdx);
+end;
+
+function TScan2Track.DecodeSample(radius, angleSin, angleCos: Double): Double;
+const
+  CSigma = 2.5;
+var
+  iSmp, upCnt, posMin, posMax: Integer;
+  r, px, py, cxa, estCurSample, stdDev: Double;
+  sample, sampleMin, sampleMax, sampleMiddle, sampleIdx, upAcc: Single;
+  smpBuf: array[-CSampleDecoderMax .. CSampleDecoderMax - 1] of Double;
 begin
   cxa := C45RpmRecordingGrooveWidth * Scan.DPI / (CSampleDecoderMax - 0.5);
 
@@ -88,34 +116,52 @@ begin
   if not Scan.InRangePointD(py, px) then
     Exit(0.0);
 
-  sampleMiddle := 0.0;
-  for ismp := -CSampleDecoderMax to CSampleDecoderMax - 1 do
+  estCurSample := NaN;
+  posMin := -CSampleDecoderMax;
+  posMax := CSampleDecoderMax - 1;
+
+  if FPrevSampleIdx >= Length(FPrevSamples) then
   begin
-    r := radius + (ismp + 0.5) * cxa;
+    estCurSample := FPrevSample;
+    stdDev := PopnStdDev(FPrevSamples);
+
+    posMin := Max(posMin, Floor(estCurSample - CSigma * stdDev));
+    posMax := Min(posMax, Ceil(estCurSample + CSigma * stdDev));
+  end;
+
+  sampleMin := Infinity;
+  sampleMax := -Infinity;
+  for iSmp := posMin to posMax do
+  begin
+    r := radius + (iSmp + 0.5) * cxa;
     px := angleCos * r + Scan.Center.X;
     py := angleSin * r * Scan.SkewY + Scan.Center.Y;
 
     sample := Scan.GetPointD_Sinc(Scan.Image, py, px);
 
-    sampleMiddle += sample;
+    sampleMin := Min(sampleMin, sample);
+    sampleMax := Max(sampleMax, sample);
 
-    smpBuf[ismp] := sample;
+    smpBuf[iSmp] := sample;
   end;
 
-  sampleMiddle /= CSampleDecoderMax * 2.0;
+  sampleMiddle := (sampleMax + sampleMin) * 0.5;
 
   upAcc := 0;
   upCnt := 0;
-  for ismp := -CSampleDecoderMax to CSampleDecoderMax - 1 do
-    if smpBuf[ismp] >= sampleMiddle  then
+  for iSmp := posMin to posMax do
+    if smpBuf[iSmp] >= sampleMiddle then
     begin
-      upAcc += ismp + 0.5;
+      upAcc += iSmp + 0.5;
       Inc(upCnt);
     end;
 
-  Result := DivDef(upAcc, (CSampleDecoderMax - 0.5) * upCnt, 0.0);
-end;
+  sampleIdx := DivDef(upAcc, upCnt, 0.0);
 
+  AddPrevSample(sampleIdx - 0.5);
+
+  Result := sampleIdx / (CSampleDecoderMax - 0.5);
+end;
 
 procedure TScan2Track.EvalTrack;
 var
@@ -187,12 +233,12 @@ begin
 
     SetLength(samples, iSample);
     CreateWAV(1, 16, FSampleRate, FOutputWAVFileName, samples);
+
+    WriteLn;
+    WriteLn('Done!');
   finally
     fltSample.Free;
   end;
-
-  WriteLn;
-  WriteLn('Done!');
 end;
 
 procedure TScan2Track.LoadPNG;
