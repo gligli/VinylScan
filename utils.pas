@@ -16,6 +16,14 @@ type
     X, Y: Double;
   end;
 
+  TPointValue = record
+    X, Y, Value: Double;
+  end;
+
+  TPolarPointValue = record
+    Radius, Angle, Sin, Cos, Value: Double;
+  end;
+
   TRectD = record
     L, T, R, B: Double;
   end;
@@ -30,6 +38,8 @@ type
 
   TPointDDynArray = array of TPointD;
   TPointDDynArray2 = array of TPointDDynArray;
+  TPointValueDynArray = array of TPointValue;
+  TPolarPointValueDynArray = array of TPolarPointValue;
   TByteDynArray2 = array of TByteDynArray;
   TWordDynArray2 = array of TWordDynArray;
   TSingleDynArray2 = array of TSingleDynArray;
@@ -63,7 +73,7 @@ const
   C45RpmInnerSize = 1.504;
   C45RpmLabelOuterSize = 3.5;
   C45RpmConcentricGroove = 3.875;
-  C45RpmMinConcentricGroove = C45RpmConcentricGroove - 0.078 * 2;
+  C45RpmMinConcentricGroove = C45RpmConcentricGroove - 0.078 * 1.5;
   C45RpmMaxConcentricGroove = C45RpmConcentricGroove + 0.078;
   C45RpmFirstMusicGroove = 6.625;
   C45RpmLastMusicGroove = 4.25;
@@ -86,6 +96,10 @@ const
   cPhi = (1 + sqrt(5)) / 2;
   cInvPhi = 1 / cPhi;
 
+  CFiniteDifferencesYFactor: array[-7 .. 7] of Double = (-1/24024, 7/10296, -7/1320, 7/264, -7/72, 7/24, -7/8, 0, 7/8, -7/24, 7/72, -7/264, 7/1320, -7/10296, 1/24024);
+  //CFiniteDifferencesYFactor: array[-4 .. 4] of Double = (1/280, -4/105, 1/5, -4/5, 0, 4/5, -1/5, 4/105, -1/280);
+  //CFiniteDifferencesYFactor: array[-2 .. 2] of Double = (1/12, -2/3, 0, 2/3, -1/12);
+
 procedure SpinEnter(Lock: PSpinLock); assembler;
 procedure SpinLeave(Lock: PSpinLock); assembler;
 function NumberOfProcessors: Integer;
@@ -107,6 +121,8 @@ function lerp(x, y, alpha: Double): Double; overload;
 function lerp(x, y: Word; alpha: Double): Double; overload;
 function lerp(x, y: Integer; alpha: Double): Double; overload;
 
+procedure DrawPointValue(const AImage: TDoubleDynArray; const APoint: TPointValue; AWidth, AHeight: Integer; ASign: TValueSign);
+
 function Sinc(x: Double): Double;
 function BlackmanExactWindow(p: Double): Double;
 
@@ -118,7 +134,7 @@ function serpFromCoeffs(coeffs, data: PSingle): Single;
 function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
-function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: array of Double; EpsilonG: Double; Silent: Boolean; Data: Pointer = nil): Double;
+function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: array of Double; EpsilonG: Double; MaxIter: Integer; Silent: Boolean; Data: Pointer = nil): Double;
 function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 
 function MAE(const a: TWordDynArray; const b: TWordDynArray): Double;
@@ -127,6 +143,7 @@ function MSE(const a: TWordDynArray; const b: TWordDynArray): Double; overload;
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 function SpearmanRankCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 
+function Make8BitSample(smp: Double): ShortInt;
 function Make16BitSample(smp: Double): SmallInt;
 
 function NormalizeAngle(x: Double): Double;
@@ -135,7 +152,7 @@ function NormalizedAngleDiff(xmin, xmax: Double): Double;
 function NormalizedAngleTo02Pi(x: Double): Double;
 
 procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TSinCosDynArray; AOriginAngle: Double = 0.0; AExtentsAngle: Double = 2.0 * Pi);
-function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle: Double; PxCountShift: Byte): TRadiusAngleDynArray;
+function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle: Double): TRadiusAngleDynArray;
 procedure OffsetRadiusAngleLUTAngle(var LUT: TRadiusAngleDynArray; AngleOffset: Double);
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
 
@@ -278,6 +295,34 @@ end;
 function lerp(x, y: Integer; alpha: Double): Double;
 begin
   Result := x + (y - x) * alpha;
+end;
+
+procedure DrawPointValue(const AImage: TDoubleDynArray; const APoint: TPointValue; AWidth, AHeight: Integer; ASign: TValueSign);
+var
+  ix, iy, xy: Integer;
+  x, y, rx, ry, p: Double;
+begin
+  x := APoint.X;
+  y := APoint.Y;
+  p := APoint.Value * ASign;
+
+  ix := trunc(x);
+  iy := trunc(y);
+
+  if InRange(ix, 0, AWidth - 2) and InRange(iy, 0, AHeight - 2) then
+  begin
+    xy := iy * AWidth + ix;
+
+    x -= ix;
+    y -= iy;
+    rx := 1.0 - x;
+    ry := 1.0 - y;
+
+    AImage[xy] += ry * rx * p;
+    AImage[xy + 1] += ry * x * p;
+    AImage[xy + AWidth] += y * rx * p;
+    AImage[xy + AWidth + 1] += y * x * p;
+  end;
 end;
 
 function Sinc(x: Double): Double;
@@ -549,7 +594,7 @@ begin
 end;
 
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: array of Double;
-  EpsilonG: Double; Silent: Boolean; Data: Pointer): Double;
+  EpsilonG: Double; MaxIter: Integer; Silent: Boolean; Data: Pointer): Double;
 var
   gm, f: Double;
   grad, bestX: TDoubleDynArray;
@@ -591,7 +636,7 @@ begin
     end;
 
     Inc(iter);
-  until gm <= EpsilonG;
+  until (gm <= EpsilonG) or (iter >= MaxIter);
 
   for i := 0 to High(X) do
     X[i] := bestX[i];
@@ -725,6 +770,11 @@ begin
   Result := alglib_SpearmanRankCorrelation(@a[0], @b[0], Length(a));
 end;
 
+function Make8BitSample(smp: Double): ShortInt;
+begin
+  Result := EnsureRange(round(smp * High(ShortInt)), Low(ShortInt), High(ShortInt));
+end;
+
 function Make16BitSample(smp: Double): SmallInt;
 begin
   Result := EnsureRange(round(smp * High(SmallInt)), Low(SmallInt), High(SmallInt));
@@ -763,7 +813,7 @@ end;
 function NormalizedAngleTo02Pi(x: Double): Double;
 begin
   Result := x;
-  if Result <= 0 then
+  if Result < 0 then
     Result += 2.0 * Pi;
 end;
 
@@ -789,29 +839,25 @@ begin
   Result := CompareValue(ra1^.Angle, ra2^.Angle);
 end;
 
-function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle: Double; PxCountShift: Byte
-  ): TRadiusAngleDynArray;
+function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle: Double): TRadiusAngleDynArray;
 var
   oy, ox, cnt, rEndInt: Integer;
-  r, t, nsa, nea: Double;
+  r, t, nsa, nea, diff: Double;
 begin
   rEndInt := Ceil(EndRadius);
   nsa := NormalizeAngle(startAngle);
   nea := NormalizeAngle(endAngle);
 
-  SetLength(Result, Round(Sqr(rEndInt * 2 + 1) * NormalizedAngleDiff(nsa, nea) / (2.0 * Pi)));
+  diff := NormalizedAngleDiff(nsa, nea);
+  if diff = 0 then
+    diff := 2.0 * Pi;
+
+  SetLength(Result, Round(Sqr(rEndInt * 2 + 1) * diff / (2.0 * Pi)));
 
   cnt := 0;
   for oy := -rEndInt to rEndInt do
-  begin
-    if oy and ((1 shl PxCountShift) - 1) <> 0 then
-      Continue;
-
     for ox := -rEndInt to rEndInt do
     begin
-      if ox and ((1 shl PxCountShift) - 1) <> 0 then
-        Continue;
-
       r := Sqrt(sqr(oy) + sqr(ox));
 
       if InRange(r, StartRadius, EndRadius) then
@@ -828,7 +874,6 @@ begin
         end;
       end;
     end;
-  end;
 
   SetLength(Result, cnt);
   QuickSort(Result[0], 0, cnt - 1, SizeOf(Result[0]), @CompareRadiusAngle);
@@ -837,12 +882,17 @@ end;
 procedure OffsetRadiusAngleLUTAngle(var LUT: TRadiusAngleDynArray; AngleOffset: Double);
 var
   i: Integer;
+  offCos, offSin, cs, sn: Double;
 begin
-  SinCos(LUT[0].Angle + AngleOffset, LUT[0].Sin, LUT[0].Cos);
-  for i := 1 to High(LUT) do
-    if LUT[i].Angle <> LUT[i - 1].Angle then
+  SinCos(AngleOffset, offSin, offCos);
+
+  for i := 0 to High(LUT) do
+    if (i = 0) or (LUT[i].Angle <> LUT[i - 1].Angle) then
     begin
-      SinCos(LUT[i].Angle + AngleOffset, LUT[i].Sin, LUT[i].Cos)
+      sn := LUT[i].Sin;
+      cs := LUT[i].Cos;
+      LUT[i].Sin := sn * offCos + cs * offSin;
+      LUT[i].Cos := cs * offCos - sn * offSin;
     end
     else
     begin

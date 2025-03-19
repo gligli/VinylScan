@@ -45,6 +45,9 @@ type
     FImage: TWordDynArray;
     FLeveledImage: TWordDynArray;
 
+    FTrack: TPolarPointValueDynArray;
+    FTrackWH: Integer;
+
     procedure SetRevolutionFromDPI(ADPI: Integer);
     procedure SetRevolutionFromSampleRate(ASampleRate: Integer);
     function GetImageShortName: String;
@@ -65,12 +68,14 @@ type
     procedure LoadImage;
     procedure BrickwallLimit;
     procedure FindTrack(AForcedSampleRate: Integer = -1);
+    procedure BuildTrackPoints;
+    procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle, ASkewY: Double);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray);
 
     function InRangePointD(Y, X: Double): Boolean;
     function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
-    function GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single;
     procedure GetGradientsD(const Image: TWordDynArray; Y, X: Double; out GY: Double; out GX: Double);
+    function GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single;
 
     property ImageFileName: String read FImageFileName write FImageFileName;
     property ImageShortName: String read GetImageShortName;
@@ -78,8 +83,8 @@ type
     property DPI: Integer read FDPI;
     property Width: Integer read FWidth;
     property Height: Integer read FHeight;
+    property TrackWH: Integer read FTrackWH;
 
-    property Center: TPointD read FCenter write FCenter;
     property ConcentricGrooveRadius: Double read FConcentricGrooveRadius;
     property FirstGrooveRadius: Double read FFirstGrooveRadius;
     property GrooveStartAngle: Double read FGrooveStartAngle;
@@ -87,14 +92,17 @@ type
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
 
-    property SkewY: Double read FSkewY write FSkewY;
-    property RelativeAngle: Double read FRelativeAngle write FRelativeAngle;
-    property CropData: TCropData read FCropData write FCropData;
+    property Center: TPointD read FCenter;
+    property RelativeAngle: Double read FRelativeAngle;
+    property SkewY: Double read FSkewY;
+    property CropData: TCropData read FCropData;
+
     property CenterQuality: Double read FCenterQuality;
     property Objective: Double read FObjective write FObjective;
 
     property Image: TWordDynArray read FImage;
     property LeveledImage: TWordDynArray read FLeveledImage;
+    property Track: TPolarPointValueDynArray read FTrack;
   end;
 
   { TScanImage }
@@ -124,6 +132,8 @@ type
   end;
 
 implementation
+
+uses scan2track, scan2points;
 
 { TInputScan }
 
@@ -319,6 +329,9 @@ begin
       end;
   end;
 
+  if extents.Left > extents.Right then Exchange(extents.Left, extents.Right);
+  if extents.Top > extents.Bottom then Exchange(extents.Top, extents.Bottom);
+
   //WriteLn(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
 
   // grid search algorithm to find the concentric groove
@@ -423,7 +436,7 @@ begin
 
   X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius, FSkewY];
 
-  ff := GradientDescentMinimize(@GradientConcentricGroove, X, [0.0005, 0.0005, 0.0002, 0.0000001], 1e-6, True);
+  ff := GradientDescentMinimize(@GradientConcentricGroove, X, [0.0005, 0.0005, 0.0002, 0.0000001], 1e-6, 10000, True);
 
   FCenter.X := X[0];
   FCenter.Y := X[1];
@@ -524,7 +537,7 @@ begin
       if (png.DPI.X > 0) and (png.DPI.X = png.DPI.Y) then
       begin
         FDPI := png.DPI.X;
-        if not FSilent then   WriteLn('DPI:', FDPI:6);
+        if not FSilent then WriteLn('DPI:', FDPI:6);
       end;
     finally
       img.Free;
@@ -576,7 +589,7 @@ begin
       if (dpiX > 0) and (dpiX = dpiY) then
       begin
         FDPI := Round(dpiX);
-        if not FSilent then   WriteLn('DPI:', FDPI:6);
+        if not FSilent then WriteLn('DPI:', FDPI:6);
       end;
     finally
       img.Free;
@@ -688,7 +701,7 @@ begin
   FFirstGrooveRadius := (C45RpmFirstMusicGroove + C45RpmOuterSize) * 0.5 * FDPI * 0.5;
   FConcentricGrooveRadius := C45RpmConcentricGroove * FDPI * 0.5;
 
-  FindConcentricGroove_GridSearch(True);
+  FindConcentricGroove_GridSearch(False);
   FindConcentricGroove_Gradient;
   FindGrooveStart;
 
@@ -706,6 +719,34 @@ begin
   begin
     WriteLn(ImageFileName, ', CenterX:', FCenter.X:9:3, ', CenterY:', FCenter.Y:9:3, ', ConcentricGroove:', FConcentricGrooveRadius:10:3, ', SkewY:', FSkewY:9:6, ', Quality:', FCenterQuality:12:3);
   end;
+end;
+
+procedure TInputScan.BuildTrackPoints;
+var
+  s2t: TScan2Track;
+  s2p: TScan2Points;
+begin
+  s2t := TScan2Track.CreateFromInputScan(Self, True, 4);
+  s2p := TScan2Points.Create(s2t);
+  try
+    s2p.BuildTrackPoints;
+
+    FTrackWH := s2p.TrackWH;
+    FTrack := s2p.Track;
+
+    WriteLn(ImageShortName, ', TrackPos:', s2p.TrackPos:8, ', TrackFailCount:', s2p.TrackFailCount:8);
+  finally
+    s2p.Free;
+    s2t.Free;
+  end;
+end;
+
+procedure TInputScan.CorrectByModel(ACenterX, ACenterY, ARelativeAngle, ASkewY: Double);
+begin
+  if not IsNan(ACenterX) then FCenter.X := ACenterX;
+  if not IsNan(ACenterY) then FCenter.Y := ACenterY;
+  if not IsNan(ARelativeAngle) then FRelativeAngle := ARelativeAngle;
+  if not IsNan(ASkewY) then FSkewY := ASkewY;
 end;
 
 function TInputScan.PowellCrop(const x: TVector; obj: Pointer): TScalar;
@@ -789,36 +830,15 @@ begin
   ix := trunc(X);
   iy := trunc(Y);
 
-  yx := iy * Width + ix;
+  yx := iy * FWidth + ix;
 
   y1 := lerp(Image[yx], Image[yx + 1], X - ix);
-  y2 := lerp(Image[yx + Width], Image[yx + Width + 1], X - ix);
+  y2 := lerp(Image[yx + FWidth], Image[yx + FWidth + 1], X - ix);
 
   Result := lerp(y1, y2, Y - iy);
 end;
 
-function TInputScan.GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single;
-var
-  ix, iy: Integer;
-  intData: TSerpCoeffs9;
-  coeffsX, coeffsY: PSingle;
-begin
-  ix := trunc(X);
-  iy := trunc(Y);
-
-  coeffsX := serpCoeffs(X - ix);
-  coeffsY := serpCoeffs(Y - iy);
-
-  serpFromCoeffsXY(coeffsX, @Image[iy * Width + ix], Width, @intData[0]);
-
-  Result := serpFromCoeffs(coeffsY, @intData[0]);
-end;
-
 procedure TInputScan.GetGradientsD(const Image: TWordDynArray; Y, X: Double; out GY: Double; out GX: Double);
-const
-  CFiniteDifferencesYFactor: array[-7 .. 7] of Double = (-1/24024, 7/10296, -7/1320, 7/264, -7/72, 7/24, -7/8, 0, 7/8, -7/24, 7/72, -7/264, 7/1320, -7/10296, 1/24024);
-  //CFiniteDifferencesYFactor: array[-4 .. 4] of Double = (1/280, -4/105, 1/5, -4/5, 0, 4/5, -1/5, 4/105, -1/280);
-  //CFiniteDifferencesYFactor: array[-2 .. 2] of Double = (1/12, -2/3, 0, 2/3, -1/12);
 var
   i, iy, ix, xy, iw: Integer;
   lG00, lG01, lG10, lG11, lgx, lgy, fdy: Double;
@@ -866,6 +886,22 @@ begin
   GY := lgy;
 end;
 
+function TInputScan.GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single;
+var
+  ix, iy: Integer;
+  intData: TSerpCoeffs9;
+  coeffsX, coeffsY: PSingle;
+begin
+  ix := trunc(X);
+  iy := trunc(Y);
+
+  coeffsX := serpCoeffs(X - ix);
+  coeffsY := serpCoeffs(Y - iy);
+
+  serpFromCoeffsXY(coeffsX, @Image[iy * FWidth + ix], FWidth, @intData[0]);
+
+  Result := serpFromCoeffs(coeffsY, @intData[0]);
+end;
 
 { TScanImage }
 

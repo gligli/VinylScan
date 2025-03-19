@@ -35,7 +35,8 @@ type
     FOutputWidth, FOutputHeight: Integer;
     FOutputImage: TWordDynArray;
 
-    procedure CorrectAnglesFromCoords(const coords: TAngleScanCoords; out AStartAngle, AEndAngle: Double);
+    procedure CorrectAnglesFromCoords(const coords: TAngleScanCoords; out AStartAngle, AEndAngle: Double;
+      AReduceAngles: Boolean);
 
     procedure PrepareAnalyze(var Coords: TAngleScanCoords);
     procedure GradientAnalyse(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
@@ -253,7 +254,7 @@ var
       end;
     end;
 
-    FInputScans[AIndex].RelativeAngle := NormalizeAngle(bestAngle);
+    FInputScans[AIndex].CorrectByModel(NaN, NaN, NormalizeAngle(bestAngle), NaN);
   end;
 
 var
@@ -291,20 +292,25 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * scan.DPI, CAnalyzeAreaEnd * 0.5 * scan.DPI, 0.0, 2.0 * Pi, 1);
-  OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT , scan.RelativeAngle);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * scan.DPI, CAnalyzeAreaEnd * 0.5 * scan.DPI, 0.0, 2.0 * Pi);
+  OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, scan.RelativeAngle);
+  try
 
-  // parse image using LUTs
+    // parse image using LUTs
 
-  for iLut := 0 to High(Coords.RadiusAngleLUT) do
-  begin
-    ra := @Coords.RadiusAngleLUT[iLut];
+    for iLut := 0 to High(Coords.RadiusAngleLUT) do
+    begin
+      ra := @Coords.RadiusAngleLUT[iLut];
 
-    r := ra^.Radius;
-    ox := ra^.Cos * r + cx;
-    oy := ra^.Sin * r * sky + cy;
+      r := ra^.Radius;
+      ox := ra^.Cos * r + cx;
+      oy := ra^.Sin * r * sky + cy;
 
-    ra^.TagValue := scan.GetPointD_Linear(scan.LeveledImage, oy, ox);
+      ra^.TagValue := scan.GetPointD_Linear(scan.LeveledImage, oy, ox);
+    end;
+
+  finally
+    OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, -scan.RelativeAngle);
   end;
 end;
 
@@ -325,59 +331,62 @@ begin
   scan := FInputScans[coords^.ScanIdx];
 
   OffsetRadiusAngleLUTAngle(coords^.RadiusAngleLUT, angle);
+  try
+    func := 0.0;
+    if Assigned(grad) then
+      FillQWord(grad[0], Length(grad), 0);
 
-  func := 0.0;
-  if Assigned(grad) then
-    FillQWord(grad[0], Length(grad), 0);
-
-  for iLut := 0 to High(coords^.RadiusAngleLUT) do
-  begin
-    ra := @coords^.RadiusAngleLUT[iLut];
-
-    r := ra^.Radius;
-    cs := ra^.Cos;
-    sn := ra^.Sin;
-
-    px := cs * r + centerX;
-    py := sn * r * skewY + centerY;
-
-    if scan.InRangePointD(py, px) then
+    for iLut := 0 to High(coords^.RadiusAngleLUT) do
     begin
-      mseInt := ra^.TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px);
-      func += Sqr(mseInt);
+      ra := @coords^.RadiusAngleLUT[iLut];
 
-      if Assigned(grad) then
+      r := ra^.Radius;
+      cs := ra^.Cos;
+      sn := ra^.Sin;
+
+      px := cs * r + centerX;
+      py := sn * r * skewY + centerY;
+
+      if scan.InRangePointD(py, px) then
       begin
-        scan.GetGradientsD(scan.LeveledImage, py, px, giy, gix);
+        mseInt := ra^.TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px);
+        func += Sqr(mseInt);
 
-        gmseInt := -2.0 * mseInt;
+        if Assigned(grad) then
+        begin
+          scan.GetGradientsD(scan.LeveledImage, py, px, giy, gix);
 
-        grad[0] += gix * gmseInt;
-        grad[1] += giy * gmseInt;
-        grad[2] += ((gix * -sn) + (giy * cs) * skewY) * r * gmseInt;
-        grad[3] += giy * sn * r * gmseInt;
+          gmseInt := -2.0 * mseInt;
+
+          grad[0] += gix * gmseInt;
+          grad[1] += giy * gmseInt;
+          grad[2] += ((gix * -sn) + (giy * cs) * skewY) * r * gmseInt;
+          grad[3] += giy * sn * r * gmseInt;
+        end;
+      end
+      else
+      begin
+        func += Sqr(1e6);
       end;
-    end
-    else
-    begin
-      func += Sqr(1e6);
     end;
+
+    func /= Length(coords^.RadiusAngleLUT);
+
+    if Assigned(grad) then
+      for iGrad := 0 to High(grad) do
+      begin
+        grad[iGrad] /= Length(coords^.RadiusAngleLUT);
+        grad[iGrad] *= 0.5 * Power(func, -0.5);
+        grad[iGrad] /= High(Word);
+      end;
+
+    func := Sqrt(func);
+    func /= High(Word);
+
+    scan.Objective := func;
+  finally
+    OffsetRadiusAngleLUTAngle(coords^.RadiusAngleLUT, -angle);
   end;
-
-  func /= Length(coords^.RadiusAngleLUT);
-
-  if Assigned(grad) then
-    for iGrad := 0 to High(grad) do
-    begin
-      grad[iGrad] /= Length(coords^.RadiusAngleLUT);
-      grad[iGrad] *= 0.5 * Power(func, -0.5);
-      grad[iGrad] /= High(Word);
-    end;
-
-  func := Sqrt(func);
-  func /= High(Word);
-
-  scan.Objective := func;
 
   SpinEnter(@FLock);
   try
@@ -444,11 +453,7 @@ const
     until SameValue(prevFunc, func, CEpsY);
 
     scan.Objective := func;
-    p.X := X[0];
-    p.Y := X[1];
-    scan.Center := p;
-    scan.RelativeAngle := X[2];
-    scan.SkewY := X[3];
+    FInputScans[AIndex].CorrectByModel(X[0], X[1], X[2], X[3]);
   end;
 
 var
@@ -498,7 +503,7 @@ begin
   rBeg := C45RpmLastMusicGroove * 0.5 * FInputScans[0].DPI;
   rEnd := C45RpmFirstMusicGroove * 0.5 * FInputScans[0].DPI;
 
-  RadiusAngleLut := BuildRadiusAngleLUT(rBeg, rEnd, 0, 2.0 * Pi, 1);
+  RadiusAngleLut := BuildRadiusAngleLUT(rBeg, rEnd, 0, 2.0 * Pi);
 
   ProcThreadPool.DoParallelLocalProc(@DoCrop, 0, High(FInputScans));
 
@@ -506,7 +511,7 @@ begin
     WriteLn(FInputScans[i].ImageShortName, ', begin:', RadToDeg(FInputScans[i].CropData.StartAngle):9:3, ', end:', RadToDeg(FInputScans[i].CropData.EndAngle):9:3);
 end;
 
-procedure TScanCorrelator.CorrectAnglesFromCoords(const coords: TAngleScanCoords; out AStartAngle, AEndAngle: Double);
+procedure TScanCorrelator.CorrectAnglesFromCoords(const coords: TAngleScanCoords; out AStartAngle, AEndAngle: Double; AReduceAngles: Boolean);
 var
   croppedCnt: Integer;
   angle, angleExtents, startAngle, endAngle, a0a, a1a, a0b, a1b: Double;
@@ -517,61 +522,64 @@ begin
   startAngle := NormalizeAngle(angle - angleExtents);
   endAngle := NormalizeAngle(angle + angleExtents);
 
-  scan := FInputScans[coords.ScanIdx];
-
-  //WriteLn(scan.ImageShortName, RadToDeg(angle):12:6, RadToDeg(startAngle):12:6, RadToDeg(endAngle):12:6);
-
-  // use CropData to potentially reduce angle span
-
-  a0a := NormalizeAngle(scan.CropData.StartAngle - scan.RelativeAngle);
-  a0b := NormalizeAngle(scan.CropData.EndAngle - scan.RelativeAngle);
-  a1a := NormalizeAngle(scan.CropData.StartAngleMirror - scan.RelativeAngle);
-  a1b := NormalizeAngle(scan.CropData.EndAngleMirror - scan.RelativeAngle);
-
-  //WriteLn(scan.ImageShortName, RadToDeg(a0a):12:6, RadToDeg(a0b):12:6, RadToDeg(a1a):12:6, RadToDeg(a1b):12:6);
-
-  croppedCnt := 0;
-
-  if InNormalizedAngle(startAngle, a0a, a0b) then
+  if AReduceAngles then
   begin
-    startAngle := a0b;
-    Inc(croppedCnt);
-  end;
+    scan := FInputScans[coords.ScanIdx];
 
-  if InNormalizedAngle(startAngle, a1a, a1b) then
-  begin
-    startAngle := a1b;
-    Inc(croppedCnt);
-  end;
-
-  if InNormalizedAngle(endAngle, a0a, a0b) then
-  begin
-    endAngle := a0a;
-    Inc(croppedCnt);
-  end;
-
-  if InNormalizedAngle(endAngle, a1a, a1b) then
-  begin
-    endAngle := a1a;
-    Inc(croppedCnt);
-  end;
-
-  //WriteLn(scan.ImageShortName, RadToDeg(angle):12:6, RadToDeg(startAngle):12:6, RadToDeg(endAngle):12:6);
-
-  // entirely cropped angle? -> not to be computed
-
-  if croppedCnt >= 2 then
-  begin
-    Assert(croppedCnt = 2);
-
-    startAngle := NaN;
-    endAngle := NaN;
-
-    //WriteLn(scan.ImageShortName, RadToDeg(angle):12:6, startAngle:12:6, endAngle:12:6);
-  end
-  else
-  begin
     //WriteLn(scan.ImageShortName, RadToDeg(angle):12:6, RadToDeg(startAngle):12:6, RadToDeg(endAngle):12:6);
+
+    // use CropData to potentially reduce angle span
+
+    a0a := NormalizeAngle(scan.CropData.StartAngle - scan.RelativeAngle);
+    a0b := NormalizeAngle(scan.CropData.EndAngle - scan.RelativeAngle);
+    a1a := NormalizeAngle(scan.CropData.StartAngleMirror - scan.RelativeAngle);
+    a1b := NormalizeAngle(scan.CropData.EndAngleMirror - scan.RelativeAngle);
+
+    //WriteLn(scan.ImageShortName, RadToDeg(a0a):12:6, RadToDeg(a0b):12:6, RadToDeg(a1a):12:6, RadToDeg(a1b):12:6);
+
+    croppedCnt := 0;
+
+    if InNormalizedAngle(startAngle, a0a, a0b) then
+    begin
+      startAngle := a0b;
+      Inc(croppedCnt);
+    end;
+
+    if InNormalizedAngle(startAngle, a1a, a1b) then
+    begin
+      startAngle := a1b;
+      Inc(croppedCnt);
+    end;
+
+    if InNormalizedAngle(endAngle, a0a, a0b) then
+    begin
+      endAngle := a0a;
+      Inc(croppedCnt);
+    end;
+
+    if InNormalizedAngle(endAngle, a1a, a1b) then
+    begin
+      endAngle := a1a;
+      Inc(croppedCnt);
+    end;
+
+    //WriteLn(scan.ImageShortName, RadToDeg(angle):12:6, RadToDeg(startAngle):12:6, RadToDeg(endAngle):12:6);
+
+    // entirely cropped angle? -> not to be computed
+
+    if croppedCnt >= 2 then
+    begin
+      Assert(croppedCnt = 2);
+
+      startAngle := NaN;
+      endAngle := NaN;
+
+      //WriteLn(scan.ImageShortName, RadToDeg(angle):12:6, startAngle:12:6, endAngle:12:6);
+    end
+    else
+    begin
+      //WriteLn(scan.ImageShortName, RadToDeg(angle):12:6, RadToDeg(startAngle):12:6, RadToDeg(endAngle):12:6);
+    end;
   end;
 
   AStartAngle := startAngle;
@@ -581,14 +589,14 @@ end;
 function TScanCorrelator.PrepareCorrect(var Coords: TAngleScanCoords): Boolean;
 var
   iAngle, iBaseScan, iLut, v, best: Integer;
-  cx, cy, px, py, r, sky, startAngle, endAngle, bt, t, alpha: Double;
+  cx, cy, px, py, r, sky, startAngle, endAngle, saRaw, eaRaw, bt, t, alpha: Double;
   baseScan: TInputScan;
   ra: ^TRadiusAngle;
 begin
   Result := True;
   Coords.BaseScanIdx := 0;
 
-  CorrectAnglesFromCoords(Coords, startAngle, endAngle);
+  CorrectAnglesFromCoords(Coords, startAngle, endAngle, True);
 
   if IsNan(startAngle) or IsNan(endAngle) then
     Exit(False);
@@ -628,9 +636,11 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, startAngle, endAngle, 0);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, startAngle, endAngle);
 
   // build weights lookup table
+
+  CorrectAnglesFromCoords(Coords, saRaw, eaRaw, False);
 
   for iLut := 0 to High(Coords.RadiusAngleLUT) do
   begin
@@ -639,12 +649,12 @@ begin
     bt := ra^.Angle;
     if InNormalizedAngle(bt, startAngle, endAngle) then
     begin
-      alpha := 1.0 - 2.0 * abs(NormalizedAngleDiff(startAngle, bt) / NormalizedAngleDiff(startAngle, endAngle) - 0.5);
+      alpha := 1.0 - 2.0 * abs(NormalizedAngleDiff(saRaw, bt) / NormalizedAngleDiff(saRaw, eaRaw) - 0.5);
       ra^.TagWeight := alpha;
     end;
   end;
 
-  // parse image using LUTs
+  // parse image using LUT
 
   OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, baseScan.RelativeAngle);
 
@@ -668,7 +678,7 @@ begin
 
   // prepare for iterations
 
-  OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, FInputScans[Coords.ScanIdx].RelativeAngle);
+  OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, FInputScans[Coords.ScanIdx].RelativeAngle - baseScan.RelativeAngle);
 end;
 
 function TScanCorrelator.GridSearchCorrect(ConstSkew, MulSkew, SqrSkew: Double; const Coords: TAngleScanCoords): Double;

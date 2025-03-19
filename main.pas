@@ -50,13 +50,14 @@ type
     FLastTickCount: QWord;
     FPoints: TPointFList;
 
-    function OnSample(Sender: TScan2Track; X, Y, Percent: Double; Finished: Boolean): Boolean;
+    function OnSample(Sender: TScan2Track; Sample, X, Y: Double; var Radius: Double; Percent: Double; Finished: Boolean): Boolean;
   public
     procedure UnitTests;
 
     procedure SetReduc(AImageWidth, AImageHeight: Integer);
     procedure DrawExtents(AScan: TInputScan);
     procedure DrawImage(const Img: TWordDynArray; AWidth, AHeight: Integer);
+    procedure DrawImage(const Img: TDoubleDynArray; AWidth, AHeight: Integer);
     procedure DrawPoints(const APoints: TPointFList; AColor: TColor);
   end;
 
@@ -73,7 +74,7 @@ procedure TMainForm.btScan2TrackClick(Sender: TObject);
 var
   s2t: TScan2Track;
 begin
-  s2t := TScan2Track.Create(StrToIntDef(cbSR.Text, 48000), 16, StrToIntDef(cbDPI.Text, 2400));
+  s2t := TScan2Track.Create(StrToIntDef(cbDPI.Text, 2400), False, StrToIntDef(cbSR.Text, 48000));
   try
     s2t.OnSample := @OnSample;
     s2t.OutputWAVFileName := edOutputWAV.Text;
@@ -270,7 +271,8 @@ begin
   end;
 end;
 
-function TMainForm.OnSample(Sender: TScan2Track; X, Y, Percent: Double; Finished: Boolean): Boolean;
+function TMainForm.OnSample(Sender: TScan2Track; Sample, X, Y: Double; var Radius: Double; Percent: Double;
+  Finished: Boolean): Boolean;
 const
   CSecondsAtATime = 0.1;
 var
@@ -291,12 +293,15 @@ begin
     FLastTickCount := tc;
 
     FPoints.Clear;
+
+    if Finished or not Result then
+      WriteLn;
   end;
 end;
 
 procedure TMainForm.SetReduc(AImageWidth, AImageHeight: Integer);
 begin
-  FReducRatio := Max(1, Floor(AImageWidth / Width));
+  FReducRatio := Max(1, Floor(AImageHeight / Height));
   FReducFactor := 1.0 / FReducRatio;
 end;
 
@@ -364,6 +369,45 @@ begin
             acc += Img[((y * FReducRatio) + iy) * AWidth + ((x * FReducRatio) + ix)];
 
         b := EnsureRange(Round(acc * (High(Byte)  / (High(Word) * Sqr(FReducRatio)))), 0, High(Byte));
+
+        sc^ := ToRGB(b, b, b);
+
+        Inc(sc);
+      end;
+    end;
+  finally
+    Image.Picture.Bitmap.EndUpdate;
+  end;
+
+  Application.ProcessMessages;
+end;
+
+procedure TMainForm.DrawImage(const Img: TDoubleDynArray; AWidth, AHeight: Integer);
+var
+  x, y, ix, iy: Integer;
+  sc: PCardinal;
+  b: Byte;
+  acc: Double;
+begin
+  SetReduc(AWidth, AHeight);
+
+  Image.Picture.Bitmap.PixelFormat := pf32bit;
+  Image.Picture.Bitmap.Width := AWidth div FReducRatio;
+  Image.Picture.Bitmap.Height := AHeight div FReducRatio;
+
+  Image.Picture.Bitmap.BeginUpdate;
+  try
+    for y := 0 to Image.Picture.Bitmap.Height - 1 do
+    begin
+      sc := Image.Picture.Bitmap.ScanLine[y];
+      for x := 0 to Image.Picture.Bitmap.Width - 1 do
+      begin
+        acc  := 0;
+        for iy := 0 to FReducRatio - 1 do
+          for ix := 0 to FReducRatio - 1 do
+            acc += Img[((y * FReducRatio) + iy) * AWidth + ((x * FReducRatio) + ix)];
+
+        b := Round(EnsureRange(acc / Sqr(FReducRatio), -1, 1) * High(ShortInt) - Low(ShortInt));
 
         sc^ := ToRGB(b, b, b);
 
