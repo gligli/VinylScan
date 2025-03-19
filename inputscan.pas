@@ -55,12 +55,14 @@ type
     procedure FindConcentricGroove_GridSearch(ALowPrecision: Boolean);
     procedure FindConcentricGroove_Gradient;
     procedure FindGrooveStart;
+
+    procedure LoadPNG;
+    procedure LoadTIFF;
   public
     constructor Create(ADefaultDPI: Integer = 2400; ASilent: Boolean = False);
     destructor Destroy; override;
 
-    procedure LoadPNG;
-    procedure LoadTIFF;
+    procedure LoadImage;
     procedure BrickwallLimit;
     procedure FindTrack(AForcedSampleRate: Integer = -1);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray);
@@ -483,6 +485,15 @@ end;
 destructor TInputScan.Destroy;
 begin
   inherited Destroy;
+end;
+
+procedure TInputScan.LoadImage;
+begin
+  if SameText(ExtractFileExt(FImageFileName), '.tif') or
+      SameText(ExtractFileExt(FImageFileName), '.tiff') then
+    LoadTIFF
+  else
+    LoadPNG;
 end;
 
 procedure TInputScan.LoadPNG;

@@ -43,7 +43,7 @@ type
     constructor Create(ASampleRate: Integer = 48000; ABitsPerSample: Integer = 16; ADPI: Integer = 2400);
     destructor Destroy; override;
 
-    procedure LoadPNG;
+    procedure LoadScan;
     procedure EvalTrack;
 
     property OnSample: TSampleEvent read FOnSample write FOnSample;
@@ -241,9 +241,9 @@ begin
   end;
 end;
 
-procedure TScan2Track.LoadPNG;
+procedure TScan2Track.LoadScan;
 begin
-  Scan.LoadPNG;
+  Scan.LoadImage;
   Scan.FindTrack(FSampleRate);
 end;
 

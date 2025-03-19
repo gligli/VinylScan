@@ -145,11 +145,7 @@ procedure TScanCorrelator.LoadScans;
   begin
     Scan := FInputScans[AIndex];
 
-    if SameText(ExtractFileExt(Scan.ImageFileName), '.tif') or
-        SameText(ExtractFileExt(Scan.ImageFileName), '.tiff') then
-      Scan.LoadTIFF
-    else
-      Scan.LoadPNG;
+    Scan.LoadImage;
 
     if FBrickwallLimitScans then Scan.BrickwallLimit;
     Scan.FindTrack;

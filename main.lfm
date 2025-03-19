@@ -2,7 +2,7 @@ object MainForm: TMainForm
   Left = -8
   Height = 1461
   Top = -8
-  Width = 1360
+  Width = 1376
   HorzScrollBar.Increment = 240
   HorzScrollBar.Page = 640
   HorzScrollBar.Tracking = True
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
   ClientHeight = 1422
-  ClientWidth = 1360
+  ClientWidth = 1376
   Color = 4210752
   DoubleBuffered = True
   KeyPreview = True
@@ -242,7 +242,7 @@ object MainForm: TMainForm
   end
   object odInPNG: TOpenDialog
     DefaultExt = '.PNG'
-    Filter = 'PNG|*.png'
+    Filter = 'PNG; TIFF|*.png;*.tif'
     InitialDir = 'data'
     Left = 80
     Top = 216

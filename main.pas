@@ -79,7 +79,7 @@ begin
     s2t.OutputWAVFileName := edOutputWAV.Text;
     s2t.Scan.ImageFileName := edInputPNG.Text;
 
-    s2t.LoadPNG;
+    s2t.LoadScan;
 
     DrawImage(s2t.Scan.Image, s2t.Scan.Width, s2t.Scan.Height);
     DrawExtents(s2t.Scan);
