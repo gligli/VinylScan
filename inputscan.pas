@@ -45,9 +45,6 @@ type
     FImage: TWordDynArray;
     FLeveledImage: TWordDynArray;
 
-    FTrack: TPolarPointValueDynArray;
-    FTrackWH: Integer;
-
     procedure SetRevolutionFromDPI(ADPI: Integer);
     procedure SetRevolutionFromSampleRate(ASampleRate: Integer);
     function GetImageShortName: String;
@@ -68,7 +65,6 @@ type
     procedure LoadImage;
     procedure BrickwallLimit;
     procedure FindTrack(AForcedSampleRate: Integer = -1);
-    procedure BuildTrackPoints;
     procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle, ASkewY: Double);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray);
 
@@ -83,7 +79,6 @@ type
     property DPI: Integer read FDPI;
     property Width: Integer read FWidth;
     property Height: Integer read FHeight;
-    property TrackWH: Integer read FTrackWH;
 
     property ConcentricGrooveRadius: Double read FConcentricGrooveRadius;
     property FirstGrooveRadius: Double read FFirstGrooveRadius;
@@ -102,7 +97,6 @@ type
 
     property Image: TWordDynArray read FImage;
     property LeveledImage: TWordDynArray read FLeveledImage;
-    property Track: TPolarPointValueDynArray read FTrack;
   end;
 
   { TScanImage }
@@ -718,26 +712,6 @@ begin
   else
   begin
     WriteLn(ImageFileName, ', CenterX:', FCenter.X:9:3, ', CenterY:', FCenter.Y:9:3, ', ConcentricGroove:', FConcentricGrooveRadius:10:3, ', SkewY:', FSkewY:9:6, ', Quality:', FCenterQuality:12:3);
-  end;
-end;
-
-procedure TInputScan.BuildTrackPoints;
-var
-  s2t: TScan2Track;
-  s2p: TScan2Points;
-begin
-  s2t := TScan2Track.CreateFromInputScan(Self, True, 4);
-  s2p := TScan2Points.Create(s2t);
-  try
-    s2p.BuildTrackPoints;
-
-    FTrackWH := s2p.TrackWH;
-    FTrack := s2p.Track;
-
-    WriteLn(ImageShortName, ', TrackPos:', s2p.TrackPos:8, ', TrackFailCount:', s2p.TrackFailCount:8);
-  finally
-    s2p.Free;
-    s2t.Free;
   end;
 end;
 
