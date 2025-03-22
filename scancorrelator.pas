@@ -722,9 +722,9 @@ procedure TScanCorrelator.Correct;
 const
   CConstCorrectExtents = 0.02; // inches
   CConstCorrectHalfCount = 100;
-  CMulCorrectExtents = 0.01;
+  CMulCorrectExtents = 0.006;
   CMulCorrectHalfCount = 100;
-  CSqrCorrectExtents = 0.000001;
+  CSqrCorrectExtents = 0.000003;
   CSqrCorrectHalfCount = 100;
 var
   rmses: TDoubleDynArray;
