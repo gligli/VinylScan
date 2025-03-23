@@ -39,7 +39,6 @@ type
       AReduceAngles: Boolean);
 
     procedure PrepareAnalyze(var Coords: TAngleScanCoords);
-    procedure GradientAnalyse(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
     function PowellAnalyze(const x: TVector; obj: Pointer): TScalar;
     function PrepareCorrect(var Coords: TAngleScanCoords): Boolean;
     function GridSearchCorrect(ConstSkew, MulSkew, SqrSkew: Double; const Coords: TAngleScanCoords): Double;
@@ -292,7 +291,7 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * scan.DPI, CAnalyzeAreaEnd * 0.5 * scan.DPI, 0.0, 2.0 * Pi);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * scan.DPI, CAnalyzeAreaEnd * 0.5 * scan.DPI, 0.0, 2.0 * Pi, scan.DPI / 600.0);
   OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, scan.RelativeAngle);
   try
 
@@ -314,79 +313,61 @@ begin
   end;
 end;
 
-procedure TScanCorrelator.GradientAnalyse(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray;
-  obj: Pointer);
+function TScanCorrelator.PowellAnalyze(const x: TVector; obj: Pointer): TScalar;
 var
   coords: PAngleScanCoords absolute obj;
-  iScan, iGrad, ilut: Integer;
-  r, px, py, sn, cs, angle, centerX, centerY, skewY, mseInt, gix, giy, gmseInt: Double;
+  iScan, ilut, radiusLimitX, radiusLimitY: Integer;
+  r, px, py, sn, cs, angle, centerX, centerY, skewY: Double;
   scan: TInputScan;
   ra: ^TRadiusAngle;
+  extents: TRect;
 begin
-  centerX := arg[0];
-  centerY := arg[1];
-  angle := arg[2];
-  skewY := arg[3];
+  centerX := x[0];
+  centerY := x[1];
+  angle := x[2];
+  skewY := x[3];
 
   scan := FInputScans[coords^.ScanIdx];
 
-  OffsetRadiusAngleLUTAngle(coords^.RadiusAngleLUT, angle);
-  try
-    func := 0.0;
-    if Assigned(grad) then
-      FillQWord(grad[0], Length(grad), 0);
+  radiusLimitX := Round(C45RpmOuterSize * 0.5 * scan.DPI) + 1;
+  radiusLimitY := Round(C45RpmOuterSize * 0.5 * scan.DPI * skewY) + 1;
 
-    for iLut := 0 to High(coords^.RadiusAngleLUT) do
-    begin
-      ra := @coords^.RadiusAngleLUT[iLut];
+  extents.Left := radiusLimitX;
+  extents.Top := radiusLimitY;
+  extents.Right := scan.Width - radiusLimitX;
+  extents.Bottom := scan.Height - radiusLimitY;
 
-      r := ra^.Radius;
-      cs := ra^.Cos;
-      sn := ra^.Sin;
+  Result := 1000.0;
 
-      px := cs * r + centerX;
-      py := sn * r * skewY + centerY;
+  if extents.Contains(TPoint.Create(Round(centerX), Round(centerY))) then
+  begin
+    OffsetRadiusAngleLUTAngle(coords^.RadiusAngleLUT, angle);
+    try
+      Result := 0.0;
 
-      if scan.InRangePointD(py, px) then
+      for iLut := 0 to High(coords^.RadiusAngleLUT) do
       begin
-        mseInt := ra^.TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px);
-        func += Sqr(mseInt);
+        ra := @coords^.RadiusAngleLUT[iLut];
 
-        if Assigned(grad) then
-        begin
-          scan.GetGradientsD(scan.LeveledImage, py, px, giy, gix);
+        r := ra^.Radius;
+        cs := ra^.Cos;
+        sn := ra^.Sin;
 
-          gmseInt := -2.0 * mseInt;
+        px := cs * r + centerX;
+        py := sn * r * skewY + centerY;
 
-          grad[0] += gix * gmseInt;
-          grad[1] += giy * gmseInt;
-          grad[2] += ((gix * -sn) + (giy * cs) * skewY) * r * gmseInt;
-          grad[3] += giy * sn * r * gmseInt;
-        end;
-      end
-      else
-      begin
-        func += Sqr(1e6);
+        Result += Sqr(ra^.TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px));
       end;
+
+      Result /= Length(coords^.RadiusAngleLUT);
+      Result := Sqrt(Result);
+      Result /= High(Word);
+    finally
+      OffsetRadiusAngleLUTAngle(coords^.RadiusAngleLUT, -angle);
     end;
-
-    func /= Length(coords^.RadiusAngleLUT);
-
-    if Assigned(grad) then
-      for iGrad := 0 to High(grad) do
-      begin
-        grad[iGrad] /= Length(coords^.RadiusAngleLUT);
-        grad[iGrad] *= 0.5 * Power(func, -0.5);
-        grad[iGrad] /= High(Word);
-      end;
-
-    func := Sqrt(func);
-    func /= High(Word);
-
-    scan.Objective := func;
-  finally
-    OffsetRadiusAngleLUTAngle(coords^.RadiusAngleLUT, -angle);
   end;
+
+  scan.Objective := Result;
 
   SpinEnter(@FLock);
   try
@@ -399,11 +380,6 @@ begin
   end;
 end;
 
-function TScanCorrelator.PowellAnalyze(const x: TVector; obj: Pointer): TScalar;
-begin
-  GradientAnalyse(x, Result, nil, obj);
-end;
-
 function CompareInputScansObjective(Item1, Item2, UserParameter: Pointer): Integer;
 var
   s1: ^TInputScan absolute Item1;
@@ -414,16 +390,13 @@ end;
 
 procedure TScanCorrelator.Analyze;
 const
-  CEpsY = 1e-9;
   CEpsX = 1e-6;
   CScale = 1e-8;
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     coords: TAngleScanCoords;
-    iter: Integer;
-    func, prevFunc: Double;
-    p: TPointD;
+    func: Double;
     X: TVector;
     scan: TInputScan;
   begin
@@ -439,18 +412,7 @@ const
 
     X := [scan.Center.X, scan.Center.Y, scan.RelativeAngle, scan.SkewY];
 
-    func := Infinity;
-    iter := 0;
-    repeat
-      prevFunc := func;
-
-      if Odd(iter) then
-        func := PowellMinimize(@PowellAnalyze, x, CScale, CEpsX, 0.0, MaxInt, @coords)[0]
-      else
-        func := BFGSMinimize(@GradientAnalyse, X, CEpsX, @coords);
-
-      Inc(iter);
-    until SameValue(prevFunc, func, CEpsY);
+    func := PowellMinimize(@PowellAnalyze, x, CScale, CEpsX, 0.0, MaxInt, @coords)[0];
 
     scan.Objective := func;
     FInputScans[AIndex].CorrectByModel(X[0], X[1], X[2], X[3]);
@@ -503,7 +465,7 @@ begin
   rBeg := C45RpmLastMusicGroove * 0.5 * FInputScans[0].DPI;
   rEnd := C45RpmFirstMusicGroove * 0.5 * FInputScans[0].DPI;
 
-  RadiusAngleLut := BuildRadiusAngleLUT(rBeg, rEnd, 0, 2.0 * Pi);
+  RadiusAngleLut := BuildRadiusAngleLUT(rBeg, rEnd, 0, 2.0 * Pi, FInputScans[0].DPI / 300.0);
 
   ProcThreadPool.DoParallelLocalProc(@DoCrop, 0, High(FInputScans));
 
@@ -636,7 +598,7 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, startAngle, endAngle);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, startAngle, endAngle, baseScan.DPI / 1200.0);
 
   // build weights lookup table
 
@@ -683,39 +645,45 @@ end;
 
 function TScanCorrelator.GridSearchCorrect(ConstSkew, MulSkew, SqrSkew: Double; const Coords: TAngleScanCoords): Double;
 var
-  iScan, iLut: Integer;
-  cx, cy, r, sky, px, py, cs, sn: Double;
+  iLut: Integer;
+  centerX, centerY, r, skewY, px, py, cs, sn, radiusLimit: Double;
   scan: TInputScan;
   ra: ^TRadiusAngle;
 begin
-  iScan := Coords.ScanIdx;
-  scan := FInputScans[iScan];
+  scan := FInputScans[Coords.ScanIdx];
 
-  cx  := scan.Center.X;
-  cy  := scan.Center.Y;
-  sky := scan.SkewY;
+  centerX  := scan.Center.X;
+  centerY  := scan.Center.Y;
+  skewY := scan.SkewY;
 
-  Result := 0;
-  for iLut := 0 to High(Coords.RadiusAngleLUT) do
+  Result := 1000.0;
+
+  radiusLimit := MinValue([centerX, centerY, scan.Width - 1 - centerX, scan.Height - 1 - centerY]) - 1;
+  r := CCorrectAreaEnd * 0.5 * scan.DPI * Max(1.0, skewY);
+  r := r + r * (MulSkew + r * SqrSkew) + ConstSkew;
+
+  if r <= radiusLimit then
   begin
-    ra := @Coords.RadiusAngleLUT[iLut];
+    Result := 0.0;
 
-    r := ra^.Radius;
-    cs := ra^.Cos;
-    sn := ra^.Sin;
+    for iLut := 0 to High(Coords.RadiusAngleLUT) do
+    begin
+      ra := @Coords.RadiusAngleLUT[iLut];
 
-    r := r + r * (MulSkew + r * SqrSkew) + ConstSkew;
+      r := ra^.Radius;
+      cs := ra^.Cos;
+      sn := ra^.Sin;
 
-    px := cs * r + cx;
-    py := sn * r * sky + cy;
+      r := r + r * (MulSkew + r * SqrSkew) + ConstSkew;
 
-    if scan.InRangePointD(py, px) then
+      px := cs * r + centerX;
+      py := sn * r * skewY + centerY;
+
       Result += Sqr((ra^.TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px)) * ra^.TagWeight)
-    else
-      Result += Sqr(1e6);
-  end;
+    end;
 
-  Result := Result / Length(Coords.RadiusAngleLUT);
+    Result := Result / Length(Coords.RadiusAngleLUT);
+  end;
 end;
 
 procedure TScanCorrelator.Correct;

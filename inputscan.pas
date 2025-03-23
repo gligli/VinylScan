@@ -695,7 +695,7 @@ begin
   FFirstGrooveRadius := (C45RpmFirstMusicGroove + C45RpmOuterSize) * 0.5 * FDPI * 0.5;
   FConcentricGrooveRadius := C45RpmConcentricGroove * FDPI * 0.5;
 
-  FindConcentricGroove_GridSearch(False);
+  FindConcentricGroove_GridSearch(True);
   FindConcentricGroove_Gradient;
   FindGrooveStart;
 
