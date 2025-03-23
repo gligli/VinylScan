@@ -682,7 +682,7 @@ begin
       Result += Sqr((ra^.TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px)) * ra^.TagWeight)
     end;
 
-    Result := Result / Length(Coords.RadiusAngleLUT);
+    Result := Sqrt(Result / Length(Coords.RadiusAngleLUT)) / High(Word);
   end;
 end;
 
@@ -763,8 +763,6 @@ var
 
       // free up memory
       SetLength(coords.RadiusAngleLUT, 0);
-
-      bestFunc := Sqrt(bestFunc) / High(Word);
     end;
 
     FPerAngleX[AIndex] := [bestConstSkew, bestMulSkew, bestSqrSkew];
