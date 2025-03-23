@@ -827,7 +827,7 @@ begin
       Write(FInputScans[iscan].ImageShortName);
       Write(', Angle:', (iangle / CCorrectAngleCount) * 360.0:9:3);
       Write(', RMSE:', rmses[ias]:12:6);
-      WriteLn(', ', FPerAngleX[ias, 0]:12:6, ', ', FPerAngleX[ias, 1]:12:6, ', ', FPerAngleX[ias, 2]:12:9);
+      WriteLn(', ', FPerAngleX[ias, 0]:9:3, ', ', FPerAngleX[ias, 1]:12:6, ', ', FPerAngleX[ias, 2]:16:10);
     end;
 
   WriteLn('Worst RMSE: ', MaxValue(rmses):12:9);
