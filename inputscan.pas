@@ -728,9 +728,8 @@ var
   radiusAngleLut: ^TRadiusAngleDynArray absolute obj;
   a0a, a1a, a0b, a1b, cx, cy, r, sn, cs, px, py, bt: Double;
   iLut: Integer;
-  isGoodPart: Boolean;
-  partsPos: array[Boolean] of Integer;
-  partsSDArr: array[Boolean] of TDoubleDynArray;
+  pos: Integer;
+  SDArr: TDoubleDynArray;
   ra: ^TRadiusAngle;
 begin
   Result := 1e6;
@@ -743,10 +742,8 @@ begin
   a1a := NormalizeAngle(a0a + Pi);
   a1b := NormalizeAngle(a0b + Pi);
 
-  SetLength(partsSDArr[False], Length(radiusAngleLut^));
-  SetLength(partsSDArr[True], Length(radiusAngleLut^));
-  partsPos[False] := 0;
-  partsPos[True] := 0;
+  SetLength(SDArr, Length(radiusAngleLut^));
+  pos := 0;
 
   cx := FCenter.X;
   cy := FCenter.Y;
@@ -763,16 +760,15 @@ begin
     px := cs * r + cx;
     py := sn * r + cy;
 
-    if InRangePointD(py, px) then
+    if InRangePointD(py, px) and not InNormalizedAngle(bt, a0a, a0b) and not InNormalizedAngle(bt, a1a, a1b) then
     begin
-      isGoodPart := not InNormalizedAngle(bt, a0a, a0b) and not InNormalizedAngle(bt, a1a, a1b);
-      partsSDArr[isGoodPart, partsPos[isGoodPart]] := FImage[round(py) * FWidth + round(px)];
-      Inc(partsPos[isGoodPart]);
+      SDArr[pos] := FImage[round(py) * FWidth + round(px)];
+      Inc(pos);
     end;
   end;
 
-  if (partsPos[False] > 0) and (partsPos[True] > 0) then
-    Result := Variance(PDouble(@partsSDArr[False, 0]), partsPos[False]) - Variance(PDouble(@partsSDArr[True, 0]), partsPos[True]);
+  if (pos > 0) then
+    Result := -Variance(PDouble(@SDArr[0]), pos);
 
   //WriteLn(ImageShortName, ', begin:', RadToDeg(a0a):9:3, ', end:', RadToDeg(a0b):9:3, result:18:6);
 end;
