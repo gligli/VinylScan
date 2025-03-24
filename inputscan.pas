@@ -600,8 +600,8 @@ end;
 
 procedure TInputScan.BrickwallLimit;
 const
-  CRadius = 16;
-  CSigma = 1;
+  CRadius = 32;
+  CSigma = 2;
 var
   offsets: TIntegerDynArray;
 
@@ -692,7 +692,7 @@ begin
   else
     SetRevolutionFromDPI(FDPI);
 
-  FFirstGrooveRadius := (C45RpmFirstMusicGroove + C45RpmOuterSize) * 0.5 * FDPI * 0.5;
+  FFirstGrooveRadius := (C45RpmFirstMusicGroove * 2.0 + C45RpmOuterSize) / 3.0 * FDPI * 0.5;
   FConcentricGrooveRadius := C45RpmConcentricGroove * FDPI * 0.5;
 
   FindConcentricGroove_GridSearch(True);
@@ -766,7 +766,7 @@ begin
     if InRangePointD(py, px) then
     begin
       isGoodPart := not InNormalizedAngle(bt, a0a, a0b) and not InNormalizedAngle(bt, a1a, a1b);
-      partsSDArr[isGoodPart, partsPos[isGoodPart]] := FLeveledImage[round(py) * FWidth + round(px)];
+      partsSDArr[isGoodPart, partsPos[isGoodPart]] := FImage[round(py) * FWidth + round(px)];
       Inc(partsPos[isGoodPart]);
     end;
   end;
