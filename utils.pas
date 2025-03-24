@@ -884,6 +884,9 @@ var
   i: Integer;
   offCos, offSin, cs, sn: Double;
 begin
+  if AngleOffset = 0.0 then
+    Exit;
+
   SinCos(AngleOffset, offSin, offCos);
 
   for i := 0 to High(LUT) do

@@ -12,6 +12,7 @@ type
   TAngleScanCoords = record
     AngleIdx, ScanIdx, BaseScanIdx: Integer;
     RadiusAngleLUT: array of TRadiusAngle;
+    PrevAngle: Double;
   end;
 
   PAngleScanCoords = ^TAngleScanCoords;
@@ -281,35 +282,31 @@ procedure TScanCorrelator.PrepareAnalyze(var Coords: TAngleScanCoords);
 var
   ilut: Integer;
   cx, cy, r, sky, ox, oy: Double;
-  scan: TInputScan;
+  baseScan: TInputScan;
   ra: ^TRadiusAngle;
 begin
-  scan := FInputScans[0];
-  cx  := scan.Center.X;
-  cy  := scan.Center.Y;
-  sky := scan.SkewY;
+  baseScan := FInputScans[Coords.BaseScanIdx];
+  cx  := baseScan.Center.X;
+  cy  := baseScan.Center.Y;
+  sky := baseScan.SkewY;
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * scan.DPI, CAnalyzeAreaEnd * 0.5 * scan.DPI, 0.0, 2.0 * Pi, scan.DPI / 600.0);
-  OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, scan.RelativeAngle);
-  try
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * baseScan.DPI, CAnalyzeAreaEnd * 0.5 * baseScan.DPI, 0.0, 2.0 * Pi, baseScan.DPI / 600.0);
+  OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, baseScan.RelativeAngle);
+  Coords.PrevAngle := baseScan.RelativeAngle;
 
-    // parse image using LUTs
+  // parse image using LUTs
 
-    for iLut := 0 to High(Coords.RadiusAngleLUT) do
-    begin
-      ra := @Coords.RadiusAngleLUT[iLut];
+  for iLut := 0 to High(Coords.RadiusAngleLUT) do
+  begin
+    ra := @Coords.RadiusAngleLUT[iLut];
 
-      r := ra^.Radius;
-      ox := ra^.Cos * r + cx;
-      oy := ra^.Sin * r * sky + cy;
+    r := ra^.Radius;
+    ox := ra^.Cos * r + cx;
+    oy := ra^.Sin * r * sky + cy;
 
-      ra^.TagValue := scan.GetPointD_Linear(scan.LeveledImage, oy, ox);
-    end;
-
-  finally
-    OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, -scan.RelativeAngle);
+    ra^.TagValue := baseScan.GetPointD_Linear(baseScan.LeveledImage, oy, ox);
   end;
 end;
 
@@ -341,30 +338,28 @@ begin
 
   if extents.Contains(TPoint.Create(Round(centerX), Round(centerY))) then
   begin
-    OffsetRadiusAngleLUTAngle(coords^.RadiusAngleLUT, angle);
-    try
-      Result := 0.0;
+    OffsetRadiusAngleLUTAngle(coords^.RadiusAngleLUT, angle - coords^.PrevAngle);
+    coords^.PrevAngle := angle;
 
-      for iLut := 0 to High(coords^.RadiusAngleLUT) do
-      begin
-        ra := @coords^.RadiusAngleLUT[iLut];
+    Result := 0.0;
 
-        r := ra^.Radius;
-        cs := ra^.Cos;
-        sn := ra^.Sin;
+    for iLut := 0 to High(coords^.RadiusAngleLUT) do
+    begin
+      ra := @coords^.RadiusAngleLUT[iLut];
 
-        px := cs * r + centerX;
-        py := sn * r * skewY + centerY;
+      r := ra^.Radius;
+      cs := ra^.Cos;
+      sn := ra^.Sin;
 
-        Result += Sqr(ra^.TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px));
-      end;
+      px := cs * r + centerX;
+      py := sn * r * skewY + centerY;
 
-      Result /= Length(coords^.RadiusAngleLUT);
-      Result := Sqrt(Result);
-      Result /= High(Word);
-    finally
-      OffsetRadiusAngleLUTAngle(coords^.RadiusAngleLUT, -angle);
+      Result += Sqr(ra^.TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px));
     end;
+
+    Result /= Length(coords^.RadiusAngleLUT);
+    Result := Sqrt(Result);
+    Result /= High(Word);
   end;
 
   scan.Objective := Result;
