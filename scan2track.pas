@@ -30,6 +30,8 @@ type
     FRadiansPerRevolutionPoint: Double;
     FSilent: Boolean;
 
+    FUsedSampleValues: array[SmallInt] of Boolean;
+
     function DecodeSample(radius, angleSin, angleCos: Double): Double;
 
   public
@@ -92,12 +94,15 @@ end;
 
 function TScan2Track.DecodeSample(radius, angleSin, angleCos: Double): Double;
 var
-  iSmp, upCnt, posMin, posMax: Integer;
+  iSmp, posMin, posMax: Integer;
   r, px, py, cxa: Double;
-  sample, sampleMin, sampleMax, sampleMiddle, sampleIdx, upAcc: Single;
+  sample, sampleMin, sampleMax, sampleMiddle, sampleIdx: Single;
   smpBuf: array[SmallInt] of Double;
+  idxCnt: array[Boolean] of Integer;
+  idxAcc: array[Boolean] of Integer;
+  up: Boolean;
 begin
-  cxa := C45RpmRecordingGrooveWidth * Scan.DPI / (FDecoderMax - 0.5);
+  cxa := C45RpmRecordingGrooveWidth * 0.5 * Scan.DPI / FDecoderMax;
 
   r := radius + FDecoderMax * cxa;
   px := angleCos * r + Scan.Center.X;
@@ -126,18 +131,23 @@ begin
 
   sampleMiddle := (sampleMax + sampleMin) * 0.5;
 
-  upAcc := 0;
-  upCnt := 0;
+  for up := False to True do
+  begin
+    idxAcc[up] := 0;
+    idxCnt[up] := 0;
+  end;
+
   for iSmp := posMin to posMax do
-    if smpBuf[iSmp] >= sampleMiddle then
-    begin
-      upAcc += iSmp + 0.5;
-      Inc(upCnt);
-    end;
+  begin
+    up := smpBuf[iSmp] >= sampleMiddle;
 
-  sampleIdx := DivDef(upAcc, upCnt, 0.0);
+    idxAcc[up] += iSmp;
+    Inc(idxCnt[up]);
+  end;
 
-  Result := sampleIdx / (FDecoderMax - 0.5);
+  sampleIdx := DivDef(idxAcc[True], idxCnt[True], 0.0) - DivDef(idxAcc[False], idxCnt[False], 0.0);
+
+  Result := sampleIdx / FDecoderMax;
 end;
 
 procedure TScan2Track.EvalTrack;
@@ -157,7 +167,7 @@ var
 
 var
   radius, rOuter, sn, cs, ox, oy, fbRatio, fSmp, ffSmp, pct: Double;
-  iSample, iLut: Integer;
+  iSample, iLut, cnt: Integer;
   hasOutFile, validSample: Boolean;
   fltSample: TFilterIIRHPBessel;
   sinCosLut: TSinCosDynArray;
@@ -176,7 +186,7 @@ begin
 
     BuildSinCosLUT(FPointsPerRevolution, sinCosLut, Scan.GrooveStartAngle, -2.0 * Pi);
 
-    fbRatio := CutoffToFeedbackRatio(CLowCutoffFreq, FSampleRate) * C45RpmRecordingGrooveWidth * Scan.DPI;
+    fbRatio := CutoffToFeedbackRatio(CLowCutoffFreq, FSampleRate) * C45RpmRecordingGrooveWidth * 0.5 * Scan.DPI;
 
     rOuter := C45RpmOuterSize * 0.5 * Scan.DPI;
     iSample := 0;
@@ -191,6 +201,8 @@ begin
 
       fSmp := DecodeSample(radius, sn, cs);
       radius += fSmp * fbRatio;
+
+      FUsedSampleValues[Make16BitSample(fSmp)] := True;
 
       ffSmp := fltSample.FilterFilter(fSmp);
 
@@ -222,7 +234,14 @@ begin
     end;
 
     if not FSilent then
+    begin
+      cnt := 0;
+      for iSample := Low(FUsedSampleValues) to High(FUsedSampleValues) do
+        Inc(cnt, Ord(FUsedSampleValues[iSample]));
+      WriteLn('UsedSampleValues:', cnt:8);
+
       WriteLn('Done!');
+    end;
   finally
     fltSample.Free;
   end;

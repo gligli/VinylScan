@@ -66,7 +66,7 @@ const
   C45RpmLeadInGroovesPerInch = 16.0;
   C45RpmMinGroovesPerInch = 2.0;
 
-  C45RpmRecordingGrooveWidth = 0.0032;
+  C45RpmRecordingGrooveWidth = 0.0058;
   C45RpmLeadOutGrooveWidth = 0.006;
 
   C45RpmOuterSize = 6.875;
