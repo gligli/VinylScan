@@ -208,7 +208,7 @@ var
         px := cx + cs * iRadius;
         py := cy + sn * iRadius * sky;
         if Scan.InRangePointD(py, px) then
-          arr[Result] += Scan.GetPointD_Linear(Scan.LeveledImage, py, px);
+          arr[Result] += Scan.GetPointD_Linear(Scan.Image, py, px);
 
         Inc(pxAggr);
         if pxAggr >= aggregatedPixelCount then
