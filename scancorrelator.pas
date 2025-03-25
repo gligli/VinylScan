@@ -43,6 +43,7 @@ type
     function PowellAnalyze(const x: TVector; obj: Pointer): TScalar;
     function PrepareCorrect(var Coords: TAngleScanCoords): Boolean;
     function GridSearchCorrect(ConstSkew, MulSkew, SqrSkew: Double; const Coords: TAngleScanCoords): Double;
+    function PowellCorrect(const x: TVector; obj: Pointer): TScalar;
 
     procedure AngleInit;
     procedure Analyze;
@@ -681,14 +682,17 @@ begin
   end;
 end;
 
+function TScanCorrelator.PowellCorrect(const x: TVector; obj: Pointer): TScalar;
+begin
+  Result := GridSearchCorrect(x[0], x[1], x[2], PAngleScanCoords(obj)^);
+end;
+
 procedure TScanCorrelator.Correct;
 const
   CConstCorrectExtents = 0.02; // inches
   CConstCorrectHalfCount = 100;
   CMulCorrectExtents = 0.006;
   CMulCorrectHalfCount = 100;
-  CSqrCorrectExtents = 0.000003;
-  CSqrCorrectHalfCount = 100;
 var
   rmses: TDoubleDynArray;
   coordsArray: array of TAngleScanCoords;
@@ -698,7 +702,8 @@ var
   var
     coords: TAngleScanCoords;
     c: Integer;
-    func, bestFunc, ConstSkew, MulSkew, SqrSkew, bestConstSkew, bestMulSkew, bestSqrSkew: Double;
+    func, bestFunc, ConstSkew, MulSkew, bestConstSkew, bestMulSkew, bestSqrSkew: Double;
+    x: TVector;
   begin
     if not InRange(AIndex, 0, High(FPerAngleX)) then
       Exit;
@@ -743,18 +748,11 @@ var
         end;
       end;
 
-      for c := -CSqrCorrectHalfCount to CSqrCorrectHalfCount do
-      begin
-        SqrSkew := c * CSqrCorrectExtents / CSqrCorrectHalfCount;
-
-        func := GridSearchCorrect(bestConstSkew, bestMulSkew, SqrSkew, coords);
-
-        if func < bestFunc then
-        begin
-          bestFunc := func;
-          bestSqrSkew := SqrSkew;
-        end;
-      end;
+      x := [bestConstSkew, bestMulSkew, bestSqrSkew];
+      bestFunc := PowellMinimize(@PowellCorrect, x, 1e-9, 1e-9, 0.0, MaxInt, @coords)[0];
+      bestConstSkew := x[0];
+      bestMulSkew := x[1];
+      bestSqrSkew := x[2];
 
       // free up memory
       SetLength(coords.RadiusAngleLUT, 0);
