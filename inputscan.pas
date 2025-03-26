@@ -11,6 +11,10 @@ uses
 type
   TInputScan = class;
 
+  TCorrectRef = record
+    AngleIdx, ScanIdx: Integer;
+  end;
+
   TCropData = record
     StartAngle, EndAngle: Double;
     StartAngleMirror, EndAngleMirror: Double;
@@ -45,6 +49,9 @@ type
     FImage: TWordDynArray;
     FLeveledImage: TWordDynArray;
 
+    FCorrectRefs: array of TCorrectRef;
+    FLock: TSpinlock;
+
     procedure SetRevolutionFromDPI(ADPI: Integer);
     procedure SetRevolutionFromSampleRate(ASampleRate: Integer);
     function GetImageShortName: String;
@@ -52,7 +59,7 @@ type
     procedure GradientConcentricGroove(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
     function PowellCrop(const x: TVector; obj: Pointer): TScalar;
 
-    procedure FindConcentricGroove_GridSearch(ALowPrecision: Boolean);
+    procedure FindConcentricGroove_GridSearch;
     procedure FindConcentricGroove_Gradient;
     procedure FindGrooveStart;
 
@@ -72,6 +79,9 @@ type
     function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
     procedure GetGradientsD(const Image: TWordDynArray; Y, X: Double; out GY: Double; out GX: Double);
     function GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single;
+
+    procedure AddCorrectRef(AngleIdx, ScanIdx: Integer);
+    function HasCorrectRef(const AList: TInputScanDynArray; AngleIdx, ScanIdx: Integer): Boolean;
 
     property ImageFileName: String read FImageFileName write FImageFileName;
     property ImageShortName: String read GetImageShortName;
@@ -148,7 +158,7 @@ begin
   Result := ChangeFileExt(ExtractFileName(FImageFileName), '');
 end;
 
-procedure TInputScan.FindConcentricGroove_GridSearch(ALowPrecision: Boolean);
+procedure TInputScan.FindConcentricGroove_GridSearch;
 const
   CCorneringThres = 1.5 * (High(Byte) + 1);
   CPointsPerRevolution = 512;
@@ -175,7 +185,7 @@ var
     vs: TValueSign;
     pxArr, pyArr: array[TValueSign, 0 .. CPointsPerRevolution div 4 - 1] of Integer;
   begin
-    resIdx := AIndex * (1 + Ord(ALowPrecision));
+    resIdx := AIndex;
     if not InRange(resIdx, CMinSkew, CMaxSkew) then
       Exit;
 
@@ -184,9 +194,6 @@ var
     sky := resIdx / CSkewDivisor;
     for k := round(C45RpmMinConcentricGroove * FDPI * 0.5) to round(C45RpmMaxConcentricGroove * FDPI * 0.5) do
     begin
-      if ALowPrecision and Odd(k) then
-        Continue;
-
       r := k;
 
       for vs := Low(TValueSign) to High(TValueSign) do
@@ -197,15 +204,8 @@ var
         end;
 
       for cy := extents.Top to extents.Bottom do
-      begin
-        if ALowPrecision and Odd(cy) then
-          Continue;
-
         for cx := extents.Left to extents.Right do
         begin
-          if ALowPrecision and Odd(cx) then
-            Continue;
-
           f := 0;
           for vs := Low(TValueSign) to High(TValueSign) do
           begin
@@ -231,7 +231,6 @@ var
             results[resIdx].X := [cx, cy, r, sky];
           end;
         end;
-      end;
     end;
   end;
 
@@ -342,20 +341,15 @@ begin
 
   x := [extents.CenterPoint.X, extents.CenterPoint.Y, C45RpmConcentricGroove * FDPI * 0.5, 1.0];
 
-  ProcThreadPool.DoParallelLocalProc(@DoSkew, CMinSkew div (1 + Ord(ALowPrecision)), CMaxSkew div (1 + Ord(ALowPrecision)));
+  ProcThreadPool.DoParallelLocalProc(@DoSkew, CMinSkew, CMaxSkew);
 
   bestf := Low(Int64);
   for iRes := CMinSkew to CMaxSkew do
-  begin
-    if ALowPrecision and Odd(iRes) then
-      Continue;
-
     if results[iRes].Objective > bestf then
     begin
       bestf := results[iRes].Objective;
       x := results[iRes].X;
     end;
-  end;
 
   FCenter.X := x[0];
   FCenter.Y := x[1];
@@ -695,7 +689,7 @@ begin
   FFirstGrooveRadius := (C45RpmFirstMusicGroove * 2.0 + C45RpmOuterSize) / 3.0 * FDPI * 0.5;
   FConcentricGrooveRadius := C45RpmConcentricGroove * FDPI * 0.5;
 
-  FindConcentricGroove_GridSearch(True);
+  FindConcentricGroove_GridSearch;
   FindConcentricGroove_Gradient;
   FindGrooveStart;
 
@@ -871,6 +865,63 @@ begin
   serpFromCoeffsXY(coeffsX, @Image[iy * FWidth + ix], FWidth, @intData[0]);
 
   Result := serpFromCoeffs(coeffsY, @intData[0]);
+end;
+
+procedure TInputScan.AddCorrectRef(AngleIdx, ScanIdx: Integer);
+var
+  cr: TCorrectRef;
+begin
+  cr.AngleIdx := AngleIdx;
+  cr.ScanIdx := ScanIdx;
+
+  SpinEnter(@FLock);
+  try
+    SetLength(FCorrectRefs, Length(FCorrectRefs) + 1);
+    FCorrectRefs[High(FCorrectRefs)] := cr;
+  finally
+    SpinLeave(@FLock);
+  end;
+end;
+
+function TInputScan.HasCorrectRef(const AList: TInputScanDynArray; AngleIdx, ScanIdx: Integer): Boolean;
+
+  procedure Recurse(AScan: TInputScan);
+  var
+    i: Integer;
+    cr: TCorrectRef;
+    toRecurse: array of TInputScan;
+  begin
+    if Result then Exit;
+
+    SpinEnter(@AScan.FLock);
+    try
+      for i := 0 to High(AScan.FCorrectRefs) do
+      begin
+        cr := AScan.FCorrectRefs[i];
+
+        if (cr.AngleIdx = AngleIdx) and (cr.ScanIdx = ScanIdx) then
+        begin
+          Result := True;
+          Break;
+        end;
+
+        if cr.AngleIdx = AngleIdx then
+        begin
+          SetLength(toRecurse, Length(toRecurse) + 1);
+          toRecurse[High(toRecurse)] := AList[cr.ScanIdx];
+        end;
+      end;
+    finally
+      SpinLeave(@AScan.FLock);
+    end;
+
+    for i := 0 to High(toRecurse) do
+      Recurse(toRecurse[i]);
+  end;
+
+begin
+  Result := False;
+  Recurse(Self);
 end;
 
 { TScanImage }
