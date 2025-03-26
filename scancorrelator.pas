@@ -563,9 +563,12 @@ begin
 
   Coords.BaseScanIdx := -1;
   best := MaxInt;
-  for iBaseScan := 0 to Coords.ScanIdx - 1 do
+  for iBaseScan := 0 to High(FInputScans) do
   begin
     baseScan := FInputScans[iBaseScan];
+
+    if (Coords.ScanIdx = iBaseScan) or baseScan.HasCorrectRef(FInputScans, Coords.AngleIdx, Coords.ScanIdx) then
+      Continue;
 
     v := 0;
     for iAngle := -180 to 179 do
@@ -591,6 +594,7 @@ begin
   //WriteLn(Coords.ScanIdx:4, Coords.AngleIdx:4, Coords.BaseScanIdx:4, best:8);
 
   baseScan := FInputScans[Coords.BaseScanIdx];
+  FInputScans[Coords.ScanIdx].AddCorrectRef(Coords.AngleIdx, Coords.BaseScanIdx);
 
   // build radius / angle lookup table
 
