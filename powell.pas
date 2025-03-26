@@ -293,7 +293,7 @@ begin
     atol := 5 * xtol / sqsos;
   atol := Min(0.1, atol);
 
-  alpha_fret_iter := Brent(@AlongRay1, Vec(0, 1), atol, 100, p, xi, f, data);
+  alpha_fret_iter := Brent(@AlongRay1, Vec(0, 1), atol, 500, p, xi, f, data);
   alpha := alpha_fret_iter[0];
   fret := alpha_fret_iter[1];
   for i := 0 to n - 1 do
