@@ -5,7 +5,8 @@ unit main;
 interface
 
 uses
-  Classes, windows, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, Types, scan2track, scancorrelator, utils, math, inputscan, FilterIIRLPBessel, FilterIIRHPBessel;
+  Classes, windows, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, Spin, ComCtrls, Types, scan2track,
+  scancorrelator, utils, math, inputscan, FilterIIRLPBessel, FilterIIRHPBessel;
 
 type
 
@@ -29,12 +30,17 @@ type
     edOutputPNG: TEdit;
     edOutputWAV: TEdit;
     Image: TImage;
+    llDPI: TLabel;
+    llSR: TLabel;
+    llPrec: TLabel;
     mmInputPNGs: TMemo;
     odInPNGs: TOpenDialog;
     odInPNG: TOpenDialog;
+    pbS2T: TProgressBar;
     pnSettings: TPanel;
     sdOutPNG: TSaveDialog;
     sdOutWAV: TSaveDialog;
+    sePrec: TSpinEdit;
     procedure btOutPNGClick(Sender: TObject);
     procedure btInPNGClick(Sender: TObject);
     procedure btOutWAVClick(Sender: TObject);
@@ -74,7 +80,7 @@ procedure TMainForm.btScan2TrackClick(Sender: TObject);
 var
   s2t: TScan2Track;
 begin
-  s2t := TScan2Track.Create(StrToIntDef(cbDPI.Text, 2400), False, StrToIntDef(cbSR.Text, 48000));
+  s2t := TScan2Track.Create(StrToIntDef(cbDPI.Text, 2400), False, StrToIntDef(cbSR.Text, 48000), sePrec.Value);
   try
     s2t.OnSample := @OnSample;
     s2t.OutputWAVFileName := edOutputWAV.Text;
@@ -247,6 +253,7 @@ begin
     chkDefaultDPI.Checked := not sc.RebuildScaled;
     cbDPI.Text := IntToStr(sc.OutputDPI);
     cbSR.Text := IntToStr(s2t.SampleRate);
+    sePrec.Value := s2t.DecoderPrecision;
   finally
     s2t.Free;
     sc.Free;
@@ -290,6 +297,7 @@ begin
 
     tc := GetTickCount64;
     Write(Percent:6:2, '%,', DivDef(FPoints.Count / Sender.SampleRate * 1000.0, tc - FLastTickCount, 0.0):6:3, 'x', #13);
+    pbS2T.Position := Round(Percent);
     FLastTickCount := tc;
 
     FPoints.Clear;

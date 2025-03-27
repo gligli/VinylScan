@@ -4,40 +4,41 @@ object MainForm: TMainForm
   Top = -8
   Width = 1488
   HorzScrollBar.Increment = 240
-  HorzScrollBar.Page = 640
+  HorzScrollBar.Page = 904
   HorzScrollBar.Tracking = True
   VertScrollBar.Increment = 240
-  VertScrollBar.Page = 480
+  VertScrollBar.Page = 549
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 1461
+  ClientHeight = 1422
   ClientWidth = 1488
   Color = 4210752
   DoubleBuffered = True
   KeyPreview = True
-  OnCreate = FormCreate
-  OnKeyDown = FormKeyDown
   ParentDoubleBuffered = False
-  LCLVersion = '3.8.0.0'
   Scaled = False
   WindowState = wsMaximized
+  OnCreate = FormCreate
+  OnKeyDown = FormKeyDown
   object Image: TImage
-    Left = 0
+    Left = 264
     Height = 480
     Top = 0
     Width = 640
     AutoSize = True
+    Center = True
     ParentShowHint = False
   end
   object pnSettings: TPanel
     Left = 0
-    Height = 200
+    Height = 1422
     Top = 0
-    Width = 400
+    Width = 264
+    Align = alLeft
     BevelOuter = bvLowered
-    ClientHeight = 200
-    ClientWidth = 400
+    ClientHeight = 1422
+    ClientWidth = 264
     DoubleBuffered = False
     FullRepaint = False
     ParentBackground = False
@@ -46,31 +47,31 @@ object MainForm: TMainForm
     TabOrder = 0
     object edOutputWAV: TEdit
       Left = 8
-      Height = 23
+      Height = 24
       Hint = 'Scan to track output WAV file'
-      Top = 169
+      Top = 377
       Width = 224
       ParentShowHint = False
       ShowHint = True
-      TabOrder = 6
+      TabOrder = 12
       Text = 'data\sample.wav'
     end
     object edInputPNG: TEdit
       Left = 8
-      Height = 23
+      Height = 24
       Hint = 'Scan to track input PNG file'
-      Top = 144
+      Top = 352
       Width = 224
       ParentShowHint = False
       ShowHint = True
-      TabOrder = 4
+      TabOrder = 10
       Text = 'data\sample_correlated.png'
     end
     object edOutputPNG: TEdit
       Left = 8
-      Height = 23
+      Height = 24
       Hint = 'Scans correlator output PNG file'
-      Top = 104
+      Top = 176
       Width = 224
       ParentShowHint = False
       ShowHint = True
@@ -79,7 +80,7 @@ object MainForm: TMainForm
     end
     object mmInputPNGs: TMemo
       Left = 8
-      Height = 94
+      Height = 168
       Hint = 'Scans correlator input PNG files'
       Top = 8
       Width = 224
@@ -100,30 +101,30 @@ object MainForm: TMainForm
       WordWrap = False
     end
     object btScansCorrelator: TButton
-      Left = 264
+      Left = 8
       Height = 25
-      Top = 104
+      Top = 312
       Width = 131
       Caption = 'Scans correlator (F10)'
-      TabOrder = 13
+      TabOrder = 9
       OnClick = btScansCorrelatorClick
     end
     object btScan2Track: TButton
-      Left = 264
+      Left = 8
       Height = 25
-      Top = 168
+      Top = 496
       Width = 131
       Caption = 'Scan to track (F11)'
-      TabOrder = 16
+      TabOrder = 17
       OnClick = btScan2TrackClick
     end
     object cbDPI: TComboBox
-      Left = 264
-      Height = 23
+      Left = 152
+      Height = 24
       Hint = 'Default dots per inch'
-      Top = 144
-      Width = 64
-      ItemHeight = 15
+      Top = 416
+      Width = 80
+      ItemHeight = 16
       ItemIndex = 2
       Items.Strings = (
         '600'
@@ -148,7 +149,7 @@ object MainForm: TMainForm
     object btOutPNG: TButton
       Left = 232
       Height = 23
-      Top = 104
+      Top = 176
       Width = 23
       Caption = '...'
       TabOrder = 3
@@ -157,28 +158,28 @@ object MainForm: TMainForm
     object btInPNG: TButton
       Left = 232
       Height = 23
-      Top = 144
+      Top = 352
       Width = 23
       Caption = '...'
-      TabOrder = 5
+      TabOrder = 11
       OnClick = btInPNGClick
     end
     object btOutWAV: TButton
       Left = 232
       Height = 23
-      Top = 168
+      Top = 376
       Width = 23
       Caption = '...'
-      TabOrder = 7
+      TabOrder = 13
       OnClick = btOutWAVClick
     end
     object cbSR: TComboBox
-      Left = 330
-      Height = 23
+      Left = 152
+      Height = 24
       Hint = 'Sample rate'
-      Top = 144
-      Width = 65
-      ItemHeight = 15
+      Top = 440
+      Width = 80
+      ItemHeight = 16
       ItemIndex = 2
       Items.Strings = (
         '16000'
@@ -192,44 +193,83 @@ object MainForm: TMainForm
       Text = '48000'
     end
     object chkCorrect: TCheckBox
-      Left = 264
-      Height = 19
-      Top = 46
-      Width = 94
+      Left = 8
+      Height = 20
+      Top = 246
+      Width = 93
       Caption = 'Correct angles'
-      TabOrder = 10
+      TabOrder = 6
     end
     object chkBlend: TCheckBox
-      Left = 264
-      Height = 19
-      Top = 65
+      Left = 8
+      Height = 20
+      Top = 265
       Width = 104
       Caption = 'Rebuild blended'
-      TabOrder = 11
+      TabOrder = 7
     end
     object chkBrickLim: TCheckBox
-      Left = 264
-      Height = 19
-      Top = 8
-      Width = 124
-      Caption = 'Brickwall limit scans'
-      TabOrder = 8
+      Left = 8
+      Height = 20
+      Top = 208
+      Width = 158
+      Caption = 'Brickwall limit scan images'
+      TabOrder = 4
     end
     object chkOptimize: TCheckBox
-      Left = 264
-      Height = 19
-      Top = 27
-      Width = 116
+      Left = 8
+      Height = 20
+      Top = 227
+      Width = 114
       Caption = 'Analyze minimizes'
-      TabOrder = 9
+      TabOrder = 5
     end
     object chkDefaultDPI: TCheckBox
-      Left = 264
-      Height = 19
-      Top = 84
+      Left = 8
+      Height = 20
+      Top = 284
       Width = 133
       Caption = 'Rebuild to default DPI'
-      TabOrder = 12
+      TabOrder = 8
+    end
+    object llDPI: TLabel
+      Left = 8
+      Height = 16
+      Top = 420
+      Width = 111
+      Caption = 'Default Dots Per Inch'
+    end
+    object llSR: TLabel
+      Left = 8
+      Height = 16
+      Top = 444
+      Width = 110
+      Caption = 'Decoded sample rate'
+    end
+    object sePrec: TSpinEdit
+      Left = 152
+      Height = 24
+      Top = 464
+      Width = 80
+      MaxValue = 16
+      MinValue = 1
+      TabOrder = 16
+      Value = 1
+    end
+    object llPrec: TLabel
+      Left = 8
+      Height = 16
+      Top = 468
+      Width = 102
+      Caption = 'Decoding precision'
+    end
+    object pbS2T: TProgressBar
+      Left = 8
+      Height = 20
+      Top = 528
+      Width = 247
+      Smooth = True
+      TabOrder = 18
     end
   end
   object odInPNGs: TOpenDialog
@@ -238,28 +278,27 @@ object MainForm: TMainForm
     Filter = 'PNG; TIFF|*.png;*.tif'
     InitialDir = 'C:\VinylScan\data\'
     Options = [ofAllowMultiSelect, ofEnableSizing, ofViewDetail]
-    Left = 16
-    Top = 216
+    Top = 616
   end
   object odInPNG: TOpenDialog
     DefaultExt = '.PNG'
     Filter = 'PNG; TIFF|*.png;*.tif'
     InitialDir = 'data'
-    Left = 80
-    Top = 216
+    Left = 64
+    Top = 616
   end
   object sdOutPNG: TSaveDialog
     DefaultExt = '.PNG'
     Filter = 'PNG|*.png'
     InitialDir = 'data'
-    Left = 144
-    Top = 216
+    Left = 128
+    Top = 616
   end
   object sdOutWAV: TSaveDialog
     DefaultExt = '.WAV'
     Filter = 'WAV|*.wav'
     InitialDir = 'data'
-    Left = 208
-    Top = 216
+    Left = 192
+    Top = 616
   end
 end
