@@ -97,7 +97,7 @@ var
   iSmp, posMin, posMax: Integer;
   r, px, py, cxa: Double;
   sample, sampleMin, sampleMax, sampleMiddle, sampleIdx: Single;
-  smpBuf: array[SmallInt] of Double;
+  smpBuf: array[SmallInt] of Single;
   idxCnt: array[Boolean] of Integer;
   idxAcc: array[Boolean] of Integer;
   up: Boolean;
@@ -139,7 +139,9 @@ begin
 
   for iSmp := posMin to posMax do
   begin
-    up := smpBuf[iSmp] >= sampleMiddle;
+    sample := smpBuf[iSmp];
+
+    up := sample >= sampleMiddle;
 
     idxAcc[up] += iSmp;
     Inc(idxCnt[up]);
@@ -166,7 +168,7 @@ var
   end;
 
 var
-  radius, rOuter, sn, cs, ox, oy, fbRatio, fSmp, ffSmp, pct: Double;
+  radius, rOuter, sn, cs, ox, oy, fbRatio, fSmp, ffSmp, instantPct, maxPct: Double;
   iSample, iLut, cnt: Integer;
   hasOutFile, validSample: Boolean;
   fltSample: TFilterIIRHPBessel;
@@ -188,6 +190,7 @@ begin
 
     fbRatio := CutoffToFeedbackRatio(CLowCutoffFreq, FSampleRate) * C45RpmRecordingGrooveWidth * 0.5 * Scan.DPI;
 
+    maxPct := 0.0;
     rOuter := C45RpmOuterSize * 0.5 * Scan.DPI;
     iSample := 0;
     iLut := 0;
@@ -219,10 +222,11 @@ begin
         ox := cs * radius;
         oy := sn * radius * Scan.SkewY;
 
-        pct := (Sqrt(Sqr(ox) + Sqr(oy)) - Scan.ConcentricGrooveRadius) / (Scan.FirstGrooveRadius - Scan.ConcentricGrooveRadius);
-        pct := EnsureRange(1.0 - pct, 0.0, 1.0) * 100.0;
+        instantPct := (radius - Scan.ConcentricGrooveRadius) / (Scan.FirstGrooveRadius - Scan.ConcentricGrooveRadius);
+        instantPct := EnsureRange(1.0 - instantPct, 0.0, 1.0) * 100.0;
+        maxPct := Max(maxPct, instantPct);
 
-        validSample := FOnSample(Self, ffSmp, ox + Scan.Center.X, oy + Scan.Center.Y, radius, pct, not validSample) and validSample;
+        validSample := FOnSample(Self, ffSmp, ox + Scan.Center.X, oy + Scan.Center.Y, radius, maxPct, not validSample) and validSample;
       end;
 
     until not validSample;
