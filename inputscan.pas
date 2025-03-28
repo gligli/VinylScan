@@ -5,8 +5,8 @@ unit inputscan;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, FPReadPNG, FPReadTiff, FPImage, PNGComn, MTProcs,
-  utils, powell;
+  Classes, SysUtils, Types, Math, Graphics, FPReadTiff, FPImage, PNGComn, MTProcs,
+  utils, powell, hackedreadpng;
 
 type
   TInputScan = class;
@@ -36,7 +36,7 @@ type
     FCenter: TPointD;
     FConcentricGrooveRadius: Double;
     FSkewY: Double;
-    FFirstGrooveRadius: Double;
+    FSetDownRadius: Double;
     FGrooveStartAngle: Double;
     FGrooveStartPoint: TPointD;
 
@@ -85,7 +85,7 @@ type
     property Height: Integer read FHeight;
 
     property ConcentricGrooveRadius: Double read FConcentricGrooveRadius;
-    property FirstGrooveRadius: Double read FFirstGrooveRadius;
+    property SetDownRadius: Double read FSetDownRadius;
     property GrooveStartAngle: Double read FGrooveStartAngle;
     property GrooveStartPoint: TPointD read FGrooveStartPoint;
     property PointsPerRevolution: Integer read FPointsPerRevolution;
@@ -118,7 +118,7 @@ type
 
   { TDPIAwareReaderPNG }
 
-  TDPIAwareReaderPNG = class(TFPReaderPNG)
+  TDPIAwareReaderPNG = class(THackedReaderPNG)
   private
     FDPI: TPoint;
   protected
@@ -130,8 +130,6 @@ type
   end;
 
 implementation
-
-uses scan2track, scan2points;
 
 { TInputScan }
 
@@ -154,14 +152,13 @@ end;
 
 procedure TInputScan.FindConcentricGroove_GridSearch;
 const
-  CCorneringThres = 1.5 * (High(Byte) + 1);
+  CCorneringThres = 10.0;
   CPointsPerRevolution = 512;
   CSkewDivisor = 1000.0;
   CMinSkew = round(0.98 * CSkewDivisor);
   CMaxSkew = round(1.02 * CSkewDivisor);
 var
   startBuf: TWordDynArray;
-  cornerbuf: TWordDynArray;
   sinCosLUT: TSinCosDynArray;
   stencilX: array[TValueSign] of Double;
   stencilY: array[TValueSign] of Integer;
@@ -228,34 +225,32 @@ var
     end;
   end;
 
-  function DoXBuf(var buf: TWordDynArray; y: Integer; corr: Boolean): Double;
+  function DoXYBuf(var buf: TWordDynArray; xy: Integer; alongY, corr: Boolean): Double;
   var
     i: Integer;
   begin
-    for i := 0 to Width - 1 do
-     buf[i] := FImage[y * Width + i];
+    if alongY then
+    begin
+      for i := 0 to Height - 1 do
+       buf[i] := FImage[i * Width + xy];
+    end
+    else
+    begin
+      for i := 0 to Width - 1 do
+       buf[i] := FImage[xy * Width + i];
+    end;
 
     Result := NaN;
     if corr then
-      Result := MAE(startBuf, cornerbuf);
-  end;
-
-  function DoYBuf(var buf: TWordDynArray; x: Integer; corr: Boolean): Double;
-  var
-    i: Integer;
-  begin
-    for i := 0 to Height - 1 do
-     buf[i] := FImage[i * Width + x];
-
-    Result := NaN;
-    if corr then
-      Result := MAE(startBuf, cornerbuf);
+      Result := Sqrt(MSE(startBuf, buf));
   end;
 
 var
   iRes, radiusLimit, maxCorner, xx, yy: Integer;
+  baseMSE: Double;
   bestf: Int64;
   x: TDoubleDynArray;
+  cornerbuf: TWordDynArray;
 begin
   // init
 
@@ -276,17 +271,19 @@ begin
     SetLength(cornerbuf, Height);
     maxCorner := Width - radiusLimit * 2 - 1;
 
-    DoYBuf(startBuf, 0, False);
+    DoXYBuf(startBuf, 0, True, False);
+    baseMSE := DoXYBuf(cornerbuf, 1, True, True);
     for xx := 0 to maxCorner do
-      if (DoYBuf(cornerbuf, xx, True) > CCorneringThres) or (xx = maxCorner) then
+      if (DoXYBuf(cornerbuf, xx, True, True) > CCorneringThres * baseMSE) or (xx = maxCorner) then
       begin
         extents.Left := xx + radiusLimit;
         Break;
       end;
 
-    DoYBuf(startBuf, Width - 1, False);
+    DoXYBuf(startBuf, Width - 1, True, False);
+    baseMSE := DoXYBuf(cornerbuf, Width - 2, True, True);
     for xx := Width - 1 downto Width - 1 - maxCorner do
-      if (DoYBuf(cornerbuf, xx, True) > CCorneringThres) or (xx = Width - 1 - maxCorner) then
+      if (DoXYBuf(cornerbuf, xx, True, True) > CCorneringThres * baseMSE) or (xx = Width - 1 - maxCorner) then
       begin
         extents.Right := xx - radiusLimit;
         Break;
@@ -299,17 +296,19 @@ begin
     SetLength(cornerbuf, Width);
     maxCorner := Height - radiusLimit * 2 - 1;
 
-    DoXBuf(startBuf, 0, False);
+    DoXYBuf(startBuf, 0, False, False);
+    baseMSE := DoXYBuf(cornerbuf, 1, False, True);
     for yy := 0 to maxCorner do
-      if (DoXBuf(cornerbuf, yy, True) > CCorneringThres) or (yy = maxCorner) then
+      if (DoXYBuf(cornerbuf, yy, False, True) > CCorneringThres * baseMSE) or (yy = maxCorner) then
       begin
         extents.Top := yy + radiusLimit;
         Break;
       end;
 
-    DoXBuf(startBuf, Height - 1, False);
+    DoXYBuf(startBuf, Height - 1, False, False);
+    baseMSE := DoXYBuf(cornerbuf, Height - 2, False, True);
     for yy := Height - 1 downto Height - 1 - maxCorner do
-      if (DoXBuf(cornerbuf, yy, True) > CCorneringThres) or (yy = Height - 1 - maxCorner) then
+      if (DoXYBuf(cornerbuf, yy, False, True) > CCorneringThres * baseMSE) or (yy = Height - 1 - maxCorner) then
       begin
         extents.Bottom := yy - radiusLimit;
         Break;
@@ -442,8 +441,8 @@ begin
   begin
     SinCos(i * FRadiansPerRevolutionPoint, sn, cs);
 
-    x := cs * FFirstGrooveRadius + FCenter.X;
-    y := sn * FFirstGrooveRadius + FCenter.Y;
+    x := cs * FSetDownRadius + FCenter.X;
+    y := sn * FSetDownRadius + FCenter.Y;
 
     if InRangePointD(y, x) then
     begin
@@ -680,7 +679,7 @@ begin
   else
     SetRevolutionFromDPI(FDPI);
 
-  FFirstGrooveRadius := C45RpmFirstMusicGroove * FDPI * 0.5;
+  FSetDownRadius := C45RpmStylusSetDown * FDPI * 0.5;
   FConcentricGrooveRadius := C45RpmConcentricGroove * FDPI * 0.5;
 
   FindConcentricGroove_GridSearch;
@@ -693,7 +692,7 @@ begin
     WriteLn('ConcentricGrooveRadius:', FConcentricGrooveRadius:12:3);
     WriteLn('SkewY:', FSkewY:12:6);
     WriteLn('CenterQuality:', FCenterQuality:12:6);
-    WriteLn('FirstGrooveRadius:', FFirstGrooveRadius:12:3);
+    WriteLn('SetDownRadius:', FSetDownRadius:12:3);
     WriteLn('GrooveStartPoint:', FGrooveStartPoint.X:12:3, ',', FGrooveStartPoint.Y:12:3);
     Writeln('Inner raw sample rate: ', Round(Pi * C45RpmLastMusicGroove * FDPI * C45RpmRevolutionsPerSecond), ' Hz');
   end

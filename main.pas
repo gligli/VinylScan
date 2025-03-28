@@ -328,8 +328,8 @@ begin
   cy := Round(AScan.Center.Y * FReducFactor);
   sx := Round(AScan.GrooveStartPoint.X * FReducFactor);
   sy := Round(AScan.GrooveStartPoint.Y * FReducFactor);
-  rfx := Round(AScan.FirstGrooveRadius) div FReducRatio;
-  rfy := Round(AScan.FirstGrooveRadius * AScan.SkewY) div FReducRatio;
+  rfx := Round(AScan.SetDownRadius) div FReducRatio;
+  rfy := Round(AScan.SetDownRadius * AScan.SkewY) div FReducRatio;
   rcx := Round(AScan.ConcentricGrooveRadius) div FReducRatio;
   rcy := Round(AScan.ConcentricGrooveRadius * AScan.SkewY) div FReducRatio;
   rax := Round(C45RpmAdapterSize * 0.5 * AScan.DPI) div FReducRatio;

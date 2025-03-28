@@ -194,7 +194,7 @@ begin
     rOuter := C45RpmOuterSize * 0.5 * Scan.DPI;
     iSample := 0;
     iLut := 0;
-    radius := Scan.FirstGrooveRadius;
+    radius := Scan.SetDownRadius;
     repeat
       cs := sinCosLut[iLut].Cos;
       sn := sinCosLut[iLut].Sin;
@@ -222,7 +222,7 @@ begin
         ox := cs * radius;
         oy := sn * radius * Scan.SkewY;
 
-        instantPct := (radius - Scan.ConcentricGrooveRadius) / (Scan.FirstGrooveRadius - Scan.ConcentricGrooveRadius);
+        instantPct := (radius - Scan.ConcentricGrooveRadius) / (Scan.SetDownRadius - Scan.ConcentricGrooveRadius);
         instantPct := EnsureRange(1.0 - instantPct, 0.0, 1.0) * 100.0;
         maxPct := Max(maxPct, instantPct);
 

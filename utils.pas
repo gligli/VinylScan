@@ -63,9 +63,6 @@ type
 const
   C45RpmRevolutionsPerSecond = 45.0 / 60.0;
 
-  C45RpmLeadInGroovesPerInch = 16.0;
-  C45RpmMinGroovesPerInch = 2.0;
-
   C45RpmRecordingGrooveWidth = 0.0058;
   C45RpmLeadOutGrooveWidth = 0.006;
 
@@ -75,6 +72,7 @@ const
   C45RpmConcentricGroove = 3.875;
   C45RpmMinConcentricGroove = C45RpmConcentricGroove - 0.078 * 1.5;
   C45RpmMaxConcentricGroove = C45RpmConcentricGroove + 0.078;
+  C45RpmStylusSetDown = 6.781;
   C45RpmFirstMusicGroove = 6.625;
   C45RpmLastMusicGroove = 4.25;
   C45RpmAdapterSize = 1.496;
