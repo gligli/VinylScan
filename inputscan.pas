@@ -357,12 +357,23 @@ procedure TInputScan.GradientConcentricGroove(const arg: TDoubleDynArray; var fu
   obj: Pointer);
 var
   iLut: Integer;
-  px, py, cx, cy, sky, r, cs, sn, gix, giy, gcx, gcy, gr, gsky: Double;
+  px, py, cx, cy, sky, r, cs, sn, gix, giy, gcx, gcy, gr, gsky, rsx, sy: Double;
+  stencilX: array[TValueSign] of Double;
+  stencilY: array[TValueSign] of Integer;
+  vs: TValueSign;
 begin
   cx := arg[0];
   cy := arg[1];
   r := arg[2];
   sky := arg[3];
+
+  stencilY[NegativeValue] := -1;
+  stencilY[ZeroValue] := 2;
+  stencilY[PositiveValue] := -1;
+
+  stencilX[NegativeValue] := -C45RpmLeadOutGrooveWidth * FDPI;
+  stencilX[ZeroValue] := 0;
+  stencilX[PositiveValue] := C45RpmLeadOutGrooveWidth * FDPI;
 
   func := 0.0;
   if Assigned(grad) then
@@ -378,21 +389,27 @@ begin
     cs := FSinCosLUT[iLut].Cos;
     sn := FSinCosLUT[iLut].Sin;
 
-    px := cs * r + cx;
-    py := sn * r * sky + cy;
-
-    if InRangePointD(py, px) then
+    for vs := Low(TValueSign) to High(TValueSign) do
     begin
-      func -= GetPointD_Linear(FLeveledImage, py, px);
+      rsx := r + stencilX[vs];
+      sy := stencilY[vs];
 
-      if Assigned(grad) then
+      px := cs * rsx + cx;
+      py := sn * rsx * sky + cy;
+
+      if InRangePointD(py, px) then
       begin
-        GetGradientsD(FLeveledImage, py, px, giy, gix);
+        func -= GetPointD_Linear(FLeveledImage, py, px) * sy;
 
-        gcx -= gix;
-        gcy -= giy;
-        gr -= gix * cs + giy * sn * sky;
-        gsky -= giy * sn;
+        if Assigned(grad) then
+        begin
+          GetGradientsD(FLeveledImage, py, px, giy, gix);
+
+          gcx -= gix * sy;
+          gcy -= giy * sy;
+          gr -= (gix * cs + giy * sn * sky) * sy;
+          gsky -= giy * sn * sy;
+        end;
       end;
     end;
   end;
