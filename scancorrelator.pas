@@ -327,8 +327,8 @@ begin
 
   scan := FInputScans[coords^.ScanIdx];
 
-  radiusLimitX := Round(C45RpmOuterSize * 0.5 * scan.DPI) + 1;
-  radiusLimitY := Round(C45RpmOuterSize * 0.5 * scan.DPI * skewY) + 1;
+  radiusLimitX := Round(CAnalyzeAreaEnd * 0.5 * scan.DPI) + 1;
+  radiusLimitY := Round(CAnalyzeAreaEnd * 0.5 * scan.DPI * skewY) + 1;
 
   extents.Left := radiusLimitX;
   extents.Top := radiusLimitY;
