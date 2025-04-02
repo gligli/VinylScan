@@ -150,7 +150,7 @@ procedure TScanCorrelator.LoadScans;
     Scan.LoadImage;
 
     if FBrickwallLimitScans then Scan.BrickwallLimit;
-    Scan.FindTrack;
+    Scan.FindTrack(True);
   end;
 
 var

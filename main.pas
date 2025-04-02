@@ -281,7 +281,7 @@ end;
 function TMainForm.OnSample(Sender: TScan2Track; Sample, X, Y: Double; var Radius: Double; Percent: Double;
   Finished: Boolean): Boolean;
 const
-  CSecondsAtATime = 0.1;
+  CSecondsAtATime = 0.25 / C45RpmRevolutionsPerSecond;
 var
   tc: QWord;
 begin
@@ -309,7 +309,7 @@ end;
 
 procedure TMainForm.SetReduc(AImageWidth, AImageHeight: Integer);
 begin
-  FReducRatio := Max(1, Floor(AImageHeight / Height));
+  FReducRatio := Max(1, Ceil(AImageHeight / ClientHeight));
   FReducFactor := 1.0 / FReducRatio;
 end;
 

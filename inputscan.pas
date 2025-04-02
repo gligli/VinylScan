@@ -68,7 +68,7 @@ type
 
     procedure LoadImage;
     procedure BrickwallLimit;
-    procedure FindTrack(AForcedSampleRate: Integer = -1);
+    procedure FindTrack(AUseGradient: Boolean; AForcedSampleRate: Integer = -1);
     procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle, ASkewY: Double);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray);
 
@@ -687,7 +687,7 @@ begin
   ProcThreadPool.DoParallelLocalProc(@DoY, CRadius, FHeight - 1 - CRadius);
 end;
 
-procedure TInputScan.FindTrack(AForcedSampleRate: Integer);
+procedure TInputScan.FindTrack(AUseGradient: Boolean; AForcedSampleRate: Integer);
 begin
   if not FSilent then WriteLn('FindTrack');
 
@@ -696,11 +696,12 @@ begin
   else
     SetRevolutionFromDPI(FDPI);
 
-  FSetDownRadius := C45RpmStylusSetDown * FDPI * 0.5;
+  FSetDownRadius := (C45RpmStylusSetDown + C45RpmFirstMusicGroove) * 0.5 * FDPI * 0.5;
   FConcentricGrooveRadius := C45RpmConcentricGroove * FDPI * 0.5;
 
   FindConcentricGroove_GridSearch;
-  FindConcentricGroove_Gradient;
+  if AUseGradient then
+    FindConcentricGroove_Gradient;
   FindGrooveStart;
 
   if not FSilent then

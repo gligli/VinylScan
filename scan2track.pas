@@ -24,15 +24,21 @@ type
     FOnSample: TSampleEvent;
 
     FDecoderPrecision: Integer;
-    FDecoderMax: Integer;
     FSampleRate: Integer;
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
     FSilent: Boolean;
 
+    FPrevSamples: TSingleDynArray;
+    FPrevSamplesReady: Boolean;
+    FPrevSamplesPos: Integer;
+
     FUsedSampleValues: array[SmallInt] of Boolean;
 
-    function DecodeSample(radius, angleSin, angleCos: Double): Double;
+    procedure InitPrevSamples;
+    procedure UpdatePrevSamples(Sample: Single);
+    function GetPrevSamplesExtents: Double;
+    function DecodeSample(radius, angleSin, angleCos: Double; precision: Integer; usePrev: Boolean): Double;
 
   public
     constructor Create(ADefaultDPI: Integer = 2400; ASilent: Boolean = False; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 10);
@@ -61,7 +67,6 @@ constructor TScan2Track.Create(ADefaultDPI: Integer; ASilent: Boolean; ASampleRa
 begin
   FSampleRate := ASampleRate;
   FDecoderPrecision := EnsureRange(ADecoderPrecision, 1, 16);
-  FDecoderMax := 1 shl (FDecoderPrecision - 1);
   FSilent := ASilent;
 
   FPointsPerRevolution := Round(FSampleRate / C45RpmRevolutionsPerSecond);
@@ -69,6 +74,8 @@ begin
 
   FScan := TInputScan.Create(ADefaultDPI);
   FScanOwned := True;
+
+  InitPrevSamples;
 end;
 
 constructor TScan2Track.CreateFromInputScan(AInputScan: TInputScan; ASilent: Boolean; ADecoderPrecision: Integer);
@@ -78,10 +85,11 @@ begin
 
   FSampleRate := Round(FPointsPerRevolution * C45RpmRevolutionsPerSecond);
   FDecoderPrecision := EnsureRange(ADecoderPrecision, 1, 16);
-  FDecoderMax := 1 shl (FDecoderPrecision - 1);
   FSilent := ASilent;
 
   FScan := AInputScan;
+
+  InitPrevSamples;
 end;
 
 destructor TScan2Track.Destroy;
@@ -92,27 +100,75 @@ begin
   inherited Destroy;
 end;
 
-function TScan2Track.DecodeSample(radius, angleSin, angleCos: Double): Double;
+procedure TScan2Track.InitPrevSamples;
+var i: Integer;
+begin
+  SetLength(FPrevSamples, Round(FSampleRate / CLowCutoffFreq));
+  FPrevSamplesReady := False;
+  FPrevSamplesPos := 0;
+
+  for i := 0 to High(FPrevSamples) do
+    FPrevSamples[i] := NaN;
+end;
+
+procedure TScan2Track.UpdatePrevSamples(Sample: Single);
+var i: Integer;
+begin
+  for i := 0 to High(FPrevSamples) - 1 do
+    FPrevSamples[i] := FPrevSamples[i + 1];
+  FPrevSamples[High(FPrevSamples)] := Sample;
+
+  Inc(FPrevSamplesPos);
+
+  if FPrevSamplesPos >= Length(FPrevSamples) then
+  begin
+    FPrevSamplesReady := True;
+    FPrevSamplesPos := 0;
+  end;
+end;
+
+function TScan2Track.GetPrevSamplesExtents: Double;
 var
-  iSmp, posMin, posMax: Integer;
-  r, px, py, cxa: Double;
-  sample, sampleMin, sampleMax, sampleMiddle, sampleIdx: Single;
+  i: Integer;
+begin
+  if not FPrevSamplesReady then
+    Exit(NaN);
+
+  Result := Sqrt(SumOfSquares(FPrevSamples) / Length(FPrevSamples));
+end;
+
+function TScan2Track.DecodeSample(radius, angleSin, angleCos: Double; precision: Integer; usePrev: Boolean): Double;
+var
+  iSmp, posMin, posMax, decoderMax: Integer;
+  r, px, py, cxa, psExtents: Double;
+  sample, sampleMin, sampleMax, sampleMiddle, sampleIdx, estSample: Single;
   smpBuf: array[SmallInt] of Single;
   idxCnt: array[Boolean] of Integer;
   idxAcc: array[Boolean] of Integer;
   up: Boolean;
 begin
-  cxa := C45RpmRecordingGrooveWidth * 0.5 * Scan.DPI / FDecoderMax;
+  decoderMax := 1 shl (precision - 1);
 
-  r := radius + FDecoderMax * cxa;
+  cxa := C45RpmRecordingGrooveWidth * 0.5 * Scan.DPI / decoderMax;
+
+  r := radius + decoderMax * cxa;
   px := angleCos * r + Scan.Center.X;
   py := angleSin * r * Scan.SkewY + Scan.Center.Y;
 
   if not Scan.InRangePointD(py, px) then
     Exit(0.0);
 
-  posMin := -FDecoderMax;
-  posMax := FDecoderMax - 1;
+  estSample := NaN;
+  posMin := -decoderMax;
+  posMax := decoderMax - 1;
+  if usePrev and FPrevSamplesReady then
+  begin
+    estSample := FPrevSamples[High(FPrevSamples)];
+    psExtents := GetPrevSamplesExtents;
+    posMin := Max(posMin, Floor(estSample - psExtents));
+    posMax := Min(posMax, Ceil(estSample + psExtents));
+  end;
+
   sampleMin := Infinity;
   sampleMax := -Infinity;
   for iSmp := posMin to posMax do
@@ -147,28 +203,32 @@ begin
     Inc(idxCnt[up]);
   end;
 
-  sampleIdx := DivDef(idxAcc[True], idxCnt[True], 0.0) - DivDef(idxAcc[False], idxCnt[False], 0.0);
+  if usePrev then
+  begin
+    sampleIdx := DivDef(idxAcc[True], idxCnt[True], 0.0);
+    UpdatePrevSamples(sampleIdx);
+  end
+  else
+  begin
+    sampleIdx := DivDef(idxAcc[True], idxCnt[True], 0.0) - DivDef(idxAcc[False], idxCnt[False], 0.0);
+  end;
 
-  Result := sampleIdx / FDecoderMax;
+  Result := sampleIdx / decoderMax;
 end;
 
 procedure TScan2Track.EvalTrack;
 var
-  samples: TSmallIntDynArray;
+  samples: TDoubleDynArray;
 
-  procedure StoreSample(fsmp: Double; pos: Integer);
-  var
-    smp: SmallInt;
+  procedure StoreSample(var samplesArray: TDoubleDynArray;  fsmp: Double; pos: Integer);
   begin
-    smp :=  Make16BitSample(fsmp);
-
-    while pos >= Length(samples) do
-      SetLength(samples, Ceil(Length(samples) * cPhi));
-    samples[pos] := smp;
+    while pos >= Length(samplesArray) do
+      SetLength(samplesArray, Ceil(Length(samplesArray) * cPhi));
+    samplesArray[pos] := fsmp;
   end;
 
 var
-  radius, rOuter, sn, cs, ox, oy, fbRatio, fSmp, ffSmp, instantPct, maxPct: Double;
+  rOuter, sn, cs, ox, oy, fbRatio, ffSmp, instantPct, maxPct, radius, fSmp: Double;
   iSample, iLut, cnt: Integer;
   hasOutFile, validSample: Boolean;
   fltSample: TFilterIIRHPBessel;
@@ -190,11 +250,12 @@ begin
 
     fbRatio := CutoffToFeedbackRatio(CLowCutoffFreq, FSampleRate) * C45RpmRecordingGrooveWidth * 0.5 * Scan.DPI;
 
+    radius := Scan.SetDownRadius;
     maxPct := 0.0;
     rOuter := C45RpmOuterSize * 0.5 * Scan.DPI;
     iSample := 0;
     iLut := 0;
-    radius := Scan.SetDownRadius;
+
     repeat
       cs := sinCosLut[iLut].Cos;
       sn := sinCosLut[iLut].Sin;
@@ -202,18 +263,15 @@ begin
       if iLut >= FPointsPerRevolution then
         iLut := 0;
 
-      fSmp := DecodeSample(radius, sn, cs);
-      radius += fSmp * fbRatio;
+      fSmp := DecodeSample(radius, sn, cs, FDecoderPrecision, True);
+      radius += DecodeSample(radius, sn, cs, Max(1, FDecoderPrecision div 2), False) * fbRatio;
 
       FUsedSampleValues[Make16BitSample(fSmp)] := True;
 
       ffSmp := fltSample.FilterFilter(fSmp);
 
       if hasOutFile then
-      begin
-        StoreSample(ffSmp, iSample);
-        Inc(iSample);
-      end;
+        StoreSample(samples, ffSmp, iSample);
 
       validSample := InRange(radius, Scan.ConcentricGrooveRadius, rOuter);
 
@@ -228,6 +286,8 @@ begin
 
         validSample := FOnSample(Self, ffSmp, ox + Scan.Center.X, oy + Scan.Center.Y, radius, maxPct, not validSample) and validSample;
       end;
+
+      Inc(iSample);
 
     until not validSample;
 
@@ -254,7 +314,7 @@ end;
 procedure TScan2Track.LoadScan;
 begin
   Scan.LoadImage;
-  Scan.FindTrack(FSampleRate);
+  Scan.FindTrack(False, FSampleRate);
 end;
 
 end.
