@@ -12,7 +12,7 @@
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
  **********************************************************************}
-{$mode objfpc}{$h+}
+{$mode objfpc}{$h+}{$r-}
 unit hackedreadpng;
 
 interface
