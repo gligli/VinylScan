@@ -150,7 +150,7 @@ function NormalizedAngleDiff(xmin, xmax: Double): Double;
 function NormalizedAngleTo02Pi(x: Double): Double;
 
 procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TSinCosDynArray; AOriginAngle: Double = 0.0; AExtentsAngle: Double = 2.0 * Pi);
-function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle, PxCountDiv: Double): TRadiusAngleDynArray;
+function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle, PxCountDiv: Double; Sort: Boolean): TRadiusAngleDynArray;
 procedure OffsetRadiusAngleLUTAngle(var LUT: TRadiusAngleDynArray; AngleOffset: Double);
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
 
@@ -835,9 +835,11 @@ var
   ra2: ^TRadiusAngle absolute Item2;
 begin
   Result := CompareValue(ra1^.Angle, ra2^.Angle);
+  if Result = 0 then
+    Result := CompareValue(ra1^.Radius, ra2^.Radius);
 end;
 
-function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle, PxCountDiv: Double): TRadiusAngleDynArray;
+function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle, PxCountDiv: Double; Sort: Boolean): TRadiusAngleDynArray;
 var
   oy, ox, cnt, rEndInt: Integer;
   r, t, nsa, nea, diff: Double;
@@ -874,7 +876,9 @@ begin
     end;
 
   SetLength(Result, cnt);
-  QuickSort(Result[0], 0, cnt - 1, SizeOf(Result[0]), @CompareRadiusAngle);
+
+  if Sort then
+    QuickSort(Result[0], 0, cnt - 1, SizeOf(Result[0]), @CompareRadiusAngle);
 end;
 
 procedure OffsetRadiusAngleLUTAngle(var LUT: TRadiusAngleDynArray; AngleOffset: Double);

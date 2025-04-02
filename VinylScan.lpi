@@ -36,6 +36,7 @@
           </Parsing>
           <CodeGeneration>
             <SmartLinkUnit Value="True"/>
+            <StackSize Value="16777216"/>
             <TargetOS Value="win64"/>
             <Optimizations>
               <OptimizationLevel Value="2"/>
@@ -70,6 +71,7 @@
           </Parsing>
           <CodeGeneration>
             <SmartLinkUnit Value="True"/>
+            <StackSize Value="16777216"/>
             <TargetOS Value="win64"/>
             <Optimizations>
               <OptimizationLevel Value="3"/>
@@ -110,6 +112,7 @@
           </Parsing>
           <CodeGeneration>
             <SmartLinkUnit Value="True"/>
+            <StackSize Value="16777216"/>
             <TargetOS Value="win64"/>
             <Optimizations>
               <OptimizationLevel Value="3"/>
@@ -222,6 +225,7 @@
         <OverflowChecks Value="True"/>
         <StackChecks Value="True"/>
       </Checks>
+      <StackSize Value="16777216"/>
       <VerifyObjMethodCallValidity Value="True"/>
       <TargetOS Value="win64"/>
       <Optimizations>

@@ -293,7 +293,7 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * baseScan.DPI, CAnalyzeAreaEnd * 0.5 * baseScan.DPI, 0.0, 2.0 * Pi, baseScan.DPI / 1200.0);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * baseScan.DPI, CAnalyzeAreaEnd * 0.5 * baseScan.DPI, 0.0, 2.0 * Pi, baseScan.DPI / 1200.0, True);
   OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, baseScan.RelativeAngle);
   Coords.PrevAngle := baseScan.RelativeAngle;
 
@@ -461,7 +461,7 @@ begin
   rBeg := C45RpmLastMusicGroove * 0.5 * FInputScans[0].DPI;
   rEnd := C45RpmFirstMusicGroove * 0.5 * FInputScans[0].DPI;
 
-  RadiusAngleLut := BuildRadiusAngleLUT(rBeg, rEnd, 0, 2.0 * Pi, FInputScans[0].DPI / 300.0);
+  RadiusAngleLut := BuildRadiusAngleLUT(rBeg, rEnd, 0, 2.0 * Pi, FInputScans[0].DPI / 300.0, True);
 
   ProcThreadPool.DoParallelLocalProc(@DoCrop, 0, High(FInputScans));
 
@@ -594,7 +594,7 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, startAngle, endAngle, baseScan.DPI / 2400.0);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, startAngle, endAngle, baseScan.DPI / 2400.0, False);
 
   // build weights lookup table
 
