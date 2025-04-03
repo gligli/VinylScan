@@ -746,7 +746,7 @@ var
       end;
 
       x := [bestConstSkew, bestMulSkew];
-      bestFunc := PowellMinimize(@PowellCorrect, x, 1e-9, 1e-6, 0.0, MaxInt, @coords)[0];
+      bestFunc := PowellMinimize(@PowellCorrect, x, 1e-8, 1e-6, 0.0, MaxInt, @coords)[0];
       bestConstSkew := x[0];
       bestMulSkew := x[1];
 

@@ -459,7 +459,7 @@ begin
     SinCos(i * FRadiansPerRevolutionPoint, sn, cs);
 
     x := cs * FSetDownRadius + FCenter.X;
-    y := sn * FSetDownRadius + FCenter.Y;
+    y := sn * FSetDownRadius * FSkewY + FCenter.Y;
 
     if InRangePointD(y, x) then
     begin

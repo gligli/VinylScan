@@ -682,8 +682,9 @@ end;
 function PseudoHuber(x: Double): Double;
 const
   CDelta = 512.0;
+  CInvDelta = 1.0 / CDelta;
 begin
-  Result := CDelta * (Sqrt(1.0 + Sqr(x / CDelta)) - 1);
+  Result := CDelta * (Sqrt(1.0 + Sqr(x * CInvDelta)) - 1);
 end;
 
 function MAE(const a: TWordDynArray; const b: TWordDynArray): Double;
