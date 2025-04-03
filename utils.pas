@@ -63,7 +63,7 @@ type
 const
   C45RpmRevolutionsPerSecond = 45.0 / 60.0;
 
-  C45RpmRecordingGrooveWidth = 0.0058;
+  C45RpmRecordingGrooveWidth = 0.005;
   C45RpmLeadOutGrooveWidth = 0.006;
 
   C45RpmOuterSize = 6.875;
