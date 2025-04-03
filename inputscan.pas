@@ -696,7 +696,7 @@ begin
   else
     SetRevolutionFromDPI(FDPI);
 
-  FSetDownRadius := (C45RpmStylusSetDown + C45RpmFirstMusicGroove) * 0.5 * FDPI * 0.5;
+  FSetDownRadius := (C45RpmStylusSetDown + 2.0 * C45RpmFirstMusicGroove) / 3.0 * FDPI * 0.5;
   FConcentricGrooveRadius := C45RpmConcentricGroove * FDPI * 0.5;
 
   FindConcentricGroove_GridSearch;
