@@ -31,7 +31,7 @@ type
     FOutputDPI: Integer;
     FLock: TSpinlock;
 
-    FPerAngleX: TDoubleDynArray2;
+    FPerAngleSkew: TPointDDynArray;
 
     FOutputWidth, FOutputHeight: Integer;
     FOutputImage: TWordDynArray;
@@ -42,7 +42,7 @@ type
     procedure PrepareAnalyze(var Coords: TAngleScanCoords);
     function PowellAnalyze(const x: TVector; obj: Pointer): TScalar;
     function PrepareCorrect(var Coords: TAngleScanCoords): Boolean;
-    function GridSearchCorrect(ConstSkew, MulSkew, SqrSkew: Double; const Coords: TAngleScanCoords): Double;
+    function GridSearchCorrect(ConstSkew, MulSkew: Double; const Coords: TAngleScanCoords): Double;
     function PowellCorrect(const x: TVector; obj: Pointer): TScalar;
 
     procedure AngleInit;
@@ -293,7 +293,7 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * baseScan.DPI, CAnalyzeAreaEnd * 0.5 * baseScan.DPI, 0.0, 2.0 * Pi, baseScan.DPI / 1200.0, True);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * baseScan.DPI, CAnalyzeAreaEnd * 0.5 * baseScan.DPI, 0.0, 2.0 * Pi, Max(0.5, baseScan.DPI / 1200.0), True);
   OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, baseScan.RelativeAngle);
   Coords.PrevAngle := baseScan.RelativeAngle;
 
@@ -594,7 +594,7 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, startAngle, endAngle, baseScan.DPI / 2400.0, False);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, startAngle, endAngle, Max(0.5, baseScan.DPI / 2400.0), False);
 
   // build weights lookup table
 
@@ -639,7 +639,7 @@ begin
   OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, FInputScans[Coords.ScanIdx].RelativeAngle - baseScan.RelativeAngle);
 end;
 
-function TScanCorrelator.GridSearchCorrect(ConstSkew, MulSkew, SqrSkew: Double; const Coords: TAngleScanCoords): Double;
+function TScanCorrelator.GridSearchCorrect(ConstSkew, MulSkew: Double; const Coords: TAngleScanCoords): Double;
 var
   iLut: Integer;
   centerX, centerY, r, skewY, px, py, cs, sn, radiusLimit: Double;
@@ -656,7 +656,7 @@ begin
 
   radiusLimit := MinValue([centerX, centerY, scan.Width - 1 - centerX, scan.Height - 1 - centerY]) - 1;
   r := CCorrectAreaEnd * 0.5 * scan.DPI * Max(1.0, skewY);
-  r := r + r * (MulSkew + r * SqrSkew) + ConstSkew;
+  r := r * MulSkew + ConstSkew;
 
   if r <= radiusLimit then
   begin
@@ -670,7 +670,7 @@ begin
       cs := ra^.Cos;
       sn := ra^.Sin;
 
-      r := r + r * (MulSkew + r * SqrSkew) + ConstSkew;
+      r := r * MulSkew + ConstSkew;
 
       px := cs * r + centerX;
       py := sn * r * skewY + centerY;
@@ -684,14 +684,14 @@ end;
 
 function TScanCorrelator.PowellCorrect(const x: TVector; obj: Pointer): TScalar;
 begin
-  Result := GridSearchCorrect(x[0], x[1], x[2], PAngleScanCoords(obj)^);
+  Result := GridSearchCorrect(x[0], x[1], PAngleScanCoords(obj)^);
 end;
 
 procedure TScanCorrelator.Correct;
 const
   CConstCorrectExtents = 0.02; // inches
   CConstCorrectHalfCount = 100;
-  CMulCorrectExtents = 0.006;
+  CMulCorrectExtents = 0.01;
   CMulCorrectHalfCount = 100;
 var
   rmses: TDoubleDynArray;
@@ -702,17 +702,16 @@ var
   var
     coords: TAngleScanCoords;
     c: Integer;
-    func, bestFunc, ConstSkew, MulSkew, bestConstSkew, bestMulSkew, bestSqrSkew: Double;
+    func, bestFunc, ConstSkew, MulSkew, bestConstSkew, bestMulSkew: Double;
     x: TVector;
   begin
-    if not InRange(AIndex, 0, High(FPerAngleX)) then
+    if not InRange(AIndex, 0, High(FPerAngleSkew)) then
       Exit;
 
     FillChar(coords, SizeOf(coords), 0);
 
     bestConstSkew := 0.0;
-    bestMulSkew := 0.0;
-    bestSqrSkew := 0.0;
+    bestMulSkew := 1.0;
     bestFunc := -Infinity;
 
     DivMod(AIndex, CCorrectAngleCount, coords.ScanIdx, coords.AngleIdx);
@@ -724,9 +723,9 @@ var
 
       for c := -CMulCorrectHalfCount to CMulCorrectHalfCount do
       begin
-        MulSkew := c * CMulCorrectExtents / CMulCorrectHalfCount;
+        MulSkew := Exp(c * CMulCorrectExtents / CMulCorrectHalfCount);
 
-        func := GridSearchCorrect(bestConstSkew, MulSkew, bestSqrSkew, coords);
+        func := GridSearchCorrect(bestConstSkew, MulSkew, coords);
 
         if func < bestFunc then
         begin
@@ -739,7 +738,7 @@ var
       begin
         ConstSkew := c * CConstCorrectExtents / CConstCorrectHalfCount * FInputScans[coords.ScanIdx].DPI;
 
-        func := GridSearchCorrect(ConstSkew, bestMulSkew, bestSqrSkew, coords);
+        func := GridSearchCorrect(ConstSkew, bestMulSkew, coords);
 
         if func < bestFunc then
         begin
@@ -748,49 +747,48 @@ var
         end;
       end;
 
-      x := [bestConstSkew, bestMulSkew, bestSqrSkew];
-      bestFunc := PowellMinimize(@PowellCorrect, x, 1e-9, 1e-9, 0.0, MaxInt, @coords)[0];
+      x := [bestConstSkew, bestMulSkew];
+      bestFunc := PowellMinimize(@PowellCorrect, x, 1e-8, 1e-6, 0.0, MaxInt, @coords)[0];
       bestConstSkew := x[0];
       bestMulSkew := x[1];
-      bestSqrSkew := x[2];
 
       // free up memory
       SetLength(coords.RadiusAngleLUT, 0);
     end;
 
-    FPerAngleX[AIndex] := [bestConstSkew, bestMulSkew, bestSqrSkew];
+    FPerAngleSkew[AIndex].X := bestConstSkew;
+    FPerAngleSkew[AIndex].Y := bestMulSkew;
     rmses[AIndex] := bestFunc;
     coordsArray[AIndex] := coords;
 
-    Write(InterlockedIncrement(doneCount):4, ' / ', Length(FPerAngleX), #13);
+    Write(InterlockedIncrement(doneCount):4, ' / ', Length(FPerAngleSkew), #13);
   end;
 
 var
   iangle, iscan, ias, iasbase, ix: Integer;
-  pax: TDoubleDynArray2;
+  pas: TPointDDynArray;
 begin
   WriteLn('Correct');
 
   if Length(FInputScans) <= 1 then
     Exit;
 
-  SetLength(FPerAngleX, CCorrectAngleCount * High(FInputScans));
-  SetLength(rmses, Length(FPerAngleX));
-  SetLength(coordsArray, Length(FPerAngleX));
+  SetLength(FPerAngleSkew, CCorrectAngleCount * High(FInputScans));
+  SetLength(rmses, Length(FPerAngleSkew));
+  SetLength(coordsArray, Length(FPerAngleSkew));
 
   // compute
 
   doneCount := 0;
-  ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FPerAngleX));
+  ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FPerAngleSkew));
   WriteLn;
 
   // cumulate
 
-  SetLength(pax, Length(FPerAngleX), Length(FPerAngleX[0]));
+  SetLength(pas, Length(FPerAngleSkew));
 
-  for ias := 0 to High(pax) do
-    for ix := 0 to High(FPerAngleX[ias]) do
-      pax[ias, ix] := FPerAngleX[ias, ix];
+  for ias := 0 to High(pas) do
+    pas[ias] := FPerAngleSkew[ias];
 
   for iscan := 1 to High(FInputScans) do
     for iangle := 0 to CCorrectAngleCount - 1 do
@@ -805,8 +803,8 @@ begin
         if iasbase < 0 then
           Break;
 
-        for ix := 0 to High(FPerAngleX[ias]) do
-          FPerAngleX[ias, ix] += pax[iasbase, ix];
+        FPerAngleSkew[ias].X += pas[iasbase].X;
+        FPerAngleSkew[ias].Y *= pas[iasbase].Y;
       end;
     end;
 
@@ -819,11 +817,11 @@ begin
 
       Write(FInputScans[iscan].ImageShortName);
       Write(', Angle:', (iangle / CCorrectAngleCount) * 360.0:9:3);
-      Write(', RMSE:', rmses[ias]:12:6);
-      WriteLn(', ', FPerAngleX[ias, 0]:9:3, ', ', FPerAngleX[ias, 1]:12:6, ', ', FPerAngleX[ias, 2]:16:10);
+      Write(', Const:', FPerAngleSkew[ias].X:9:3, ', Mul:', FPerAngleSkew[ias].Y:12:6);
+      WriteLn(', RMSE:', rmses[ias]:12:6);
     end;
 
-  WriteLn('Worst RMSE: ', MaxValue(rmses):12:9);
+  WriteLn('Worst RMSE: ', MaxValue(rmses):12:6);
 end;
 
 procedure TScanCorrelator.Rebuild;
@@ -834,16 +832,17 @@ const
 var
   center, rBeg, rEnd, rLbl: Double;
 
-  procedure InterpolateX(tau: Double; scanIdx: Integer; var x: TVector);
+  function InterpolateSkew(tau: Double; scanIdx: Integer): TPointD;
   var
     ci, iX, iSerp, so: Integer;
     c, alpha: Double;
-    serpData: TSerpCoeffs9;
+    serpData: array[Boolean] of TSerpCoeffs9;
     coeffs: PSingle;
   begin
-    if (Length(FPerAngleX) = 0) or (scanIdx <= 0) then
+    if (Length(FPerAngleSkew) = 0) or (scanIdx <= 0) then
     begin
-      FillQWord(x[0], Length(x), 0);
+      Result.X := 0.0;
+      Result.Y := 1.0;
       Exit;
     end;
 
@@ -855,23 +854,23 @@ var
     so := (scanIdx - 1) * CCorrectAngleCount;
 
     coeffs := serpCoeffs(alpha);
-    for iX := 0 to High(x) do
+    for iSerp := -4 to 4 do
     begin
-      for iSerp := -4 to 4 do
-        serpData[iSerp] := FPerAngleX[(ci + iSerp + CCorrectAngleCount) mod CCorrectAngleCount + so, iX];
-      x[iX] := serpFromCoeffs(coeffs, @serpData[0]);
+      serpData[False, iSerp] := FPerAngleSkew[(ci + iSerp + CCorrectAngleCount) mod CCorrectAngleCount + so].X;
+      serpData[True, iSerp] := Ln(FPerAngleSkew[(ci + iSerp + CCorrectAngleCount) mod CCorrectAngleCount + so].Y);
     end;
+
+    Result.X := serpFromCoeffs(coeffs, @serpData[False, 0]);
+    Result.Y := Exp(serpFromCoeffs(coeffs, @serpData[True, 0]));
   end;
 
   procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
-    x: TVector;
+    skew: TPointD;
     i, ox, cnt, yx: Integer;
     r, sn, cs, px, py, t, cx, cy, sky, acc, bt, ct, rsk, d2d: Double;
     scan: TInputScan;
   begin
-    SetLength(x, 3);
-
     yx := AIndex * FOutputWidth;
 
     for ox := 0 to FOutputWidth - 1 do
@@ -895,9 +894,9 @@ var
           cy  := scan.Center.Y;
           sky := scan.SkewY;
 
-          InterpolateX(bt, i, x);
+          skew := InterpolateSkew(bt, i);
 
-          rsk := r * d2d + r * d2d * (x[1] + r * d2d * x[2]) + x[0];
+          rsk := r * d2d * skew.Y + skew.X;
 
           ct := NormalizeAngle(bt + t);
 
