@@ -355,19 +355,17 @@ begin
       px := cs * r + centerX;
       py := sn * r * skewY + centerY;
 
-      Result += Sqr(ra^.TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px));
+      Result += PseudoHuber(ra^.TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px));
     end;
 
-    Result /= Length(coords^.RadiusAngleLUT);
-    Result := Sqrt(Result);
-    Result /= High(Word);
+    Result /= Length(coords^.RadiusAngleLUT) * High(Word);
   end;
 
   scan.Objective := Result;
 
   SpinEnter(@FLock);
   try
-    Write('RMSEs: ');
+    Write('Losses: ');
     for iScan := 1 to High(FInputScans) do
       Write(FInputScans[iScan].Objective:12:9);
     Write(#13);
@@ -431,7 +429,7 @@ begin
     WriteLn;
 
     for i := 0 to High(FInputScans) do
-      WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', SkewY: ', FInputScans[i].SkewY:9:6, ', RMSE: ', FInputScans[i].Objective:12:9, ' (after)');
+      WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', SkewY: ', FInputScans[i].SkewY:9:6, ', Loss: ', FInputScans[i].Objective:12:9, ' (after)');
 
     QuickSort(FInputScans[0], 1, High(FInputScans), SizeOf(TInputScan), @CompareInputScansObjective);
   end;
@@ -675,10 +673,10 @@ begin
       px := cs * r + centerX;
       py := sn * r * skewY + centerY;
 
-      Result += Sqr((ra^.TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px)) * ra^.TagWeight)
+      Result += PseudoHuber((ra^.TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px)) * ra^.TagWeight)
     end;
 
-    Result := Sqrt(Result / Length(Coords.RadiusAngleLUT)) / High(Word);
+    Result /= Length(Coords.RadiusAngleLUT) * High(Word);
   end;
 end;
 
@@ -694,7 +692,7 @@ const
   CMulCorrectExtents = 0.01;
   CMulCorrectHalfCount = 100;
 var
-  rmses: TDoubleDynArray;
+  losses: TDoubleDynArray;
   coordsArray: array of TAngleScanCoords;
   doneCount: Integer;
 
@@ -748,7 +746,7 @@ var
       end;
 
       x := [bestConstSkew, bestMulSkew];
-      bestFunc := PowellMinimize(@PowellCorrect, x, 1e-8, 1e-6, 0.0, MaxInt, @coords)[0];
+      bestFunc := PowellMinimize(@PowellCorrect, x, 1e-9, 1e-6, 0.0, MaxInt, @coords)[0];
       bestConstSkew := x[0];
       bestMulSkew := x[1];
 
@@ -758,7 +756,7 @@ var
 
     FPerAngleSkew[AIndex].X := bestConstSkew;
     FPerAngleSkew[AIndex].Y := bestMulSkew;
-    rmses[AIndex] := bestFunc;
+    losses[AIndex] := bestFunc;
     coordsArray[AIndex] := coords;
 
     Write(InterlockedIncrement(doneCount):4, ' / ', Length(FPerAngleSkew), #13);
@@ -774,7 +772,7 @@ begin
     Exit;
 
   SetLength(FPerAngleSkew, CCorrectAngleCount * High(FInputScans));
-  SetLength(rmses, Length(FPerAngleSkew));
+  SetLength(losses, Length(FPerAngleSkew));
   SetLength(coordsArray, Length(FPerAngleSkew));
 
   // compute
@@ -818,10 +816,10 @@ begin
       Write(FInputScans[iscan].ImageShortName);
       Write(', Angle:', (iangle / CCorrectAngleCount) * 360.0:9:3);
       Write(', Const:', FPerAngleSkew[ias].X:9:3, ', Mul:', FPerAngleSkew[ias].Y:12:6);
-      WriteLn(', RMSE:', rmses[ias]:12:6);
+      WriteLn(', Loss:', losses[ias]:12:6);
     end;
 
-  WriteLn('Worst RMSE: ', MaxValue(rmses):12:6);
+  WriteLn('Worst loss: ', MaxValue(losses):12:6);
 end;
 
 procedure TScanCorrelator.Rebuild;

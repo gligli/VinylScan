@@ -135,6 +135,7 @@ function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: D
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: array of Double; EpsilonG: Double; MaxIter: Integer; Silent: Boolean; Data: Pointer = nil): Double;
 function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 
+function PseudoHuber(x: Double): Double;
 function MAE(const a: TWordDynArray; const b: TWordDynArray): Double;
 function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double; overload;
 function MSE(const a: TWordDynArray; const b: TWordDynArray): Double; overload;
@@ -676,6 +677,13 @@ begin
     GBFGSData := nil;
     GBFGSFunc := nil;
   end;
+end;
+
+function PseudoHuber(x: Double): Double;
+const
+  CDelta = 512.0;
+begin
+  Result := CDelta * (Sqrt(1.0 + Sqr(x / CDelta)) - 1);
 end;
 
 function MAE(const a: TWordDynArray; const b: TWordDynArray): Double;
