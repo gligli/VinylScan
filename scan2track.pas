@@ -38,10 +38,10 @@ type
     procedure InitPrevSamples;
     procedure UpdatePrevSamples(Sample: Single);
     function GetPrevSamplesExtents: Double;
-    function DecodeSample(radius, angleSin, angleCos: Double; precision: Integer; usePrev: Boolean): Double;
+    function DecodeSample(radius, angleSin, angleCos: Double; precision: Integer; estSample: Double = NaN): Double;
 
   public
-    constructor Create(ADefaultDPI: Integer = 2400; ASilent: Boolean = False; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 10);
+    constructor Create(ADefaultDPI: Integer = 2400; ASilent: Boolean = False; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 12);
     constructor CreateFromInputScan(AInputScan: TInputScan; ASilent: Boolean; ADecoderPrecision: Integer);
     destructor Destroy; override;
 
@@ -103,7 +103,7 @@ end;
 procedure TScan2Track.InitPrevSamples;
 var i: Integer;
 begin
-  SetLength(FPrevSamples, Round(FSampleRate / CLowCutoffFreq));
+  SetLength(FPrevSamples, Ceil(FSampleRate / 1000.0));
   FPrevSamplesReady := False;
   FPrevSamplesPos := 0;
 
@@ -112,11 +112,8 @@ begin
 end;
 
 procedure TScan2Track.UpdatePrevSamples(Sample: Single);
-var i: Integer;
 begin
-  for i := 0 to High(FPrevSamples) - 1 do
-    FPrevSamples[i] := FPrevSamples[i + 1];
-  FPrevSamples[High(FPrevSamples)] := Sample;
+  FPrevSamples[FPrevSamplesPos] := Sample;
 
   Inc(FPrevSamplesPos);
 
@@ -134,14 +131,14 @@ begin
   if not FPrevSamplesReady then
     Exit(NaN);
 
-  Result := Sqrt(SumOfSquares(FPrevSamples) / Length(FPrevSamples));
+  Result := StdDev(FPrevSamples);
 end;
 
-function TScan2Track.DecodeSample(radius, angleSin, angleCos: Double; precision: Integer; usePrev: Boolean): Double;
+function TScan2Track.DecodeSample(radius, angleSin, angleCos: Double; precision: Integer; estSample: Double): Double;
 var
   iSmp, posMin, posMax, decoderMax: Integer;
-  r, px, py, cxa, psExtents: Double;
-  sample, sampleMin, sampleMax, sampleMiddle, sampleIdx, estSample: Single;
+  r, px, py, cxa, psExtents, estSampleIdx: Double;
+  sample, sampleMin, sampleMax, sampleMiddle, sampleIdx: Single;
   smpBuf: array[SmallInt] of Single;
   idxCnt: array[Boolean] of Integer;
   idxAcc: array[Boolean] of Integer;
@@ -158,15 +155,14 @@ begin
   if not Scan.InRangePointD(py, px) then
     Exit(0.0);
 
-  estSample := NaN;
   posMin := -decoderMax;
   posMax := decoderMax - 1;
-  if usePrev and FPrevSamplesReady then
+  if not IsNan(estSample) and FPrevSamplesReady then
   begin
-    estSample := FPrevSamples[High(FPrevSamples)];
+    estSampleIdx := estSample * decoderMax - 0.5;
     psExtents := GetPrevSamplesExtents;
-    posMin := Max(posMin, Floor(estSample - psExtents));
-    posMax := Min(posMax, Ceil(estSample + psExtents));
+    posMin := Max(posMin, Floor(estSampleIdx - psExtents));
+    posMax := Min(posMax, Ceil(estSampleIdx + psExtents));
   end;
 
   sampleMin := Infinity;
@@ -203,9 +199,9 @@ begin
     Inc(idxCnt[up]);
   end;
 
-  if usePrev then
+  if not IsNan(estSample) then
   begin
-    sampleIdx := DivDef(idxAcc[True], idxCnt[True], 0.0);
+    sampleIdx := DivDef(idxAcc[True], idxCnt[True], 0.0) + 0.5;
     UpdatePrevSamples(sampleIdx);
   end
   else
@@ -228,7 +224,7 @@ var
   end;
 
 var
-  rOuter, sn, cs, ox, oy, fbRatio, ffSmp, instantPct, maxPct, radius, fSmp: Double;
+  rOuter, sn, cs, ox, oy, fbRatio, ffSmp, instantPct, maxPct, radius, fSmp, fSmpPre: Double;
   iSample, iLut, cnt: Integer;
   hasOutFile, validSample: Boolean;
   fltSample: TFilterIIRHPBessel;
@@ -244,7 +240,7 @@ begin
   try
     fltSample.FreqCut1 := CLowCutoffFreq;
     fltSample.SampleRate := FSampleRate;
-    fltSample.Order := 4;
+    fltSample.Order := 1;
 
     BuildSinCosLUT(FPointsPerRevolution, sinCosLut, Scan.GrooveStartAngle, -2.0 * Pi);
 
@@ -263,8 +259,10 @@ begin
       if iLut >= FPointsPerRevolution then
         iLut := 0;
 
-      fSmp := DecodeSample(radius, sn, cs, FDecoderPrecision, True);
-      radius += DecodeSample(radius, sn, cs, Max(1, FDecoderPrecision div 2), False) * fbRatio;
+      fSmpPre := DecodeSample(radius, sn, cs, Max(1, FDecoderPrecision div 2));
+      radius += fSmpPre * fbRatio;
+
+      fSmp := DecodeSample(radius, sn, cs, FDecoderPrecision, fSmpPre);
 
       FUsedSampleValues[Make16BitSample(fSmp)] := True;
 
