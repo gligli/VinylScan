@@ -650,34 +650,28 @@ begin
   centerY  := scan.Center.Y;
   skewY := scan.SkewY;
 
-  Result := 1000.0;
+  Result := 0.0;
 
-  radiusLimit := MinValue([centerX, centerY, scan.Width - 1 - centerX, scan.Height - 1 - centerY]) - 1;
-  r := CCorrectAreaEnd * 0.5 * scan.DPI * Max(1.0, skewY);
-  r := r * MulSkew + ConstSkew;
-
-  if r <= radiusLimit then
+  for iLut := 0 to High(Coords.RadiusAngleLUT) do
   begin
-    Result := 0.0;
+    ra := @Coords.RadiusAngleLUT[iLut];
 
-    for iLut := 0 to High(Coords.RadiusAngleLUT) do
-    begin
-      ra := @Coords.RadiusAngleLUT[iLut];
+    r := ra^.Radius;
+    cs := ra^.Cos;
+    sn := ra^.Sin;
 
-      r := ra^.Radius;
-      cs := ra^.Cos;
-      sn := ra^.Sin;
+    r := r * MulSkew + ConstSkew;
 
-      r := r * MulSkew + ConstSkew;
+    px := cs * r + centerX;
+    py := sn * r * skewY + centerY;
 
-      px := cs * r + centerX;
-      py := sn * r * skewY + centerY;
-
+    if scan.InRangePointD(py, px) then
       Result += PseudoHuber((ra^.TagValue - scan.GetPointD_Linear(scan.LeveledImage, py, px)) * ra^.TagWeight)
-    end;
-
-    Result /= Length(Coords.RadiusAngleLUT) * High(Word);
+    else
+      Result += 1e6;
   end;
+
+  Result /= Length(Coords.RadiusAngleLUT) * High(Word);
 end;
 
 function TScanCorrelator.PowellCorrect(const x: TVector; obj: Pointer): TScalar;
@@ -832,10 +826,9 @@ var
 
   function InterpolateSkew(tau: Double; scanIdx: Integer): TPointD;
   var
-    ci, iX, iSerp, so: Integer;
+    ci, so: Integer;
     c, alpha: Double;
-    serpData: array[Boolean] of TSerpCoeffs9;
-    coeffs: PSingle;
+    pp0, pp1: ^TPointD;
   begin
     if (Length(FPerAngleSkew) = 0) or (scanIdx <= 0) then
     begin
@@ -851,15 +844,11 @@ var
     alpha := c - ci;
     so := (scanIdx - 1) * CCorrectAngleCount;
 
-    coeffs := serpCoeffs(alpha);
-    for iSerp := -4 to 4 do
-    begin
-      serpData[False, iSerp] := FPerAngleSkew[(ci + iSerp + CCorrectAngleCount) mod CCorrectAngleCount + so].X;
-      serpData[True, iSerp] := Ln(FPerAngleSkew[(ci + iSerp + CCorrectAngleCount) mod CCorrectAngleCount + so].Y);
-    end;
+    pp0 := @FPerAngleSkew[(ci + 0) mod CCorrectAngleCount + so];
+    pp1 := @FPerAngleSkew[(ci + 1) mod CCorrectAngleCount + so];
 
-    Result.X := serpFromCoeffs(coeffs, @serpData[False, 0]);
-    Result.Y := Exp(serpFromCoeffs(coeffs, @serpData[True, 0]));
+    Result.X := lerp(pp0^.X, pp1^.X, alpha);
+    Result.Y := Exp(lerp(Ln(pp0^.Y), Ln(pp1^.Y), alpha));
   end;
 
   procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
