@@ -152,7 +152,7 @@ end;
 
 procedure TInputScan.FindConcentricGroove_GridSearch;
 const
-  CCorneringThres = 10.0;
+  CCorneringThres = 7.0;
   CPointsPerRevolution = 512;
   CSkewDivisor = 1000.0;
   CMinSkew = round(0.98 * CSkewDivisor);
@@ -272,7 +272,7 @@ begin
     maxCorner := Width - radiusLimit * 2 - 1;
 
     DoXYBuf(startBuf, 0, True, False);
-    baseMSE := DoXYBuf(cornerbuf, 1, True, True);
+    baseMSE := DoXYBuf(cornerbuf, 2, True, True);
     for xx := 0 to maxCorner do
       if (DoXYBuf(cornerbuf, xx, True, True) > CCorneringThres * baseMSE) or (xx = maxCorner) then
       begin
@@ -281,7 +281,7 @@ begin
       end;
 
     DoXYBuf(startBuf, Width - 1, True, False);
-    baseMSE := DoXYBuf(cornerbuf, Width - 2, True, True);
+    baseMSE := DoXYBuf(cornerbuf, Width - 3, True, True);
     for xx := Width - 1 downto Width - 1 - maxCorner do
       if (DoXYBuf(cornerbuf, xx, True, True) > CCorneringThres * baseMSE) or (xx = Width - 1 - maxCorner) then
       begin
@@ -297,7 +297,7 @@ begin
     maxCorner := Height - radiusLimit * 2 - 1;
 
     DoXYBuf(startBuf, 0, False, False);
-    baseMSE := DoXYBuf(cornerbuf, 1, False, True);
+    baseMSE := DoXYBuf(cornerbuf, 2, False, True);
     for yy := 0 to maxCorner do
       if (DoXYBuf(cornerbuf, yy, False, True) > CCorneringThres * baseMSE) or (yy = maxCorner) then
       begin
@@ -306,7 +306,7 @@ begin
       end;
 
     DoXYBuf(startBuf, Height - 1, False, False);
-    baseMSE := DoXYBuf(cornerbuf, Height - 2, False, True);
+    baseMSE := DoXYBuf(cornerbuf, Height - 3, False, True);
     for yy := Height - 1 downto Height - 1 - maxCorner do
       if (DoXYBuf(cornerbuf, yy, False, True) > CCorneringThres * baseMSE) or (yy = Height - 1 - maxCorner) then
       begin
