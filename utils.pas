@@ -50,9 +50,6 @@ type
 
   TPointFList = specialize TFPGList<TPointF>;
 
-  THerpCoeff4 = array[0 .. 3] of Integer;
-  THerpCoeff44 = array[0 .. 3, 0 .. 3] of Integer;
-
   TSerpCoeffs9 = array[-4 .. 4 + 3] of Single;
   TSerpCoeffs9ByWord = array[0 .. high(Word)] of TSerpCoeffs9;
 
