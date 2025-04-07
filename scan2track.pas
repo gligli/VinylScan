@@ -161,8 +161,8 @@ begin
   begin
     estSampleIdx := estSample * decoderMax - 0.5;
     psExtents := GetPrevSamplesExtents;
-    posMin := Max(posMin, Floor(estSampleIdx - psExtents));
-    posMax := Min(posMax, Ceil(estSampleIdx + psExtents));
+    posMin := Max(Low(smpBuf), Floor(estSampleIdx - psExtents));
+    posMax := Min(High(smpBuf), Ceil(estSampleIdx + psExtents));
   end;
 
   sampleMin := Infinity;
