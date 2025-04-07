@@ -33,7 +33,7 @@ type
   end;
 
   TRadiusAngle = record
-    Radius, Sin, Cos, Angle, TagWeight, TagValue: Double;
+    Radius, Sin, Cos, Angle: Double;
   end;
 
   TPointDDynArray = array of TPointD;
@@ -63,7 +63,7 @@ type
 const
   C45RpmRevolutionsPerSecond = 45.0 / 60.0;
 
-  C45RpmRecordingGrooveWidth = 0.005;
+  C45RpmRecordingGrooveWidth = 0.006;
   C45RpmLeadOutGrooveWidth = 0.006;
 
   C45RpmOuterSize = 6.875;
@@ -169,10 +169,6 @@ implementation
 uses utypes, ubfgs;
 
 var GSerpCoeffs9ByWord: TSerpCoeffs9ByWord;
-
-function alglib_NonSmoothBoundedMinimize(Func: Pointer; n: Integer; X, LowBound, UpBound: PDouble; Epsilon, Radius, Penalty: Double; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
-function alglib_LBFGSMinimize(Func: Pointer; n: Integer; X, Scale: PDouble; Epsilon: Double; M: Integer; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
-function alglib_SpearmanRankCorrelation(X, Y: PDouble; n: Integer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
 
 procedure SpinEnter(Lock: PSpinLock); assembler;
 label spin_lock;
@@ -770,11 +766,82 @@ begin
     Result := num / den;
 end;
 
+type
+  TSpearmanRank = record
+    Value: Double;
+    Position, Rank: Integer;
+  end;
+
+function ValueCompare(Item1, Item2, UserParameter: Pointer): Integer;
+var
+  r1: ^TSpearmanRank absolute Item1;
+  r2: ^TSpearmanRank absolute Item2;
+begin
+  Result := CompareValue(r1^.Value, r2^.Value);
+  if Result = 0 then
+    Result := CompareValue(r1^.Position, r2^.Position);
+end;
+
+function PositionCompare(Item1, Item2, UserParameter: Pointer): Integer;
+var
+  r1: ^TSpearmanRank absolute Item1;
+  r2: ^TSpearmanRank absolute Item2;
+begin
+  Result := CompareValue(r1^.Position, r2^.Position);
+end;
+
 function SpearmanRankCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
+var
+  i, sz: Integer;
+  mn, num, da, db, den, dena, denb: Double;
+  ranks: array of TSpearmanRank;
 begin
   Assert(Length(a) = Length(b));
 
-  Result := alglib_SpearmanRankCorrelation(@a[0], @b[0], Length(a));
+  sz := Length(a);
+
+  SetLength(ranks, sz * 2);
+
+  for i := 0 to High(a) do
+  begin
+    ranks[i].Value := a[i];
+    ranks[i].Position := i;
+    ranks[i + sz].Value := b[i];
+    ranks[i + sz].Position := i;
+  end;
+
+  QuickSort(ranks[0], 0, High(a), SizeOf(TSpearmanRank), @ValueCompare);
+  QuickSort(ranks[sz], 0, High(a), SizeOf(TSpearmanRank), @ValueCompare);
+
+  for i := 0 to High(a) do
+  begin
+    ranks[i].Rank := i + 1;
+    ranks[i + sz].Rank := i + 1;
+  end;
+
+  QuickSort(ranks[0], 0, High(a), SizeOf(TSpearmanRank), @PositionCompare);
+  QuickSort(ranks[sz], 0, High(a), SizeOf(TSpearmanRank), @PositionCompare);
+
+  mn := sz * 0.5;
+
+  num := 0.0;
+  dena := 0.0;
+  denb := 0.0;
+  for i := 0 to High(a) do
+  begin
+    da := ranks[i].Rank - mn;
+    db := ranks[i + sz].Rank - mn;
+
+    num += da * db;
+    dena += sqr(da);
+    denb += sqr(db);
+  end;
+
+  den := sqrt(dena * denb);
+
+  Result := 1.0;
+  if den <> 0.0 then
+    Result := num / den;
 end;
 
 function Make8BitSample(smp: Double): ShortInt;
