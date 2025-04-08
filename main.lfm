@@ -7,17 +7,16 @@ object MainForm: TMainForm
   HorzScrollBar.Page = 904
   HorzScrollBar.Tracking = True
   VertScrollBar.Increment = 240
-  VertScrollBar.Page = 549
+  VertScrollBar.Page = 557
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 1461
+  ClientHeight = 1421
   ClientWidth = 1488
   Color = 4210752
   DoubleBuffered = True
   KeyPreview = True
   ParentDoubleBuffered = False
-  LCLVersion = '4.0.0.3'
   Scaled = False
   WindowState = wsMaximized
   OnCreate = FormCreate
@@ -50,7 +49,7 @@ object MainForm: TMainForm
       Left = 8
       Height = 24
       Hint = 'Scan to track output WAV file'
-      Top = 377
+      Top = 385
       Width = 224
       ParentShowHint = False
       ShowHint = True
@@ -61,7 +60,7 @@ object MainForm: TMainForm
       Left = 8
       Height = 24
       Hint = 'Scan to track input PNG file'
-      Top = 352
+      Top = 360
       Width = 224
       ParentShowHint = False
       ShowHint = True
@@ -104,7 +103,7 @@ object MainForm: TMainForm
     object btScansCorrelator: TButton
       Left = 8
       Height = 25
-      Top = 312
+      Top = 320
       Width = 131
       Caption = 'Scans correlator (F10)'
       TabOrder = 9
@@ -113,17 +112,17 @@ object MainForm: TMainForm
     object btScan2Track: TButton
       Left = 8
       Height = 25
-      Top = 496
+      Top = 504
       Width = 131
       Caption = 'Scan to track (F11)'
       TabOrder = 17
       OnClick = btScan2TrackClick
     end
     object cbDPI: TComboBox
-      Left = 152
+      Left = 175
       Height = 24
       Hint = 'Default dots per inch'
-      Top = 416
+      Top = 424
       Width = 80
       ItemHeight = 16
       ItemIndex = 2
@@ -159,7 +158,7 @@ object MainForm: TMainForm
     object btInPNG: TButton
       Left = 232
       Height = 23
-      Top = 352
+      Top = 360
       Width = 23
       Caption = '...'
       TabOrder = 11
@@ -168,17 +167,17 @@ object MainForm: TMainForm
     object btOutWAV: TButton
       Left = 232
       Height = 23
-      Top = 376
+      Top = 384
       Width = 23
       Caption = '...'
       TabOrder = 13
       OnClick = btOutWAVClick
     end
     object cbSR: TComboBox
-      Left = 152
+      Left = 175
       Height = 24
       Hint = 'Sample rate'
-      Top = 440
+      Top = 448
       Width = 80
       ItemHeight = 16
       ItemIndex = 2
@@ -201,14 +200,6 @@ object MainForm: TMainForm
       Caption = 'Correct angles'
       TabOrder = 6
     end
-    object chkBlend: TCheckBox
-      Left = 8
-      Height = 20
-      Top = 265
-      Width = 104
-      Caption = 'Rebuild blended'
-      TabOrder = 7
-    end
     object chkBrickLim: TCheckBox
       Left = 8
       Height = 20
@@ -228,29 +219,29 @@ object MainForm: TMainForm
     object chkDefaultDPI: TCheckBox
       Left = 8
       Height = 20
-      Top = 284
+      Top = 266
       Width = 133
       Caption = 'Rebuild to default DPI'
-      TabOrder = 8
+      TabOrder = 7
     end
     object llDPI: TLabel
       Left = 8
       Height = 16
-      Top = 420
+      Top = 428
       Width = 111
       Caption = 'Default Dots Per Inch'
     end
     object llSR: TLabel
       Left = 8
       Height = 16
-      Top = 444
+      Top = 452
       Width = 110
       Caption = 'Decoded sample rate'
     end
     object sePrec: TSpinEdit
-      Left = 152
+      Left = 175
       Height = 24
-      Top = 464
+      Top = 472
       Width = 80
       MaxValue = 16
       MinValue = 1
@@ -260,17 +251,34 @@ object MainForm: TMainForm
     object llPrec: TLabel
       Left = 8
       Height = 16
-      Top = 468
+      Top = 476
       Width = 102
       Caption = 'Decoding precision'
     end
     object pbS2T: TProgressBar
       Left = 8
       Height = 20
-      Top = 528
+      Top = 536
       Width = 247
       Smooth = True
       TabOrder = 18
+    end
+    object llBlend: TLabel
+      Left = 8
+      Height = 16
+      Top = 292
+      Width = 131
+      Caption = 'Maximum blended scans'
+    end
+    object seBlend: TSpinEdit
+      Left = 175
+      Height = 24
+      Top = 288
+      Width = 80
+      MaxValue = 1000
+      MinValue = 1
+      TabOrder = 8
+      Value = 1
     end
   end
   object odInPNGs: TOpenDialog

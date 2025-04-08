@@ -31,8 +31,8 @@ type
     FBrickwallLimitScans: Boolean;
     FAnalyzeMinimize: Boolean;
     FCorrectAngles: Boolean;
-    FRebuildBlended: Boolean;
     FRebuildScaled: Boolean;
+    FRebuildBlendCount: Integer;
     FOutputPNGFileName: String;
     FOutputDPI: Integer;
     FLock: TSpinlock;
@@ -69,7 +69,7 @@ type
     property BrickwallLimitScans: Boolean read FBrickwallLimitScans write FBrickwallLimitScans;
     property AnalyzeMinimize: Boolean read FAnalyzeMinimize write FAnalyzeMinimize;
     property CorrectAngles: Boolean read FCorrectAngles write FCorrectAngles;
-    property RebuildBlended: Boolean read FRebuildBlended write FRebuildBlended;
+    property RebuildBlendCount: Integer read FRebuildBlendCount write FRebuildBlendCount;
     property RebuildScaled: Boolean read FRebuildScaled write FRebuildScaled;
 
     property OutputDPI: Integer read FOutputDPI;
@@ -124,8 +124,8 @@ begin
   FBrickwallLimitScans := False;
   FAnalyzeMinimize := True;
   FCorrectAngles := True;
-  FRebuildBlended := True;
   FRebuildScaled := True;
+  FRebuildBlendCount := 4;
 end;
 
 destructor TScanCorrelator.Destroy;
@@ -300,7 +300,7 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * baseScan.DPI, CAnalyzeAreaEnd * 0.5 * baseScan.DPI, 0.0, 2.0 * Pi, Max(0.5, baseScan.DPI / 1200.0), True);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * baseScan.DPI, CAnalyzeAreaEnd * 0.5 * baseScan.DPI, 0.0, 2.0 * Pi, Max(1.0, baseScan.DPI / 1200.0), True);
   OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, baseScan.RelativeAngle);
   Coords.PrevAngle := baseScan.RelativeAngle;
 
@@ -614,7 +614,7 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, Coords.StartAngle, Coords.EndAngle, Max(0.5, baseScan.DPI / 2400.0), False);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, Coords.StartAngle, Coords.EndAngle, Max(1.0, baseScan.DPI / 2400.0), False);
 
   // build weights lookup table
 
@@ -940,7 +940,7 @@ var
           begin
             acc += scan.GetPointD_Sinc(scan.Image, py, px);
             Inc(cnt);
-            if not FRebuildBlended then
+            if cnt >= FRebuildBlendCount then
               Break;
           end;
         end;

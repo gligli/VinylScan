@@ -19,7 +19,6 @@ type
     btOutWAV: TButton;
     btScan2Track: TButton;
     btScansCorrelator: TButton;
-    chkBlend: TCheckBox;
     chkDefaultDPI: TCheckBox;
     chkCorrect: TCheckBox;
     cbDPI: TComboBox;
@@ -31,6 +30,7 @@ type
     edOutputWAV: TEdit;
     Image: TImage;
     llDPI: TLabel;
+    llBlend: TLabel;
     llSR: TLabel;
     llPrec: TLabel;
     mmInputPNGs: TMemo;
@@ -41,6 +41,7 @@ type
     sdOutPNG: TSaveDialog;
     sdOutWAV: TSaveDialog;
     sePrec: TSpinEdit;
+    seBlend: TSpinEdit;
     procedure btOutPNGClick(Sender: TObject);
     procedure btInPNGClick(Sender: TObject);
     procedure btOutWAVClick(Sender: TObject);
@@ -132,7 +133,7 @@ begin
     sc.BrickwallLimitScans := chkBrickLim.Checked;
     sc.AnalyzeMinimize := chkOptimize.Checked;
     sc.CorrectAngles := chkCorrect.Checked;
-    sc.RebuildBlended := chkBlend.Checked;
+    sc.RebuildBlendCount := seBlend.Value;
     sc.RebuildScaled := not chkDefaultDPI.Checked;
 
     sc.LoadScans;
@@ -216,7 +217,7 @@ begin
     try
       scm.OutputPNGFileName := fn;
       scm.CorrectAngles := True;
-      scm.RebuildBlended := True;
+      scm.RebuildBlendCount := MaxInt;
 
       scm.LoadScans;
       scm.Process;
@@ -249,7 +250,7 @@ begin
     chkBrickLim.Checked := sc.BrickwallLimitScans;
     chkOptimize.Checked := sc.AnalyzeMinimize;
     chkCorrect.Checked := sc.CorrectAngles;
-    chkBlend.Checked := sc.RebuildBlended;
+    seBlend.Value := sc.RebuildBlendCount;
     chkDefaultDPI.Checked := not sc.RebuildScaled;
     cbDPI.Text := IntToStr(sc.OutputDPI);
     cbSR.Text := IntToStr(s2t.SampleRate);
