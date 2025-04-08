@@ -18,6 +18,7 @@ type
     RadiusAngleLUT: array of TRadiusAngle;
     PreparedValues, Weights: TDoubleDynArray;
     PrevAngle: Double;
+    StartAngle, EndAngle: Double;
   end;
 
   PAngleScanCoords = ^TAngleScanCoords;
@@ -46,7 +47,8 @@ type
 
     procedure PrepareAnalyze(var Coords: TAngleScanCoords);
     function PowellAnalyze(const x: TVector; obj: Pointer): TScalar;
-    function PrepareCorrect(var Coords: TAngleScanCoords): Boolean;
+    function InitCorrect(var Coords: TAngleScanCoords): Boolean;
+    procedure PrepareCorrect(var Coords: TAngleScanCoords);
     function GridSearchCorrect(ConstSkew, MulSkew, SqrSkew: Double; const Coords: TAngleScanCoords): Double;
     function PowellCorrect(const x: TVector; obj: Pointer): TScalar;
 
@@ -548,35 +550,38 @@ begin
   AEndAngle := endAngle;
 end;
 
-function TScanCorrelator.PrepareCorrect(var Coords: TAngleScanCoords): Boolean;
+function TScanCorrelator.InitCorrect(var Coords: TAngleScanCoords): Boolean;
 var
-  iAngle, iBaseScan, iLut, v, best: Integer;
-  cx, cy, px, py, r, sky, startAngle, endAngle, saRaw, eaRaw, bt, t, alpha: Double;
-  baseScan: TInputScan;
-  ra: ^TRadiusAngle;
+  iAngle, iBaseScan, v, best: Integer;
+  bt, t: Double;
+  curScan, baseScan: TInputScan;
 begin
   Result := True;
   Coords.BaseScanIdx := 0;
 
-  CorrectAnglesFromCoords(Coords, startAngle, endAngle, True);
+  CorrectAnglesFromCoords(Coords, Coords.StartAngle, Coords.EndAngle, True);
 
-  if IsNan(startAngle) or IsNan(endAngle) then
+  if IsNan(Coords.StartAngle) or IsNan(Coords.EndAngle) then
     Exit(False);
 
   // devise best baseScan
 
+  curScan := FInputScans[Coords.ScanIdx];
   Coords.BaseScanIdx := -1;
   best := MaxInt;
-  for iBaseScan := 0 to Coords.ScanIdx - 1 do
+  for iBaseScan := 0 to High(FInputScans) do
   begin
     baseScan := FInputScans[iBaseScan];
+
+    if (Coords.ScanIdx = iBaseScan) or curScan.HasCorrectRef(FInputScans, Coords.AngleIdx, iBaseScan) then
+      Continue;
 
     v := 0;
     for iAngle := -180 to 179 do
     begin
       bt := DegToRad(iAngle);
 
-      if InNormalizedAngle(bt, startAngle, endAngle) then
+      if InNormalizedAngle(bt, Coords.StartAngle, Coords.EndAngle) then
       begin
         t := NormalizeAngle(bt + baseScan.RelativeAngle);
 
@@ -595,10 +600,21 @@ begin
   //WriteLn(Coords.ScanIdx:4, Coords.AngleIdx:4, Coords.BaseScanIdx:4, best:8);
 
   baseScan := FInputScans[Coords.BaseScanIdx];
+  baseScan.AddCorrectRef(Coords.AngleIdx, Coords.ScanIdx);
+end;
+
+procedure TScanCorrelator.PrepareCorrect(var Coords: TAngleScanCoords);
+var
+  iLut: Integer;
+  cx, cy, px, py, r, sky, saRaw, eaRaw, bt, alpha: Double;
+  baseScan: TInputScan;
+  ra: ^TRadiusAngle;
+begin
+  baseScan := FInputScans[Coords.BaseScanIdx];
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, startAngle, endAngle, Max(0.5, baseScan.DPI / 2400.0), False);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, Coords.StartAngle, Coords.EndAngle, Max(0.5, baseScan.DPI / 2400.0), False);
 
   // build weights lookup table
 
@@ -610,7 +626,7 @@ begin
     ra := @Coords.RadiusAngleLUT[iLut];
 
     bt := ra^.Angle;
-    if InNormalizedAngle(bt, startAngle, endAngle) then
+    if InNormalizedAngle(bt, Coords.StartAngle, Coords.EndAngle) then
     begin
       alpha := 1.0 - 2.0 * abs(NormalizedAngleDiff(saRaw, bt) / NormalizedAngleDiff(saRaw, eaRaw) - 0.5);
       Coords.Weights[iLut] := alpha;
@@ -696,11 +712,11 @@ const
 var
   losses: TDoubleDynArray;
   coordsArray: array of TAngleScanCoords;
-  doneCount: Integer;
+  doneCount, evalCount: Integer;
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
-    coords: TAngleScanCoords;
+    coords: PAngleScanCoords;
     c: Integer;
     loss, bestLoss, ConstSkew, MulSkew, bestConstSkew, bestMulSkew, bestSqrSkew: Double;
     x: TVector;
@@ -708,69 +724,65 @@ var
     if not InRange(AIndex, 0, High(FPerAngleSkew)) then
       Exit;
 
-    FillChar(coords, SizeOf(coords), 0);
+    coords := @coordsArray[AIndex];
+    if IsNan(coords^.StartAngle) or IsNan(coords^.EndAngle) then
+      Exit;
+
+    PrepareCorrect(coords^);
 
     bestConstSkew := 0.0;
     bestMulSkew := 1.0;
     bestSqrSkew := 0.0;
-    bestLoss := -Infinity;
+    bestLoss := Infinity;
 
-    DivMod(AIndex, CCorrectAngleCount, coords.ScanIdx, coords.AngleIdx);
-    Inc(coords.ScanIdx);
-
-    if PrepareCorrect(coords) then
+    for c := -CMulCorrectHalfCount to CMulCorrectHalfCount do
     begin
-      bestLoss := Infinity;
+      MulSkew := Exp(c * CMulCorrectExtents / CMulCorrectHalfCount);
 
-      for c := -CMulCorrectHalfCount to CMulCorrectHalfCount do
+      loss := GridSearchCorrect(bestConstSkew, MulSkew, bestSqrSkew, coords^);
+
+      if loss < bestLoss then
       begin
-        MulSkew := Exp(c * CMulCorrectExtents / CMulCorrectHalfCount);
-
-        loss := GridSearchCorrect(bestConstSkew, MulSkew, bestSqrSkew, coords);
-
-        if loss < bestLoss then
-        begin
-          bestLoss := loss;
-          bestMulSkew := MulSkew;
-        end;
+        bestLoss := loss;
+        bestMulSkew := MulSkew;
       end;
-
-      for c := -CConstCorrectHalfCount to CConstCorrectHalfCount do
-      begin
-        ConstSkew := c * CConstCorrectExtents / CConstCorrectHalfCount * FInputScans[coords.ScanIdx].DPI;
-
-        loss := GridSearchCorrect(ConstSkew, bestMulSkew, bestSqrSkew, coords);
-
-        if loss < bestLoss then
-        begin
-          bestLoss := loss;
-          bestConstSkew := ConstSkew;
-        end;
-      end;
-
-      x := [bestConstSkew, bestMulSkew, bestSqrSkew];
-      bestLoss := PowellMinimize(@PowellCorrect, x, 1e-8, 1e-8, 0.0, MaxInt, @coords)[0];
-      bestConstSkew := x[0];
-      bestMulSkew := x[1];
-      bestSqrSkew := x[2];
-
-      // free up memory
-      SetLength(coords.RadiusAngleLUT, 0);
-      SetLength(coords.PreparedValues, 0);
-      SetLength(coords.Weights, 0);
     end;
+
+    for c := -CConstCorrectHalfCount to CConstCorrectHalfCount do
+    begin
+      ConstSkew := c * CConstCorrectExtents / CConstCorrectHalfCount * FInputScans[coords^.ScanIdx].DPI;
+
+      loss := GridSearchCorrect(ConstSkew, bestMulSkew, bestSqrSkew, coords^);
+
+      if loss < bestLoss then
+      begin
+        bestLoss := loss;
+        bestConstSkew := ConstSkew;
+      end;
+    end;
+
+    x := [bestConstSkew, bestMulSkew, bestSqrSkew];
+    bestLoss := PowellMinimize(@PowellCorrect, x, 1e-8, 1e-8, 0.0, MaxInt, coords)[0];
+    bestConstSkew := x[0];
+    bestMulSkew := x[1];
+    bestSqrSkew := x[2];
+
+    // free up memory
+    SetLength(coords^.RadiusAngleLUT, 0);
+    SetLength(coords^.PreparedValues, 0);
+    SetLength(coords^.Weights, 0);
 
     FPerAngleSkew[AIndex, 0].ConstSkew := bestConstSkew;
     FPerAngleSkew[AIndex, 0].MulSkew := bestMulSkew;
     FPerAngleSkew[AIndex, 0].SqrSkew := bestSqrSkew;
     losses[AIndex] := bestLoss;
-    coordsArray[AIndex] := coords;
 
-    Write(InterlockedIncrement(doneCount):4, ' / ', Length(FPerAngleSkew), #13);
+    Write(InterlockedIncrement(doneCount):4, ' / ', evalCount, #13);
   end;
 
 var
   iangle, iscan, ias, iasbase: Integer;
+  coords: PAngleScanCoords;
 begin
   WriteLn('Correct');
 
@@ -781,9 +793,32 @@ begin
   SetLength(losses, Length(FPerAngleSkew));
   SetLength(coordsArray, Length(FPerAngleSkew));
 
-  // compute
+  // init
 
   doneCount := 0;
+  evalCount := 0;
+  for iscan := 1 to High(FInputScans) do
+    for iangle := 0 to CCorrectAngleCount - 1 do
+    begin
+      ias := (iscan - 1) * CCorrectAngleCount + iangle;
+
+      coords := @coordsArray[ias];
+
+      FillChar(coords^, SizeOf(coords^), 0);
+      coords^.ScanIdx := iscan;
+      coords^.AngleIdx := iangle;
+
+      losses[ias] := -Infinity;
+      FPerAngleSkew[ias, 0].ConstSkew := 0.0;
+      FPerAngleSkew[ias, 0].MulSkew := 1.0;
+      FPerAngleSkew[ias, 0].SqrSkew := 0.0;
+
+      if InitCorrect(coords^) then
+        Inc(evalCount);
+    end;
+
+  // compute
+
   ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FPerAngleSkew));
   WriteLn;
 
@@ -879,7 +914,7 @@ var
 
         cnt := 0;
         acc := 0;
-        for i := High(FInputScans) downto 0 do
+        for i := 0 to High(FInputScans) do
         begin
           scan := FInputScans[i];
 

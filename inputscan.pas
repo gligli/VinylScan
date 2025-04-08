@@ -49,6 +49,9 @@ type
     FImage: TWordDynArray;
     FLeveledImage: TWordDynArray;
 
+    FCorrectRefs: array of TCorrectRef;
+    FLock: TSpinlock;
+
     procedure SetRevolutionFromDPI(ADPI: Integer);
     procedure SetRevolutionFromSampleRate(ASampleRate: Integer);
     function GetImageShortName: String;
@@ -76,6 +79,9 @@ type
     function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
     procedure GetGradientsD(const Image: TWordDynArray; Y, X: Double; out GY: Double; out GX: Double);
     function GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single;
+
+    procedure AddCorrectRef(AngleIdx, ScanIdx: Integer);
+    function HasCorrectRef(const AList: TInputScanDynArray; AngleIdx, ScanIdx: Integer): Boolean;
 
     property ImageFileName: String read FImageFileName write FImageFileName;
     property ImageShortName: String read GetImageShortName;
@@ -876,6 +882,63 @@ begin
   serpFromCoeffsXY(coeffsX, @Image[iy * FWidth + ix], FWidth, @intData[0]);
 
   Result := serpFromCoeffs(coeffsY, @intData[0]);
+end;
+
+procedure TInputScan.AddCorrectRef(AngleIdx, ScanIdx: Integer);
+var
+  cr: TCorrectRef;
+begin
+  cr.AngleIdx := AngleIdx;
+  cr.ScanIdx := ScanIdx;
+
+  SpinEnter(@FLock);
+  try
+    SetLength(FCorrectRefs, Length(FCorrectRefs) + 1);
+    FCorrectRefs[High(FCorrectRefs)] := cr;
+  finally
+    SpinLeave(@FLock);
+  end;
+end;
+
+function TInputScan.HasCorrectRef(const AList: TInputScanDynArray; AngleIdx, ScanIdx: Integer): Boolean;
+
+  procedure Recurse(AScan: TInputScan);
+  var
+    i: Integer;
+    cr: TCorrectRef;
+    toRecurse: array of TInputScan;
+  begin
+    if Result then Exit;
+
+    SpinEnter(@AScan.FLock);
+    try
+      for i := 0 to High(AScan.FCorrectRefs) do
+      begin
+        cr := AScan.FCorrectRefs[i];
+
+        if (cr.AngleIdx = AngleIdx) and (cr.ScanIdx = ScanIdx) then
+        begin
+          Result := True;
+          Break;
+        end;
+
+        if cr.AngleIdx = AngleIdx then
+        begin
+          SetLength(toRecurse, Length(toRecurse) + 1);
+          toRecurse[High(toRecurse)] := AList[cr.ScanIdx];
+        end;
+      end;
+    finally
+      SpinLeave(@AScan.FLock);
+    end;
+
+    for i := 0 to High(toRecurse) do
+      Recurse(toRecurse[i]);
+  end;
+
+begin
+  Result := False;
+  Recurse(Self);
 end;
 
 { TScanImage }
