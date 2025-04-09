@@ -492,8 +492,8 @@ constructor TInputScan.Create(ADefaultDPI: Integer; ASilent: Boolean);
 begin
   FDPI := ADefaultDPI;
   FSilent := ASilent;
-  FCenterQuality := NaN;
-  FObjective := NaN;
+  FCenterQuality := -Infinity;
+  FObjective := Infinity;
   FSkewY := 1.0;
 
   SetRevolutionFromDPI(FDPI);
@@ -773,13 +773,13 @@ begin
 
     if InRangePointD(py, px) and not InNormalizedAngle(bt, a0a, a0b) and not InNormalizedAngle(bt, a1a, a1b) then
     begin
-      SDArr[pos] := FImage[round(py) * FWidth + round(px)];
+      SDArr[pos] := GetPointD_Linear(FLeveledImage, py, px);
       Inc(pos);
     end;
   end;
 
   if (pos > 0) then
-    Result := -Variance(PDouble(@SDArr[0]), pos);
+    Result := -StdDev(PDouble(@SDArr[0]), pos);
 
   //WriteLn(ImageShortName, ', begin:', RadToDeg(a0a):9:3, ', end:', RadToDeg(a0b):9:3, result:18:6);
 end;
