@@ -33,7 +33,8 @@ procedure Simplex(Func      : TFuncNVar;
                   Lb, Ub    : Integer;
                   MaxIter   : Integer;
                   Tol       : Float;
-                  out F_min : Float);
+                  out F_min : Float;
+                  InitSmplx : TVector = nil);
 
 implementation
 
@@ -53,7 +54,8 @@ procedure Simplex(Func      : TFuncNVar;
                   Lb, Ub    : Integer;
                   MaxIter   : Integer;
                   Tol       : Float;
-                  out F_min : Float);
+                  out F_min : Float;
+                  InitSmplx : TVector);
   const
     Step = 1.50;  { Step used to construct the initial simplex }
   var
@@ -114,8 +116,17 @@ procedure Simplex(Func      : TFuncNVar;
     for I := Lb to M do
       for J := Lb to Ub do
         P[I,J] := X[J];
-    for I := Lb to Ub do
-      P[I,I] := P[I,I] * Step;
+
+    if Assigned(InitSmplx) then
+    begin
+      for I := Lb to Ub do
+        P[I,I] := InitSmplx[I];
+    end
+    else
+    begin
+      for I := Lb to Ub do
+        P[I,I] := P[I,I] * Step;
+    end;
 
     { Evaluate function at each vertex }
     for I := Lb to M do
