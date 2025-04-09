@@ -54,6 +54,7 @@ type
   TSerpCoeffs9ByWord = array[0 .. high(Word)] of TSerpCoeffs9;
 
   TGRSEvalFunc = function(arg: Double; obj: Pointer): Double of object;
+  TEvalFunc = function(const arg: TDoubleDynArray; data: Pointer): Double of object;
   TGradientEvalFunc = procedure(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer) of object;
   TCompareFunction = function(Item1, Item2, UserParameter: Pointer): Integer;
 
@@ -76,7 +77,7 @@ const
 
   CLowCutoffFreq = 30.0;
 
-{$if 0}
+{$if 1}
   cRedMul = 1;
   cGreenMul = 1;
   cBlueMul = 1;
@@ -131,6 +132,7 @@ function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Doubl
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: array of Double; EpsilonG: Double; MaxIter: Integer; Silent: Boolean; Data: Pointer = nil): Double;
 function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
+function GridReduceMinimize(Func: TEvalFunc; var X: TDoubleDynArray; GridSize: array of Integer; GridStep: array of Double; Epsilon: Double; VerboseTag: String = ''; Data: Pointer = nil): Double;
 
 function PseudoHuber(x: Double): Double;
 function MAE(const a: TWordDynArray; const b: TWordDynArray): Double;
@@ -670,6 +672,71 @@ begin
     GBFGSData := nil;
     GBFGSFunc := nil;
   end;
+end;
+
+function GridReduceMinimize(Func: TEvalFunc; var X: TDoubleDynArray; GridSize: array of Integer; GridStep: array of Double; Epsilon: Double; VerboseTag: String; Data: Pointer = nil): Double;
+var
+  iter, iX, iGrid, gs: Integer;
+  f, prevFunc, bestFunc: Double;
+  lX, XBestFunc, bestX: TDoubleDynArray;
+  reduce: TDoubleDynArray;
+begin
+  Assert(Length(X) = Length(GridSize));
+  Assert(Length(X) = Length(GridStep));
+
+  SetLength(XBestFunc, Length(X));
+  SetLength(bestX, Length(X));
+
+  SetLength(reduce, Length(X));
+  for iX := 0 to High(X) do
+    reduce[iX] := 1.0;
+
+  iter := 0;
+  bestFunc := Infinity;
+  repeat
+    prevFunc := bestFunc;
+
+    for iX := 0 to High(X) do
+    begin
+      bestX[iX] := X[iX];
+      XBestFunc[iX] := Infinity;
+    end;
+
+    for iX := 0 to High(X) do
+    begin
+      gs := GridSize[iX];
+
+      for iGrid := -gs to gs do
+      begin
+        lX := Copy(X);
+        lX[iX] += lerp(-GridStep[iX], GridStep[iX], (iGrid + gs) / (2 * gs)) * reduce[iX];
+
+        f := Func(lX, Data);
+
+        if f < XBestFunc[iX] then
+        begin
+          XBestFunc[iX] := f;
+          bestX[iX] := lX[iX];
+        end;
+      end;
+    end;
+
+    Inc(iter);
+    bestFunc := MinValue(XBestFunc);
+
+    for iX := 0 to High(X) do
+      if XBestFunc[iX] = bestFunc then
+      begin
+        X[iX] := bestX[iX];
+        reduce[iX] *= cInvPhi;
+
+        if VerboseTag <> '' then
+          WriteLn(VerboseTag, ', Iter:', iter:4, ', BestX:', iX:4, ', Func:', bestFunc:20:9);
+      end;
+
+  until SameValue(prevFunc, bestFunc, Epsilon);
+
+  Result := bestFunc;
 end;
 
 function PseudoHuber(x: Double): Double;
