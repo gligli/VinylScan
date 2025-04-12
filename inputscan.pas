@@ -815,28 +815,34 @@ end;
 
 procedure TInputScan.FixCISScanners;
 
-  function FindWorstAlongX(out Loss: Double): Integer;
+  function FindPhaseAlongX(Recurence, ReccurenceCount: Integer; out Loss: Double): Integer;
   var
-    iX, iY, worstX: Integer;
+    iPhase, iY, iRec, x, worstPhase: Integer;
     worstLoss, l: Double;
   begin
-    worstX := -1;
+    worstPhase := -1;
     worstLoss := -Infinity;
-    for iX := 0 to FWidth - 2 do
+    for iPhase := 0 to FWidth - 1 do
     begin
       l := 0.0;
-      for iY := 0 to FHeight - 1 do
-        l += Sqr(FImage[iY * FWidth + iX] - FImage[iY * FWidth + iX + 1]);
-      l := Sqrt(l / FHeight);
+
+      for iRec := 0 to ReccurenceCount do
+      begin
+        x := Round((iPhase mod Recurence) + Recurence * iRec);
+
+        for iY := 0 to FHeight - 1 do
+          l += Abs(FImage[iY * FWidth + x] - FImage[iY * FWidth + x + 1]);
+      end;
+      l := l / (FHeight * (ReccurenceCount + 1));
 
       if l > worstLoss then
       begin
         worstLoss := l;
-        worstX := iX;
+        worstPhase := iPhase;
       end;
     end;
 
-    Result := worstX;
+    Result := worstPhase;
     loss := worstLoss;
   end;
 
@@ -852,8 +858,8 @@ procedure TInputScan.FixCISScanners;
     begin
       l := 0.0;
       for iY := YMaxFix to FHeight - 1 - YMaxFix do
-        l += Sqr(FImage[iY * FWidth + X] - FImage[(iY + iOff) * FWidth + X + 1]);
-      l := Sqrt(l / (FHeight - 2 * YMaxFix));
+        l += Abs(FImage[iY * FWidth + X] - FImage[(iY + iOff) * FWidth + X + 1]);
+      l := l / (FHeight - 2 * YMaxFix);
 
       if l < bestLoss then
       begin
@@ -884,21 +890,27 @@ procedure TInputScan.FixCISScanners;
   end;
 
 const
-  CMaxFix = 64;
+  CMaxFix = 32;
+  C2400DPIRecurence = 1728;
 var
-  x, offset: Integer;
+  iRec, phase, recurence, recCnt, offset, x: Integer;
   loss: Double;
 begin
-  repeat
-    x := FindWorstAlongX(loss);
+  recurence := (C2400DPIRecurence * FDPI) div 2400;
+  recCnt := (FWidth - 1) div Recurence;
 
-    WriteLn(ImageShortName, x:8, loss:12:3);
+  phase := FindPhaseAlongX(recurence, recCnt, loss);
+  WriteLn(ImageShortName, phase:8, loss:12:3);
+
+  for iRec := 0 to recCnt do
+  begin
+    x := Round(phase + recurence * iRec);
+
     offset := FindBestOffsetAlongY(x, CMaxFix);
-
-    WriteLn(ImageShortName, offset:8);
-
     FixOffset(x, offset);
-  until offset <= 1;
+
+    WriteLn(ImageShortName, x:8, offset:8);
+  end;
 end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
