@@ -1034,7 +1034,7 @@ begin
   if diff = 0 then
     diff := 2.0 * Pi;
 
-  SetLength(Result, Round(Sqr(rEndInt * 2 + 1) * diff / (2.0 * Pi)));
+  SetLength(Result, Sqr(rEndInt * 2 + 1) * Ceil(diff / (2.0 * Pi)));
 
   cnt := 0;
   for oy := -rEndInt to rEndInt do
