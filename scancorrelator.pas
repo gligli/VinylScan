@@ -307,7 +307,7 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * baseScan.DPI, CAnalyzeAreaEnd * 0.5 * baseScan.DPI, 0.0, 2.0 * Pi, baseScan.DPI / 600.0);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * baseScan.DPI, CAnalyzeAreaEnd * 0.5 * baseScan.DPI, 0.0, 2.0 * Pi, 1.0);
   sinCosLUT := OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, baseScan.RelativeAngle);
 
   // parse image using LUTs
@@ -659,7 +659,7 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, Coords.StartAngle, Coords.EndAngle, baseScan.DPI / 1200.0);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, Coords.StartAngle, Coords.EndAngle, 1.0);
 
   // build weights lookup table
 
@@ -777,8 +777,7 @@ var
 
     X := [0.0, 1.0, 0.0];
     Extents := [0.015 * scan.DPI, 0.002, 5e-7];
-    loss := GridReduceMinimize(@NelderMeadCorrect, X, [10, 10, 10], Extents, 1e-1, '', coords);
-    loss := NelderMeadMinimize(@NelderMeadCorrect, X, Extents, 1e-9, coords);
+    loss := GridReduceMinimize(@NelderMeadCorrect, X, [20, 20, 20], Extents, 1e-3, '', coords);
 
     // free up memory
     SetLength(coords^.RadiusAngleLUT, 0);
