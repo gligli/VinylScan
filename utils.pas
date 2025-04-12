@@ -29,11 +29,11 @@ type
   end;
 
   TSinCos = record
-    Sin, Cos, Angle: Double;
+    Sin, Cos: Double;
   end;
 
   TRadiusAngle = record
-    Radius, Sin, Cos, Angle: Double;
+    Radius, Angle: Double;
   end;
 
   TPointDDynArray = array of TPointD;
@@ -62,7 +62,7 @@ const
   C45RpmRevolutionsPerSecond = 45.0 / 60.0;
 
   C45RpmRecordingGrooveWidth = 0.006;
-  C45RpmLeadOutGrooveWidth = 0.006;
+  C45RpmLeadOutGrooveThickness = 0.006;
 
   C45RpmOuterSize = 6.875;
   C45RpmInnerSize = 1.504;
@@ -132,7 +132,8 @@ function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Doubl
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: array of Double; EpsilonG: Double; MaxIter: Integer; Silent: Boolean; Data: Pointer = nil): Double;
 function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
-function GridReduceMinimize(Func: TEvalFunc; var X: TDoubleDynArray; GridSize: array of Integer; GridStep: array of Double; Epsilon: Double; VerboseTag: String = ''; Data: Pointer = nil): Double;
+function GridReduceMinimize(Func: TEvalFunc; var X: TDoubleDynArray; GridSize: array of Integer; GridExtents: array of Double; EpsilonReduce: Double; VerboseTag: String = ''; Data: Pointer = nil): Double;
+function NelderMeadMinimize(Func: TEvalFunc; var X: TDoubleDynArray; SimplexExtents: array of Double; Epsilon: Double = 1e-9; Data: Pointer = nil): Double;
 
 function PseudoHuber(x: Double): Double;
 function MAE(const a: TWordDynArray; const b: TWordDynArray): Double;
@@ -150,9 +151,10 @@ function NormalizedAngleDiff(xmin, xmax: Double): Double;
 function NormalizedAngleTo02Pi(x: Double): Double;
 
 procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TSinCosDynArray; AOriginAngle: Double = 0.0; AExtentsAngle: Double = 2.0 * Pi);
-function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle, PxCountDiv: Double; Sort: Boolean): TRadiusAngleDynArray;
-procedure OffsetRadiusAngleLUTAngle(var LUT: TRadiusAngleDynArray; AngleOffset: Double);
+function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle, PxCountDiv: Double): TRadiusAngleDynArray;
+function OffsetRadiusAngleLUTAngle(const LUT: TRadiusAngleDynArray; AngleOffset: Double): TSinCosDynArray;
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
+procedure IncrementalSinCos(Angle: Double; var PrevAngle: Double; var SinCos: TSinCos);
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray); overload;
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TDoubleDynArray); overload;
@@ -165,7 +167,7 @@ procedure BurgAlgorithm(var coeffs: TDoubleDynArray; const x: TSingleDynArray);
 function BurgAlgorithm_PredictOne(const coeffs: TDoubleDynArray; const x: TSingleDynArray): Double;
 
 implementation
-uses utypes, ubfgs;
+uses utypes, ubfgs, usimplex;
 
 var GSerpCoeffs9ByWord: TSerpCoeffs9ByWord;
 
@@ -674,15 +676,77 @@ begin
   end;
 end;
 
-function GridReduceMinimize(Func: TEvalFunc; var X: TDoubleDynArray; GridSize: array of Integer; GridStep: array of Double; Epsilon: Double; VerboseTag: String; Data: Pointer = nil): Double;
+
+threadvar
+  GNMData: Pointer;
+  GNMFunc: TEvalFunc;
+
+  function NMX(X : TVector) : Float;
+  begin
+    Result := GNMFunc(X, GNMData);
+  end;
+
+function NelderMeadMinimize(Func: TEvalFunc; var X: TDoubleDynArray; SimplexExtents: array of Double; Epsilon: Double; Data: Pointer): Double;
 var
-  iter, iX, iGrid, gs: Integer;
-  f, prevFunc, bestFunc: Double;
-  lX, XBestFunc, bestX: TDoubleDynArray;
+  iX: Integer;
+  InitSimplex: TDoubleDynArray;
+begin
+  Assert(Length(X) = Length(SimplexExtents));
+
+  GNMData := Data;
+  GNMFunc := Func;
+  try
+    SetLength(InitSimplex, Length(X));
+    for iX := 0 to High(InitSimplex) do
+      InitSimplex[iX] := X[iX] + SimplexExtents[iX];
+
+    Simplex(@NMX, X, 0, High(X), Length(X) * 200, Epsilon, Result, InitSimplex);
+  finally
+    GNMData := nil;
+    GNMFunc := nil;
+  end;
+end;
+
+function GridReduceMinimize(Func: TEvalFunc; var X: TDoubleDynArray; GridSize: array of Integer;
+ GridExtents: array of Double; EpsilonReduce: Double; VerboseTag: String; Data: Pointer): Double;
+var
+  XBestFunc, bestX: TDoubleDynArray;
   reduce: TDoubleDynArray;
+
+  procedure DoX(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  var
+    iX: PtrInt;
+    gs, iGrid: Integer;
+    f: Double;
+    lX: TDoubleDynArray;
+  begin
+    iX := AIndex;
+    if not InRange(iX, 0, High(X)) or IsZero(reduce[iX], EpsilonReduce) then
+      Exit;
+
+    lX := Copy(X);
+    gs := GridSize[iX];
+
+    for iGrid := -gs to gs - 1 do
+    begin
+      lX[iX] := X[iX] + lerp(-GridExtents[iX], GridExtents[iX], (iGrid + gs) / (2 * gs)) * reduce[iX];
+
+      f := Func(lX, data);
+
+      if f < XBestFunc[iX] then
+      begin
+        XBestFunc[iX] := f;
+        bestX[iX] := lX[iX];
+      end;
+    end;
+  end;
+
+var
+  iter, iX: Integer;
+  bestFunc: Double;
 begin
   Assert(Length(X) = Length(GridSize));
-  Assert(Length(X) = Length(GridStep));
+  Assert(Length(X) = Length(GridExtents));
 
   SetLength(XBestFunc, Length(X));
   SetLength(bestX, Length(X));
@@ -692,9 +756,7 @@ begin
     reduce[iX] := 1.0;
 
   iter := 0;
-  bestFunc := Infinity;
   repeat
-    prevFunc := bestFunc;
 
     for iX := 0 to High(X) do
     begin
@@ -702,24 +764,7 @@ begin
       XBestFunc[iX] := Infinity;
     end;
 
-    for iX := 0 to High(X) do
-    begin
-      gs := GridSize[iX];
-
-      for iGrid := -gs to gs do
-      begin
-        lX := Copy(X);
-        lX[iX] += lerp(-GridStep[iX], GridStep[iX], (iGrid + gs) / (2 * gs)) * reduce[iX];
-
-        f := Func(lX, Data);
-
-        if f < XBestFunc[iX] then
-        begin
-          XBestFunc[iX] := f;
-          bestX[iX] := lX[iX];
-        end;
-      end;
-    end;
+    ProcThreadPool.DoParallelLocalProc(@DoX, 0, High(X));
 
     Inc(iter);
     bestFunc := MinValue(XBestFunc);
@@ -731,10 +776,10 @@ begin
         reduce[iX] *= cInvPhi;
 
         if VerboseTag <> '' then
-          WriteLn(VerboseTag, ', Iter:', iter:4, ', BestX:', iX:4, ', Func:', bestFunc:20:9);
+          WriteLn(VerboseTag, ', Iter:', iter:4, ', BestX:', iX:4, ', Reduce:', reduce[iX]:12:9, ', Func:', bestFunc:20:9);
       end;
 
-  until SameValue(prevFunc, bestFunc, Epsilon);
+  until IsZero(MaxValue(reduce), EpsilonReduce);
 
   Result := bestFunc;
 end;
@@ -963,10 +1008,7 @@ begin
   SetLength(ASinCosLUT, APointCount);
   rprp := AExtentsAngle / APointCount;
   for i := 0 to APointCount - 1 do
-  begin
-    ASinCosLUT[i].Angle := AOriginAngle + i * rprp;
-    SinCos(ASinCosLUT[i].Angle, ASinCosLUT[i].Sin, ASinCosLUT[i].Cos);
-  end;
+    SinCos(AOriginAngle + i * rprp, ASinCosLUT[i].Sin, ASinCosLUT[i].Cos);
 end;
 
 function CompareRadiusAngle(Item1, Item2, UserParameter: Pointer): Integer;
@@ -979,7 +1021,7 @@ begin
     Result := CompareValue(ra1^.Radius, ra2^.Radius);
 end;
 
-function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle, PxCountDiv: Double; Sort: Boolean): TRadiusAngleDynArray;
+function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle, PxCountDiv: Double): TRadiusAngleDynArray;
 var
   oy, ox, cnt, rEndInt: Integer;
   r, t, nsa, nea, diff: Double;
@@ -1009,46 +1051,40 @@ begin
 
           Result[cnt].Radius := r;
           Result[cnt].Angle := t;
-          SinCos(Result[cnt].Angle, Result[cnt].Sin, Result[cnt].Cos);
           Inc(cnt);
         end;
       end;
     end;
 
   SetLength(Result, cnt);
-
-  if Sort then
-    QuickSort(Result[0], 0, cnt - 1, SizeOf(Result[0]), @CompareRadiusAngle);
+  QuickSort(Result[0], 0, cnt - 1, SizeOf(Result[0]), @CompareRadiusAngle);
 end;
 
-procedure OffsetRadiusAngleLUTAngle(var LUT: TRadiusAngleDynArray; AngleOffset: Double);
+function OffsetRadiusAngleLUTAngle(const LUT: TRadiusAngleDynArray; AngleOffset: Double): TSinCosDynArray;
 var
-  i: Integer;
-  offCos, offSin, cs, sn: Double;
+  iLUT: Integer;
 begin
-  if AngleOffset = 0.0 then
-    Exit;
+  SetLength(Result, Length(LUT));
 
-  SinCos(AngleOffset, offSin, offCos);
-
-  for i := 0 to High(LUT) do
-    if (i = 0) or (LUT[i].Angle <> LUT[i - 1].Angle) then
-    begin
-      sn := LUT[i].Sin;
-      cs := LUT[i].Cos;
-      LUT[i].Sin := sn * offCos + cs * offSin;
-      LUT[i].Cos := cs * offCos - sn * offSin;
-    end
+  for iLUT := 0 to High(LUT) do
+    if (iLUT = 0) or (LUT[iLUT].Angle <> LUT[iLUT - 1].Angle) then
+      SinCos(LUT[iLUT].Angle + AngleOffset, Result[iLUT].Sin, Result[iLUT].Cos)
     else
-    begin
-      LUT[i].Sin := LUT[i - 1].Sin;
-      LUT[i].Cos := LUT[i - 1].Cos;
-    end;
+      Result[iLUT] := Result[iLUT - 1];
 end;
 
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
 begin
   Result := (Cutoff * 2.0 / SampleRate) / sqrt(0.1024 + sqr(Cutoff * 2.0 / SampleRate));
+end;
+
+procedure IncrementalSinCos(Angle: Double; var PrevAngle: Double; var SinCos: TSinCos);
+begin
+  if Angle <> PrevAngle then
+  begin
+    Math.SinCos(Angle, SinCos.Sin, SinCos.Cos);
+    PrevAngle := Angle;
+  end;
 end;
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray);
@@ -1351,7 +1387,7 @@ initialization
   ProcThreadPool.MaxThreadCount := 1;
 {$else}
   SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
-  ProcThreadPool.MaxThreadCount := Max(1, NumberOfProcessors - 1);
+  ProcThreadPool.MaxThreadCount := Max(1, NumberOfProcessors - 2); // let one full core unused
 {$endif}
 
   serpCoeffsBuilsLUT(GSerpCoeffs9ByWord);

@@ -18,6 +18,8 @@ type
   TCropData = record
     StartAngle, EndAngle: Double;
     StartAngleMirror, EndAngleMirror: Double;
+    RadiusAngleLut: TRadiusAngleDynArray;
+    SinCosLut: TSinCosDynArray;
   end;
 
   TInputScanDynArray = array of TInputScan;
@@ -57,7 +59,8 @@ type
     function GetImageShortName: String;
 
     procedure GradientConcentricGroove(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
-    function PowellCrop(const x: TVector; obj: Pointer): TScalar;
+    function GridReduceConcentricGroove(const x: TVector; obj: Pointer): TScalar;
+    function NelderMeadCrop(const x: TVector; obj: Pointer): TScalar;
 
     procedure FindConcentricGroove_GridSearch;
     procedure FindConcentricGroove_Gradient;
@@ -73,7 +76,7 @@ type
     procedure BrickwallLimit;
     procedure FindTrack(AUseGradient: Boolean; AForcedSampleRate: Integer = -1);
     procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle, ASkewY: Double);
-    procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray);
+    procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
 
     function InRangePointD(Y, X: Double): Boolean;
     function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
@@ -334,9 +337,9 @@ begin
   stencilY[ZeroValue] := 2;
   stencilY[PositiveValue] := -1;
 
-  stencilX[NegativeValue] := -C45RpmLeadOutGrooveWidth * FDPI;
+  stencilX[NegativeValue] := -C45RpmLeadOutGrooveThickness * FDPI;
   stencilX[ZeroValue] := 0;
-  stencilX[PositiveValue] := C45RpmLeadOutGrooveWidth * FDPI;
+  stencilX[PositiveValue] := C45RpmLeadOutGrooveThickness * FDPI;
 
   x := [extents.CenterPoint.X, extents.CenterPoint.Y, C45RpmConcentricGroove * FDPI * 0.5, 1.0];
 
@@ -377,9 +380,9 @@ begin
   stencilY[ZeroValue] := 2;
   stencilY[PositiveValue] := -1;
 
-  stencilX[NegativeValue] := -C45RpmLeadOutGrooveWidth * FDPI;
+  stencilX[NegativeValue] := -C45RpmLeadOutGrooveThickness * FDPI;
   stencilX[ZeroValue] := 0;
-  stencilX[PositiveValue] := C45RpmLeadOutGrooveWidth * FDPI;
+  stencilX[PositiveValue] := C45RpmLeadOutGrooveThickness * FDPI;
 
   func := 0.0;
   if Assigned(grad) then
@@ -429,6 +432,11 @@ begin
     grad[2] := gr / High(Word);
     grad[3] := gsky / High(Word);
   end;
+end;
+
+function TInputScan.GridReduceConcentricGroove(const x: TVector; obj: Pointer): TScalar;
+begin
+  GradientConcentricGroove(x, Result, nil, obj);
 end;
 
 procedure TInputScan.FindConcentricGroove_Gradient;
@@ -734,68 +742,74 @@ begin
   if not IsNan(ASkewY) then FSkewY := ASkewY;
 end;
 
-function TInputScan.PowellCrop(const x: TVector; obj: Pointer): TScalar;
+function TInputScan.NelderMeadCrop(const x: TVector; obj: Pointer): TScalar;
 var
-  radiusAngleLut: ^TRadiusAngleDynArray absolute obj;
-  a0a, a1a, a0b, a1b, cx, cy, r, sn, cs, px, py, bt: Double;
-  iLut: Integer;
-  pos: Integer;
-  SDArr: TDoubleDynArray;
+  acc, a0a, a1a, a0b, a1b, cx, cy, r, px, py, bt: Double;
+  iLut, cnt: Integer;
   ra: ^TRadiusAngle;
+  sc: ^TSinCos;
 begin
   Result := 1e6;
 
-  if not InRange(NormalizeAngle(x[1] - x[0]), DegToRad(0.0), DegToRad(120.0)) then
+  if not InRange(NormalizeAngle(x[1] - x[0]), DegToRad(60.0), DegToRad(120.0)) then
+    Exit;
+
+  if not InRange(NormalizeAngle(x[3] - x[2]), DegToRad(60.0), DegToRad(120.0)) then
     Exit;
 
   a0a := NormalizeAngle(x[0]);
   a0b := NormalizeAngle(x[1]);
-  a1a := NormalizeAngle(a0a + Pi);
-  a1b := NormalizeAngle(a0b + Pi);
-
-  SetLength(SDArr, Length(radiusAngleLut^));
-  pos := 0;
+  a1a := NormalizeAngle(x[2]);
+  a1b := NormalizeAngle(x[3]);
 
   cx := FCenter.X;
   cy := FCenter.Y;
 
-  for iLut := 0 to High(radiusAngleLut^) do
+  acc := 0.0;
+  cnt := 0;
+
+  for iLut := 0 to High(FCropData.RadiusAngleLut) do
   begin
-    ra := @radiusAngleLut^[iLut];
+    ra := @FCropData.RadiusAngleLut[iLut];
+    sc := @FCropData.SinCosLut[iLut];
 
     bt := ra^.Angle;
-    cs := ra^.Cos;
-    sn := ra^.Sin;
     r := ra^.Radius;
 
-    px := cs * r + cx;
-    py := sn * r + cy;
+    px := sc^.Cos * r + cx;
+    py := sc^.Sin * r + cy;
 
-    if InRangePointD(py, px) and not InNormalizedAngle(bt, a0a, a0b) and not InNormalizedAngle(bt, a1a, a1b) then
+    if InRangePointD(py, px) and (InNormalizedAngle(bt, a0a, a0b) or InNormalizedAngle(bt, a1a, a1b)) then
     begin
-      SDArr[pos] := GetPointD_Linear(FLeveledImage, py, px);
-      Inc(pos);
+      acc += GetPointD_Linear(FLeveledImage, py, px);
+      Inc(cnt);
     end;
   end;
 
-  if (pos > 0) then
-    Result := -StdDev(PDouble(@SDArr[0]), pos);
+  Result := DivDef(acc, cnt, 0.0);
 
   //WriteLn(ImageShortName, ', begin:', RadToDeg(a0a):9:3, ', end:', RadToDeg(a0b):9:3, result:18:6);
 end;
 
-procedure TInputScan.Crop(const RadiusAngleLut: TRadiusAngleDynArray);
+procedure TInputScan.Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
 var
   X: TVector;
 begin
-  X := [NormalizeAngle(DegToRad(-30.0)), NormalizeAngle(DegToRad(30.0))];
+  X := [NormalizeAngle(DegToRad(-45.0)), NormalizeAngle(DegToRad(45.0)), NormalizeAngle(DegToRad(-45.0) + Pi), NormalizeAngle(DegToRad(45.0) + Pi)];
 
-  PowellMinimize(@PowellCrop, X, 1.0 / 360.0, 1e-6, 0.0, MaxInt, @RadiusAngleLut);
+  FCropData.RadiusAngleLut := RadiusAngleLut;
+  FCropData.SinCosLut := SinCosLut;
+  try
+    NelderMeadMinimize(@NelderMeadCrop, X, [DegToRad(30.0), DegToRad(30.0), DegToRad(30.0), DegToRad(30.0)], 1e-3);
+  finally
+    FCropData.RadiusAngleLut := nil;
+    FCropData.SinCosLut := nil;
+  end;
 
   FCropData.StartAngle := NormalizeAngle(X[0]);
   FCropData.EndAngle := NormalizeAngle(X[1]);
-  FCropData.StartAngleMirror := NormalizeAngle(FCropData.StartAngle + Pi);
-  FCropData.EndAngleMirror := NormalizeAngle(FCropData.EndAngle + Pi);
+  FCropData.StartAngleMirror := NormalizeAngle(X[2]);
+  FCropData.EndAngleMirror := NormalizeAngle(X[3]);
 end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;

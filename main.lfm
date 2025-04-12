@@ -85,14 +85,14 @@ object MainForm: TMainForm
       Top = 8
       Width = 224
       Lines.Strings = (
-        'data\think600_2_0.png'
-        'data\think600_2_1.png'
-        'data\think600_2_2.png'
-        'data\think600_2_3.png'
-        'data\think600_2_4.png'
-        'data\think600_2_5.png'
-        'data\think600_2_6.png'
-        'data\think600_2_7.png'
+        'data\2025_03_04\magic_fly_600_036.tif'
+        'data\2025_03_04\magic_fly_600_037.tif'
+        'data\2025_03_04\magic_fly_600_038.tif'
+        'data\2025_03_04\magic_fly_600_039.tif'
+        'data\2025_03_04\magic_fly_600_040.tif'
+        'data\2025_03_04\magic_fly_600_041.tif'
+        'data\2025_03_04\magic_fly_600_042.tif'
+        'data\2025_03_04\magic_fly_600_043.tif'
       )
       ParentShowHint = False
       ScrollBars = ssBoth
