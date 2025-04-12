@@ -7,7 +7,7 @@ object MainForm: TMainForm
   HorzScrollBar.Page = 904
   HorzScrollBar.Tracking = True
   VertScrollBar.Increment = 240
-  VertScrollBar.Page = 557
+  VertScrollBar.Page = 573
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
@@ -49,22 +49,22 @@ object MainForm: TMainForm
       Left = 8
       Height = 24
       Hint = 'Scan to track output WAV file'
-      Top = 385
+      Top = 401
       Width = 224
       ParentShowHint = False
       ShowHint = True
-      TabOrder = 12
+      TabOrder = 13
       Text = 'data\sample.wav'
     end
     object edInputPNG: TEdit
       Left = 8
       Height = 24
       Hint = 'Scan to track input PNG file'
-      Top = 360
+      Top = 376
       Width = 224
       ParentShowHint = False
       ShowHint = True
-      TabOrder = 10
+      TabOrder = 11
       Text = 'data\sample_correlated.png'
     end
     object edOutputPNG: TEdit
@@ -103,26 +103,26 @@ object MainForm: TMainForm
     object btScansCorrelator: TButton
       Left = 8
       Height = 25
-      Top = 320
+      Top = 336
       Width = 131
       Caption = 'Scans correlator (F10)'
-      TabOrder = 9
+      TabOrder = 10
       OnClick = btScansCorrelatorClick
     end
     object btScan2Track: TButton
       Left = 8
       Height = 25
-      Top = 504
+      Top = 520
       Width = 131
       Caption = 'Scan to track (F11)'
-      TabOrder = 17
+      TabOrder = 18
       OnClick = btScan2TrackClick
     end
     object cbDPI: TComboBox
       Left = 175
       Height = 24
       Hint = 'Default dots per inch'
-      Top = 424
+      Top = 440
       Width = 80
       ItemHeight = 16
       ItemIndex = 2
@@ -134,7 +134,7 @@ object MainForm: TMainForm
       )
       ParentShowHint = False
       ShowHint = True
-      TabOrder = 14
+      TabOrder = 15
       Text = '2400'
     end
     object btInPNGs: TButton
@@ -158,26 +158,26 @@ object MainForm: TMainForm
     object btInPNG: TButton
       Left = 232
       Height = 23
-      Top = 360
+      Top = 376
       Width = 23
       Caption = '...'
-      TabOrder = 11
+      TabOrder = 12
       OnClick = btInPNGClick
     end
     object btOutWAV: TButton
       Left = 232
       Height = 23
-      Top = 384
+      Top = 400
       Width = 23
       Caption = '...'
-      TabOrder = 13
+      TabOrder = 14
       OnClick = btOutWAVClick
     end
     object cbSR: TComboBox
       Left = 175
       Height = 24
       Hint = 'Sample rate'
-      Top = 448
+      Top = 464
       Width = 80
       ItemHeight = 16
       ItemIndex = 2
@@ -189,96 +189,104 @@ object MainForm: TMainForm
       )
       ParentShowHint = False
       ShowHint = True
-      TabOrder = 15
+      TabOrder = 16
       Text = '48000'
     end
     object chkCorrect: TCheckBox
       Left = 8
       Height = 20
-      Top = 246
+      Top = 262
       Width = 93
       Caption = 'Correct angles'
-      TabOrder = 6
+      TabOrder = 7
     end
     object chkBrickLim: TCheckBox
       Left = 8
       Height = 20
-      Top = 208
+      Top = 224
       Width = 158
       Caption = 'Brickwall limit scan images'
-      TabOrder = 4
+      TabOrder = 5
     end
     object chkOptimize: TCheckBox
       Left = 8
       Height = 20
-      Top = 227
+      Top = 243
       Width = 114
       Caption = 'Analyze minimizes'
-      TabOrder = 5
+      TabOrder = 6
     end
     object chkDefaultDPI: TCheckBox
       Left = 8
       Height = 20
-      Top = 266
+      Top = 282
       Width = 133
       Caption = 'Rebuild to default DPI'
-      TabOrder = 7
+      TabOrder = 8
     end
     object llDPI: TLabel
       Left = 8
       Height = 16
-      Top = 428
+      Top = 444
       Width = 111
       Caption = 'Default Dots Per Inch'
     end
     object llSR: TLabel
       Left = 8
       Height = 16
-      Top = 452
+      Top = 468
       Width = 110
       Caption = 'Decoded sample rate'
     end
     object sePrec: TSpinEdit
       Left = 175
       Height = 24
-      Top = 472
+      Top = 488
       Width = 80
       MaxValue = 16
       MinValue = 1
-      TabOrder = 16
+      TabOrder = 17
       Value = 1
     end
     object llPrec: TLabel
       Left = 8
       Height = 16
-      Top = 476
+      Top = 492
       Width = 102
       Caption = 'Decoding precision'
     end
     object pbS2T: TProgressBar
       Left = 8
       Height = 20
-      Top = 536
+      Top = 552
       Width = 247
       Smooth = True
-      TabOrder = 18
+      TabOrder = 19
     end
     object llBlend: TLabel
       Left = 8
       Height = 16
-      Top = 292
+      Top = 308
       Width = 131
       Caption = 'Maximum blended scans'
     end
     object seBlend: TSpinEdit
       Left = 175
       Height = 24
-      Top = 288
+      Top = 304
       Width = 80
       MaxValue = 1000
       MinValue = 1
-      TabOrder = 8
+      TabOrder = 9
       Value = 1
+    end
+    object chkFixCIS: TCheckBox
+      Left = 8
+      Height = 20
+      Top = 204
+      Width = 238
+      Caption = 'CIS scanners fix (Canon LIDE, Viisan VF, ...)'
+      TabOrder = 4
     end
   end
   object odInPNGs: TOpenDialog

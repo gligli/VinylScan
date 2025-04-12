@@ -30,6 +30,7 @@ type
   TScanCorrelator = class
   private
     FInputScans: TInputScanDynArray;
+    FFixCISScanners: Boolean;
     FBrickwallLimitScans: Boolean;
     FAnalyzeMinimize: Boolean;
     FCorrectAngles: Boolean;
@@ -68,6 +69,7 @@ type
     procedure Save;
 
     property OutputPNGFileName: String read FOutputPNGFileName write FOutputPNGFileName;
+    property FixCISScanners: Boolean read FFixCISScanners write FFixCISScanners;
     property BrickwallLimitScans: Boolean read FBrickwallLimitScans write FBrickwallLimitScans;
     property AnalyzeMinimize: Boolean read FAnalyzeMinimize write FAnalyzeMinimize;
     property CorrectAngles: Boolean read FCorrectAngles write FCorrectAngles;
@@ -123,6 +125,7 @@ begin
 
   SpinLeave(@FLock);
 
+  FFixCISScanners := False;
   FBrickwallLimitScans := False;
   FAnalyzeMinimize := True;
   FCorrectAngles := True;
@@ -157,7 +160,7 @@ procedure TScanCorrelator.LoadScans;
     Scan := FInputScans[AIndex];
 
     Scan.LoadImage;
-
+    if FFixCISScanners then Scan.FixCISScanners;
     if FBrickwallLimitScans then Scan.BrickwallLimit;
     Scan.FindTrack(True);
   end;

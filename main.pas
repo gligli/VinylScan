@@ -19,6 +19,7 @@ type
     btOutWAV: TButton;
     btScan2Track: TButton;
     btScansCorrelator: TButton;
+    chkFixCIS: TCheckBox;
     chkDefaultDPI: TCheckBox;
     chkCorrect: TCheckBox;
     cbDPI: TComboBox;
@@ -130,6 +131,7 @@ begin
   sc := TScanCorrelator.Create(mmInputPNGs.Lines, StrToIntDef(cbDPI.Text, 2400));
   try
     sc.OutputPNGFileName := edOutputPNG.Text;
+    sc.FixCISScanners := chkFixCIS.Checked;
     sc.BrickwallLimitScans := chkBrickLim.Checked;
     sc.AnalyzeMinimize := chkOptimize.Checked;
     sc.CorrectAngles := chkCorrect.Checked;
@@ -247,6 +249,7 @@ begin
   sc := TScanCorrelator.Create(sl);
   s2t := TScan2Track.Create;
   try
+    chkFixCIS.Checked := sc.FixCISScanners;
     chkBrickLim.Checked := sc.BrickwallLimitScans;
     chkOptimize.Checked := sc.AnalyzeMinimize;
     chkCorrect.Checked := sc.CorrectAngles;

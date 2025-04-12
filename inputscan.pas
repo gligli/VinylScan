@@ -77,6 +77,7 @@ type
     procedure FindTrack(AUseGradient: Boolean; AForcedSampleRate: Integer = -1);
     procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle, ASkewY: Double);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
+    procedure FixCISScanners;
 
     function InRangePointD(Y, X: Double): Boolean;
     function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
@@ -810,6 +811,94 @@ begin
   FCropData.EndAngle := NormalizeAngle(X[1]);
   FCropData.StartAngleMirror := NormalizeAngle(X[2]);
   FCropData.EndAngleMirror := NormalizeAngle(X[3]);
+end;
+
+procedure TInputScan.FixCISScanners;
+
+  function FindWorstAlongX(out Loss: Double): Integer;
+  var
+    iX, iY, worstX: Integer;
+    worstLoss, l: Double;
+  begin
+    worstX := -1;
+    worstLoss := -Infinity;
+    for iX := 0 to FWidth - 2 do
+    begin
+      l := 0.0;
+      for iY := 0 to FHeight - 1 do
+        l += Sqr(FImage[iY * FWidth + iX] - FImage[iY * FWidth + iX + 1]);
+      l := Sqrt(l / FHeight);
+
+      if l > worstLoss then
+      begin
+        worstLoss := l;
+        worstX := iX;
+      end;
+    end;
+
+    Result := worstX;
+    loss := worstLoss;
+  end;
+
+  function FindBestOffsetAlongY(X, YMaxFix: Integer): Integer;
+  var
+    iY, iOff, bestOff: Integer;
+    bestLoss, l: Double;
+  begin
+    bestOff := 0;
+    bestLoss := Infinity;
+
+    for iOff := -YMaxFix to YMaxFix do
+    begin
+      l := 0.0;
+      for iY := YMaxFix to FHeight - 1 - YMaxFix do
+        l += Sqr(FImage[iY * FWidth + X] - FImage[(iY + iOff) * FWidth + X + 1]);
+      l := Sqrt(l / (FHeight - 2 * YMaxFix));
+
+      if l < bestLoss then
+      begin
+        bestLoss := l;
+        bestOff := iOff;
+      end;
+    end;
+
+    Result := bestOff;
+  end;
+
+  procedure FixOffset(X, Offset: Integer);
+  var
+    iX, iY: Integer;
+  begin
+    if Offset > 0 then
+    begin
+      for iY := 0 to FHeight - 1 do
+        for iX := X + 1 to FWidth - 1 do
+          FImage[iY * FWidth + iX] := FImage[Min(iY + Offset, FHeight - 1) * FWidth + iX];
+    end
+    else if Offset < 0 then
+    begin
+      for iY := FHeight - 1 downto 0 do
+        for iX := X + 1 to FWidth - 1 do
+          FImage[iY * FWidth + iX] := FImage[Max(0, iY + Offset) * FWidth + iX];
+    end;
+  end;
+
+const
+  CMaxFix = 64;
+var
+  x, offset: Integer;
+  loss: Double;
+begin
+  repeat
+    x := FindWorstAlongX(loss);
+
+    WriteLn(ImageShortName, x:8, loss:12:3);
+    offset := FindBestOffsetAlongY(x, CMaxFix);
+
+    WriteLn(ImageShortName, offset:8);
+
+    FixOffset(x, offset);
+  until offset <= 1;
 end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
