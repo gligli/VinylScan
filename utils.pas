@@ -163,8 +163,8 @@ procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFun
 
 function GetTIFFSize(AStream: TStream; out AWidth, AHeight: DWord; out dpiX, dpiY: Double): Boolean;
 
-procedure BurgAlgorithm(var coeffs: TDoubleDynArray; const x: TSingleDynArray);
-function BurgAlgorithm_PredictOne(const coeffs: TDoubleDynArray; const x: TSingleDynArray): Double;
+procedure BurgAlgorithm(var coeffs: TDoubleDynArray; const x: TDoubleDynArray; lb, ub: Integer);
+function BurgAlgorithm_PredictOne(const coeffs: TDoubleDynArray; const x: TDoubleDynArray; from: Integer): Double;
 
 implementation
 uses utypes, ubfgs, usimplex;
@@ -336,9 +336,9 @@ var
   w, i: Integer;
   alpha, p: Double;
 begin
-  for w := 0 to High(Word) do
+  for w := 0 to High(TSerpCoeffs9ByWord) do
   begin
-    alpha := w * (1 / (High(Word) + 1));
+    alpha := w * (1 / (High(TSerpCoeffs9ByWord) + 1));
     for i := Low(TSerpCoeffs9) to -Low(TSerpCoeffs9) do
     begin
       p := ((i - alpha) - -Low(TSerpCoeffs9)) / (2 * -Low(TSerpCoeffs9));
@@ -496,7 +496,7 @@ begin
   Dec(pp, stride);             res[-2] := serpFromCoeffsX(coeffs, pp);
   Dec(pp, stride);             res[-3] := serpFromCoeffsX(coeffs, pp);
   Dec(pp, stride);             res[-4] := serpFromCoeffsX(coeffs, pp);
-end;
+  end;
 {$endif}
 
 {$ifdef CPUX64}
@@ -1302,30 +1302,31 @@ begin
 end;
 
 // from https://github.com/cchafe/burgbare/blob/main/burgalgorithm.cpp
-procedure BurgAlgorithm(var coeffs: TDoubleDynArray; const x: TSingleDynArray);
+procedure BurgAlgorithm(var coeffs: TDoubleDynArray; const x: TDoubleDynArray; lb, ub: Integer);
 var
-  i, j, k, m, ni, N: Integer;
+  i, j, k, m, ni, N, xsz: Integer;
   Ak, f, b: TDoubleDynArray;
   Dk, mu, t1, t2: Double;
 begin
   // GET SIZE FROM INPUT VECTORS
-  N := High(x);
+  xsz := ub - lb + 1;
+  N := xsz - 1;
   m := Length(coeffs);
 
   ////
-  Assert(Length(x) >= m, 'time_series should have more elements than the AR order is');
+  Assert(xsz >= m, 'time_series should have more elements than the AR order is');
 
   // INITIALIZE Ak
   SetLength(Ak, m + 1);
   Ak[ 0 ] := 1.0;
 
   // INITIALIZE f and b
-  SetLength(f, Length(x));
-  SetLength(b, Length(x));
-  for i := 0 to High(x) do
+  SetLength(f, xsz);
+  SetLength(b, xsz);
+  for i := 0 to High(f) do
   begin
-    f[i] := x[i];
-    b[i] := x[i];
+    f[i] := x[i + lb];
+    b[i] := x[i + lb];
   end;
 
   // INITIALIZE Dk
@@ -1339,12 +1340,12 @@ begin
   begin
     // COMPUTE MU
     mu := 0.0;
-    for ni := 0 to N - k - 1 do
-      mu += f[ni + k + 1] * b[ni];
-    mu *= -2.0 / Dk;
+    for ni := 0 to N - k do
+      mu += f[ni + k] * b[ni];
+    mu *= DivDef(-2.0, Dk, 1.0);
 
     // UPDATE Ak
-    for ni := 0 to (k + 1) div 2 do
+    for ni := 0 to k div 2 do
     begin
       t1 := Ak[ ni ] + mu * Ak[ k + 1 - ni ];
       t2 := Ak[ k + 1 - ni ] + mu * Ak[ ni ];
@@ -1353,16 +1354,16 @@ begin
     end;
 
     // UPDATE f and b
-    for ni := 0 to  N - k - 1 do
+    for ni := 0 to  N - k do
     begin
-      t1 := f[ ni + k + 1 ] + mu * b[ ni ];
-      t2 := b[ ni ] + mu * f[ ni + k + 1 ];
-      f[ ni + k + 1 ] := t1;
+      t1 := f[ ni + k ] + mu * b[ ni ];
+      t2 := b[ ni ] + mu * f[ ni + k ];
+      f[ ni + k ] := t1;
       b[ ni ] := t2;
     end;
 
     // UPDATE Dk
-    Dk := ( 1.0 - mu * mu ) * Dk - f[ k + 1 ] * f[ k + 1 ] - b[ N - k - 1 ] * b[ N - k - 1 ];
+    Dk := ( 1.0 - mu * mu ) * Dk - f[ k ] * f[ k ] - b[ N - k ] * b[ N - k ];
   end;
 
   // ASSIGN COEFFICIENTS
@@ -1370,7 +1371,7 @@ begin
     coeffs[i - 1] := Ak[i];
 end;
 
-function BurgAlgorithm_PredictOne(const coeffs: TDoubleDynArray; const x: TSingleDynArray): Double;
+function BurgAlgorithm_PredictOne(const coeffs: TDoubleDynArray; const x: TDoubleDynArray; from: Integer): Double;
 var
   m, i: Integer;
 begin
@@ -1378,7 +1379,7 @@ begin
 
   Result := 0.0;
   for i := 0 to m - 1 do
-    Result -= coeffs[ i ] * x[ High(x) - i ];
+    Result -= coeffs[ i ] * x[ from - 1 - i ];
 end;
 
 
