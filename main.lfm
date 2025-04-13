@@ -85,14 +85,14 @@ object MainForm: TMainForm
       Top = 8
       Width = 224
       Lines.Strings = (
-        'data\2025_03_04\magic_fly_600_036.tif'
-        'data\2025_03_04\magic_fly_600_037.tif'
-        'data\2025_03_04\magic_fly_600_038.tif'
-        'data\2025_03_04\magic_fly_600_039.tif'
-        'data\2025_03_04\magic_fly_600_040.tif'
-        'data\2025_03_04\magic_fly_600_041.tif'
-        'data\2025_03_04\magic_fly_600_042.tif'
-        'data\2025_03_04\magic_fly_600_043.tif'
+        'data\canon_600\canon_20250106_0001.png'
+        'data\canon_600\canon_20250106_0002.png'
+        'data\canon_600\canon_20250106_0003.png'
+        'data\canon_600\canon_20250106_0004.png'
+        'data\canon_600\canon_20250107_0001.png'
+        'data\canon_600\canon_20250107_0002.png'
+        'data\canon_600\canon_20250107_0003.png'
+        'data\canon_600\canon_20250107_0004.png'
       )
       ParentShowHint = False
       ScrollBars = ssBoth
