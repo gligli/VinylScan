@@ -830,7 +830,7 @@ procedure TInputScan.FixCISScanners;
       begin
         x := Round((iPhase mod Recurence) + Recurence * iRec);
 
-        for iY := 0 to FHeight - 1 do
+        for iY := 0 to FHeight - 2 do
           l += Abs(FImage[iY * FWidth + x] - FImage[iY * FWidth + x + 1]);
       end;
       l := l / (FHeight * (ReccurenceCount + 1));
@@ -846,70 +846,72 @@ procedure TInputScan.FixCISScanners;
     loss := worstLoss;
   end;
 
-  function FindBestOffsetAlongY(X, YMaxFix: Integer): Integer;
+  procedure Resample(X1, X2, FixLen: Integer);
   var
-    iY, iOff, bestOff: Integer;
-    bestLoss, l: Double;
+    iSerp, k, j, i, yoff, xii: Integer;
+    rt, p, alpha, xi: Double;
+    plain, pred: TDoubleDynArray;
+    burgCoeffs: TDoubleDynArray;
+    serpData: TSerpCoeffs9;
   begin
-    bestOff := 0;
-    bestLoss := Infinity;
-
-    for iOff := -YMaxFix to YMaxFix do
+    SetLength(burgCoeffs, FixLen * 2);
+    SetLength(plain, X2 - X1);
+    SetLength(pred, Length(plain) + FixLen);
+    for j := 0 to FHeight - 1 do
     begin
-      l := 0.0;
-      for iY := YMaxFix to FHeight - 1 - YMaxFix do
-        l += Abs(FImage[iY * FWidth + X] - FImage[(iY + iOff) * FWidth + X + 1]);
-      l := l / (FHeight - 2 * YMaxFix);
+      yoff := j * FWidth;
 
-      if l < bestLoss then
+      for i := X1 to X2 - 1 do
       begin
-        bestLoss := l;
-        bestOff := iOff;
+        p := FImage[yoff + i];
+        plain[i - X1] := p;
+        pred[i - X1] := p;
+      end;
+
+      BurgAlgorithm(burgCoeffs, plain, Max(0, Length(plain) - Length(burgCoeffs) * 8), High(plain));
+
+      for k := Length(plain) to High(pred) do
+        pred[k] := EnsureRange(BurgAlgorithm_PredictOne(burgCoeffs, pred, k), 0, High(Word));
+
+      rt := Length(pred) / Length(plain);
+      for i := X1 to X2 - 1 do
+      begin
+        xi := (i - X1) * rt;
+        xii := Trunc(xi);
+        alpha := xi - xii;
+
+        for iSerp := Low(TSerpCoeffs9) to -Low(TSerpCoeffs9) do
+          if not InRange(xii + iSerp, 0, High(pred)) then
+            serpData[iSerp] := FImage[yoff + X1 + xii + iSerp]
+          else
+            serpData[iSerp] := pred[xii + iSerp];
+
+        FImage[yoff + i] := EnsureRange(Round(serpFromCoeffs(serpCoeffs(alpha), @serpData[0])), 0, High(Word));
       end;
     end;
 
-    Result := bestOff;
-  end;
-
-  procedure FixOffset(X, Offset: Integer);
-  var
-    iX, iY: Integer;
-  begin
-    if Offset > 0 then
-    begin
-      for iY := 0 to FHeight - 1 do
-        for iX := X + 1 to FWidth - 1 do
-          FImage[iY * FWidth + iX] := FImage[Min(iY + Offset, FHeight - 1) * FWidth + iX];
-    end
-    else if Offset < 0 then
-    begin
-      for iY := FHeight - 1 downto 0 do
-        for iX := X + 1 to FWidth - 1 do
-          FImage[iY * FWidth + iX] := FImage[Max(0, iY + Offset) * FWidth + iX];
-    end;
   end;
 
 const
-  CMaxFix = 32;
   C2400DPIRecurence = 1728;
+  C2400DPIOffset = 7;
 var
-  iRec, phase, recurence, recCnt, offset, x: Integer;
+  iRec, phase, recurence, recCnt, offset, x1, x2: Integer;
   loss: Double;
 begin
   recurence := (C2400DPIRecurence * FDPI) div 2400;
+  offset := (C2400DPIOffset * FDPI) div 2400;
   recCnt := (FWidth - 1) div Recurence;
 
   phase := FindPhaseAlongX(recurence, recCnt, loss);
   WriteLn(ImageShortName, phase:8, loss:12:3);
 
-  for iRec := 0 to recCnt do
+  for iRec := 0 to recCnt - 1 do
   begin
-    x := Round(phase + recurence * iRec);
+    x1 := phase + recurence * (iRec + 0) + 1;
+    x2 := phase + recurence * (iRec + 1) + 1;
 
-    offset := FindBestOffsetAlongY(x, CMaxFix);
-    FixOffset(x, offset);
-
-    WriteLn(ImageShortName, x:8, offset:8);
+    Resample(x1, x2, offset);
   end;
 end;
 
