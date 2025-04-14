@@ -136,6 +136,7 @@ function GridReduceMinimize(Func: TEvalFunc; var X: TDoubleDynArray; GridSize: a
 function NelderMeadMinimize(Func: TEvalFunc; var X: TDoubleDynArray; SimplexExtents: array of Double; Epsilon: Double = 1e-9; Data: Pointer = nil): Double;
 
 function PseudoHuber(x: Double): Double;
+function MAE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 function MAE(const a: TWordDynArray; const b: TWordDynArray): Double;
 function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double; overload;
 function MSE(const a: TWordDynArray; const b: TWordDynArray): Double; overload;
@@ -790,6 +791,24 @@ const
   CInvDelta = 1.0 / CDelta;
 begin
   Result := CDelta * (Sqrt(1.0 + Sqr(x * CInvDelta)) - 1);
+end;
+
+function MAE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
+var
+  i: Integer;
+  acc: Double;
+begin
+  Assert(Length(a) = Length(b));
+
+  Result := 0.0;
+  if not Assigned(a) then
+    Exit;
+
+  acc := 0;
+  for i := 0 to High(a) do
+    acc += Abs(a[i] - b[i]);
+
+  Result := acc / Length(a);
 end;
 
 function MAE(const a: TWordDynArray; const b: TWordDynArray): Double;
