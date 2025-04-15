@@ -692,12 +692,12 @@ var
   iX: Integer;
   InitSimplex: TDoubleDynArray;
 begin
-  Assert(Length(X) = Length(SimplexExtents));
+  Assert((Length(X) = Length(SimplexExtents)) or (Length(SimplexExtents) = 0));
 
   GNMData := Data;
   GNMFunc := Func;
   try
-    SetLength(InitSimplex, Length(X));
+    SetLength(InitSimplex, Length(SimplexExtents));
     for iX := 0 to High(InitSimplex) do
       InitSimplex[iX] := X[iX] + SimplexExtents[iX];
 
