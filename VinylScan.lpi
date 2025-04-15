@@ -144,12 +144,6 @@
     </RunParams>
     <RequiredPackages>
       <Item>
-        <PackageName Value="lmpolynoms"/>
-      </Item>
-      <Item>
-        <PackageName Value="lmRegression"/>
-      </Item>
-      <Item>
         <PackageName Value="lmoptimum"/>
       </Item>
       <Item>

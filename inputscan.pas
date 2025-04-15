@@ -858,35 +858,35 @@ procedure TInputScan.FixCISScanners;
 
   procedure Resample(X1, X2, FixLen: Integer);
   var
-    iSerp, k, j, i, yoff, xii: Integer;
+    iSerp, y, x, iPred, yoff, xii, leftFix, rightFix: Integer;
     rt, p, alpha, xi: Double;
-    plain, pred: TDoubleDynArray;
-    burgCoeffs: TDoubleDynArray;
+    pred: TDoubleDynArray;
     serpData: TSerpCoeffs9;
   begin
-    SetLength(burgCoeffs, FixLen * 2);
-    SetLength(plain, X2 - X1);
-    SetLength(pred, Length(plain) + FixLen);
-    for j := 0 to FHeight - 1 do
-    begin
-      yoff := j * FWidth;
+    leftFix := FixLen div 2;
+    rightFix := FixLen - leftFix;
 
-      for i := X1 to X2 - 1 do
+    SetLength(pred, X2 - X1 + FixLen);
+    for y := 0 to FHeight - 1 do
+    begin
+      yoff := y * FWidth;
+
+      for x := X1 to X2 - 1 do
       begin
-        p := FImage[yoff + i];
-        plain[i - X1] := p;
-        pred[i - X1] := p;
+        p := FImage[yoff + x];
+        pred[x - X1 + leftFix] := p;
       end;
 
-      BurgAlgorithm(burgCoeffs, plain, Max(0, Length(plain) - Length(burgCoeffs) * 8), High(plain));
+      for iPred := leftFix - 1 downto 0 do
+        pred[iPred] := pred[iPred + 1];
 
-      for k := Length(plain) to High(pred) do
-        pred[k] := EnsureRange(BurgAlgorithm_PredictOne(burgCoeffs, pred, k), 0, High(Word));
+      for iPred := High(pred) - rightFix + 1 to High(pred) do
+        pred[iPred] := pred[iPred - 1];
 
-      rt := Length(pred) / Length(plain);
-      for i := X1 to X2 - 1 do
+      rt := Length(pred) / (X2 - X1);
+      for x := X1 to X2 - 1 do
       begin
-        xi := (i - X1) * rt;
+        xi := (x - X1) * rt;
         xii := Trunc(xi);
         alpha := xi - xii;
 
@@ -896,7 +896,7 @@ procedure TInputScan.FixCISScanners;
           else
             serpData[iSerp] := pred[xii + iSerp];
 
-        FImage[yoff + i] := EnsureRange(Round(serpFromCoeffs(serpCoeffs(alpha), @serpData[0])), 0, High(Word));
+        FImage[yoff + x] := EnsureRange(Round(serpFromCoeffs(serpCoeffs(alpha), @serpData[0])), 0, High(Word));
       end;
     end;
 
@@ -904,7 +904,7 @@ procedure TInputScan.FixCISScanners;
 
 const
   C2400DPIRecurence = 1728;
-  C2400DPIOffset = 7;
+  C2400DPIOffset = 6;
 var
   iRec, phase, recurence, recCnt, offset, x1, x2: Integer;
   loss: Double;
