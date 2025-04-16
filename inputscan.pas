@@ -856,34 +856,76 @@ procedure TInputScan.FixCISScanners;
     loss := worstLoss;
   end;
 
+  function GetRadialPredictedPx(y, x, xOffset: Integer): Double;
+  var
+    radius, angle, centerOff, rOff, aOff, aOffPlus, aOffMinus, int, sn, cs, px, py: Double;
+  begin
+    Result := 0.0;
+    centerOff := (x + xOffset) - FCenter.X;
+
+    // angle / radius of the last valid point
+
+    angle := ArcTan2(y - FCenter.Y, x - FCenter.X);
+    radius := Sqrt(Sqr(y - FCenter.Y) + Sqr(x - FCenter.X));
+
+    // angle / radius of the point to predict
+
+    int := sqrt(Max(0, sqr(radius) - Sqr(centerOff)));
+    aOffPlus := ArcTan2(int, centerOff);
+    aOffMinus := ArcTan2(-int, centerOff);
+    if Abs(angle - aOffMinus) < Abs(angle - aOffPlus) then
+      aOff := aOffMinus
+    else
+      aOff := aOffPlus;
+
+    rOff := Sqrt(Sqr(y - FCenter.Y) + Sqr(centerOff));
+
+    // predict mirrored
+
+    radius := rOff;
+    angle := angle + NormalizedAngleDiff(aOff, angle);
+
+    // back to cartesian coords
+
+    SinCos(angle, sn, cs);
+    px := cs * radius + FCenter.X;
+    py := sn * radius + FCenter.Y;
+
+    if InRangePointD(py, px) then
+      Result := GetPointD_Sinc(FImage, py, px)
+  end;
+
   procedure Resample(X1, X2, FixLen: Integer);
   var
     iSerp, y, x, iPred, yoff, xii, leftFix, rightFix: Integer;
-    rt, p, alpha, xi: Double;
-    pred: TDoubleDynArray;
+    rt, alpha, xi: Double;
+    pred: TDoubleDynArray2;
     serpData: TSerpCoeffs9;
   begin
     leftFix := FixLen div 2;
     rightFix := FixLen - leftFix;
 
-    SetLength(pred, X2 - X1 + FixLen);
+    SetLength(pred, FHeight, X2 - X1 + FixLen);
+
     for y := 0 to FHeight - 1 do
     begin
       yoff := y * FWidth;
 
       for x := X1 to X2 - 1 do
-      begin
-        p := FImage[yoff + x];
-        pred[x - X1 + leftFix] := p;
-      end;
+        pred[y, x - X1 + leftFix] := FImage[yoff + x];
 
-      for iPred := leftFix - 1 downto 0 do
-        pred[iPred] := pred[iPred + 1];
+      for iPred := 0 to leftFix - 1 do
+        pred[y, iPred] := GetRadialPredictedPx(y, X1, iPred - leftFix);
 
-      for iPred := High(pred) - rightFix + 1 to High(pred) do
-        pred[iPred] := pred[iPred - 1];
+      for iPred := 0 to rightFix - 1 do
+        pred[y, Length(pred[y]) - rightFix + iPred] := GetRadialPredictedPx(y, X2 - 1, iPred + 1);
+    end;
 
-      rt := Length(pred) / (X2 - X1);
+    rt := (X2 - X1 + FixLen) / (X2 - X1);
+    for y := 0 to FHeight - 1 do
+    begin
+      yoff := y * FWidth;
+
       for x := X1 to X2 - 1 do
       begin
         xi := (x - X1) * rt;
@@ -891,10 +933,10 @@ procedure TInputScan.FixCISScanners;
         alpha := xi - xii;
 
         for iSerp := Low(TSerpCoeffs9) to -Low(TSerpCoeffs9) do
-          if not InRange(xii + iSerp, 0, High(pred)) then
-            serpData[iSerp] := FImage[yoff + X1 + xii + iSerp]
+          if not InRange(xii + iSerp, 0, High(pred[y])) then
+            serpData[iSerp] := FImage[yoff + EnsureRange(X1 + xii + iSerp, 0, FWidth - 1)]
           else
-            serpData[iSerp] := pred[xii + iSerp];
+            serpData[iSerp] := pred[y, xii + iSerp];
 
         FImage[yoff + x] := EnsureRange(Round(serpFromCoeffs(serpCoeffs(alpha), @serpData[0])), 0, High(Word));
       end;
@@ -904,7 +946,7 @@ procedure TInputScan.FixCISScanners;
 
 const
   C2400DPIRecurence = 1728;
-  C2400DPIOffset = 6;
+  C2400DPIOffset = 5;
 var
   iRec, phase, recurence, recCnt, offset, x1, x2: Integer;
   loss: Double;
