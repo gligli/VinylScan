@@ -35,6 +35,7 @@ type
     FSilent: Boolean;
     FSinCosLUT: TSinCosDynArray;
 
+    FCenterExtents: TRect;
     FCenter: TPointD;
     FConcentricGrooveRadius: Double;
     FSkewY: Double;
@@ -62,6 +63,7 @@ type
     function GridReduceConcentricGroove(const x: TVector; obj: Pointer): TScalar;
     function NelderMeadCrop(const x: TVector; obj: Pointer): TScalar;
 
+    procedure FindCenterExtents;
     procedure FindConcentricGroove_GridSearch;
     procedure FindConcentricGroove_Gradient;
     procedure FindGrooveStart;
@@ -162,17 +164,14 @@ end;
 
 procedure TInputScan.FindConcentricGroove_GridSearch;
 const
-  CCorneringThres = 7.0;
   CPointsPerRevolution = 512;
   CSkewDivisor = 1000.0;
   CMinSkew = round(0.98 * CSkewDivisor);
   CMaxSkew = round(1.02 * CSkewDivisor);
 var
-  startBuf: TWordDynArray;
   sinCosLUT: TSinCosDynArray;
   stencilX: array[TValueSign] of Double;
   stencilY: array[TValueSign] of Integer;
-  extents: TRect;
   results: array[CMinSkew .. CMaxSkew] of record
     Objective: Int64;
     X: TVector;
@@ -204,8 +203,8 @@ var
           pyArr[vs, ilut] := round(sinCosLUT[iLut].Sin * (r + stencilX[vs]) * sky);
         end;
 
-      for cy := extents.Top to extents.Bottom do
-        for cx := extents.Left to extents.Right do
+      for cy := FCenterExtents.Top to FCenterExtents.Bottom do
+        for cx := FCenterExtents.Left to FCenterExtents.Right do
         begin
           f := 0;
           for vs := Low(TValueSign) to High(TValueSign) do
@@ -235,101 +234,11 @@ var
     end;
   end;
 
-  function DoXYBuf(var buf: TWordDynArray; xy: Integer; alongY, corr: Boolean): Double;
-  var
-    i: Integer;
-  begin
-    if alongY then
-    begin
-      for i := 0 to Height - 1 do
-       buf[i] := FImage[i * Width + xy];
-    end
-    else
-    begin
-      for i := 0 to Width - 1 do
-       buf[i] := FImage[xy * Width + i];
-    end;
-
-    Result := NaN;
-    if corr then
-      Result := Sqrt(MSE(startBuf, buf));
-  end;
-
 var
-  iRes, radiusLimit, maxCorner, xx, yy: Integer;
-  baseMSE: Double;
+  iRes: Integer;
   bestf: Int64;
   x: TDoubleDynArray;
-  cornerbuf: TWordDynArray;
 begin
-  // init
-
-  radiusLimit := Round(C45RpmOuterSize * 0.5 * FDPI);
-
-  extents.Left := radiusLimit;
-  extents.Top := radiusLimit;
-  extents.Right := Width - radiusLimit;
-  extents.Bottom := Height - radiusLimit;
-
-  //WriteLn(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
-
-  // corner L/T/R/B until the record edges are reached
-
-  if extents.Left <> extents.Right then
-  begin
-    SetLength(startBuf, Height);
-    SetLength(cornerbuf, Height);
-    maxCorner := Width - radiusLimit * 2 - 1;
-
-    DoXYBuf(startBuf, 0, True, False);
-    baseMSE := DoXYBuf(cornerbuf, 2, True, True);
-    for xx := 0 to maxCorner do
-      if (DoXYBuf(cornerbuf, xx, True, True) > CCorneringThres * baseMSE) or (xx = maxCorner) then
-      begin
-        extents.Left := xx + radiusLimit;
-        Break;
-      end;
-
-    DoXYBuf(startBuf, Width - 1, True, False);
-    baseMSE := DoXYBuf(cornerbuf, Width - 3, True, True);
-    for xx := Width - 1 downto Width - 1 - maxCorner do
-      if (DoXYBuf(cornerbuf, xx, True, True) > CCorneringThres * baseMSE) or (xx = Width - 1 - maxCorner) then
-      begin
-        extents.Right := xx - radiusLimit;
-        Break;
-      end;
-  end;
-
-  if extents.Top <> extents.Bottom then
-  begin
-    SetLength(startBuf, Width);
-    SetLength(cornerbuf, Width);
-    maxCorner := Height - radiusLimit * 2 - 1;
-
-    DoXYBuf(startBuf, 0, False, False);
-    baseMSE := DoXYBuf(cornerbuf, 2, False, True);
-    for yy := 0 to maxCorner do
-      if (DoXYBuf(cornerbuf, yy, False, True) > CCorneringThres * baseMSE) or (yy = maxCorner) then
-      begin
-        extents.Top := yy + radiusLimit;
-        Break;
-      end;
-
-    DoXYBuf(startBuf, Height - 1, False, False);
-    baseMSE := DoXYBuf(cornerbuf, Height - 3, False, True);
-    for yy := Height - 1 downto Height - 1 - maxCorner do
-      if (DoXYBuf(cornerbuf, yy, False, True) > CCorneringThres * baseMSE) or (yy = Height - 1 - maxCorner) then
-      begin
-        extents.Bottom := yy - radiusLimit;
-        Break;
-      end;
-  end;
-
-  if extents.Left > extents.Right then Exchange(extents.Left, extents.Right);
-  if extents.Top > extents.Bottom then Exchange(extents.Top, extents.Bottom);
-
-  //WriteLn(ImageShortName, extents.Left:6,extents.Top:6,extents.Right:6,extents.Bottom:6);
-
   // grid search algorithm to find the concentric groove
 
   BuildSinCosLUT(CPointsPerRevolution div 4, sinCosLUT, 0.0, Pi / 2.0);
@@ -342,7 +251,7 @@ begin
   stencilX[ZeroValue] := 0;
   stencilX[PositiveValue] := C45RpmLeadOutGrooveThickness * FDPI;
 
-  x := [extents.CenterPoint.X, extents.CenterPoint.Y, C45RpmConcentricGroove * FDPI * 0.5, 1.0];
+  x := [FCenter.X, FCenter.Y, C45RpmConcentricGroove * FDPI * 0.5, 1.0];
 
   ProcThreadPool.DoParallelLocalProc(@DoSkew, CMinSkew, CMaxSkew);
 
@@ -520,6 +429,8 @@ begin
     LoadTIFF
   else
     LoadPNG;
+
+  FindCenterExtents;
 end;
 
 procedure TInputScan.LoadPNG;
@@ -557,8 +468,6 @@ begin
     end;
 
     FLeveledImage := FImage;
-    FCenter.X := FWidth * 0.5;
-    FCenter.Y := FHeight * 0.5;
   finally
     png.Free;
     fs.Free;
@@ -609,8 +518,6 @@ begin
     end;
 
     FLeveledImage := FImage;
-    FCenter.X := FWidth * 0.5;
-    FCenter.Y := FHeight * 0.5;
   finally
     tiff.Free;
     fs.Free;
@@ -800,6 +707,110 @@ begin
   Result := -MAE(acc[False], acc[True]);
 
   //WriteLn(ImageShortName, ', begin:', RadToDeg(a0a):9:3, ', end:', RadToDeg(a0b):9:3, result:18:6);
+end;
+
+procedure TInputScan.FindCenterExtents;
+const
+  CCorneringThres = 7.0;
+
+var
+  startBuf: TWordDynArray;
+
+  function DoXYBuf(var buf: TWordDynArray; xy: Integer; alongY, corr: Boolean): Double;
+  var
+    i: Integer;
+  begin
+    if alongY then
+    begin
+      for i := 0 to Height - 1 do
+       buf[i] := FImage[i * Width + xy];
+    end
+    else
+    begin
+      for i := 0 to Width - 1 do
+       buf[i] := FImage[xy * Width + i];
+    end;
+
+    Result := NaN;
+    if corr then
+      Result := Sqrt(MSE(startBuf, buf));
+  end;
+
+var
+  radiusLimit, maxCorner, xx, yy: Integer;
+  baseMSE: Double;
+  cornerbuf: TWordDynArray;
+begin
+  // init
+
+  radiusLimit := Round(C45RpmOuterSize * 0.5 * FDPI);
+
+  FCenterExtents.Left := radiusLimit;
+  FCenterExtents.Top := radiusLimit;
+  FCenterExtents.Right := Width - radiusLimit;
+  FCenterExtents.Bottom := Height - radiusLimit;
+
+  //WriteLn(ImageShortName, FCenterExtents.Left:6,FCenterExtents.Top:6,FCenterExtents.Right:6,FCenterExtents.Bottom:6);
+
+  // corner L/T/R/B until the record edges are reached
+
+  if FCenterExtents.Left <> FCenterExtents.Right then
+  begin
+    SetLength(startBuf, Height);
+    SetLength(cornerbuf, Height);
+    maxCorner := Width - radiusLimit * 2 - 1;
+
+    DoXYBuf(startBuf, 0, True, False);
+    baseMSE := DoXYBuf(cornerbuf, 2, True, True);
+    for xx := 0 to maxCorner do
+      if (DoXYBuf(cornerbuf, xx, True, True) > CCorneringThres * baseMSE) or (xx = maxCorner) then
+      begin
+        FCenterExtents.Left := xx + radiusLimit;
+        Break;
+      end;
+
+    DoXYBuf(startBuf, Width - 1, True, False);
+    baseMSE := DoXYBuf(cornerbuf, Width - 3, True, True);
+    for xx := Width - 1 downto Width - 1 - maxCorner do
+      if (DoXYBuf(cornerbuf, xx, True, True) > CCorneringThres * baseMSE) or (xx = Width - 1 - maxCorner) then
+      begin
+        FCenterExtents.Right := xx - radiusLimit;
+        Break;
+      end;
+  end;
+
+  if FCenterExtents.Top <> FCenterExtents.Bottom then
+  begin
+    SetLength(startBuf, Width);
+    SetLength(cornerbuf, Width);
+    maxCorner := Height - radiusLimit * 2 - 1;
+
+    DoXYBuf(startBuf, 0, False, False);
+    baseMSE := DoXYBuf(cornerbuf, 2, False, True);
+    for yy := 0 to maxCorner do
+      if (DoXYBuf(cornerbuf, yy, False, True) > CCorneringThres * baseMSE) or (yy = maxCorner) then
+      begin
+        FCenterExtents.Top := yy + radiusLimit;
+        Break;
+      end;
+
+    DoXYBuf(startBuf, Height - 1, False, False);
+    baseMSE := DoXYBuf(cornerbuf, Height - 3, False, True);
+    for yy := Height - 1 downto Height - 1 - maxCorner do
+      if (DoXYBuf(cornerbuf, yy, False, True) > CCorneringThres * baseMSE) or (yy = Height - 1 - maxCorner) then
+      begin
+        FCenterExtents.Bottom := yy - radiusLimit;
+        Break;
+      end;
+  end;
+
+  if FCenterExtents.Left > FCenterExtents.Right then Exchange(FCenterExtents.Left, FCenterExtents.Right);
+  if FCenterExtents.Top > FCenterExtents.Bottom then Exchange(FCenterExtents.Top, FCenterExtents.Bottom);
+
+  //WriteLn(ImageShortName, FCenterExtents.Left:6,FCenterExtents.Top:6,FCenterExtents.Right:6,FCenterExtents.Bottom:6);
+
+  FCenter.X := lerp(FCenterExtents.Left, FCenterExtents.Right, 0.5);
+  FCenter.Y := lerp(FCenterExtents.Top, FCenterExtents.Bottom, 0.5);
 end;
 
 procedure TInputScan.Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
