@@ -18,7 +18,6 @@ type
     RadiusAngleLUT: TRadiusAngleDynArray;
     SinCosLUT: TSinCosDynArray;
     PreparedValues, Weights: TDoubleDynArray;
-    PreparedRelativities: TShortIntDynArray;
     StartAngle, EndAngle: Double;
     BaseMean, Mean: Double;
   end;
@@ -54,6 +53,7 @@ type
     procedure PrepareCorrect(var Coords: TAngleScanCoords);
     function GridSearchCorrect(ConstSkew, MulSkew, SqrSkew: Double; const Coords: TAngleScanCoords): Double;
     function NelderMeadCorrect(const arg: TDoubleDynArray; data: Pointer): Double;
+    procedure GradientCorrect(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
 
     procedure AngleInit;
     procedure Analyze;
@@ -107,8 +107,8 @@ const
   CAnalyzeAreaEnd = C45RpmLabelOuterSize;
 
   CCorrectAngleCount = 36;
-  CCorrectAreaBegin = C45RpmMinConcentricGroove;
-  CCorrectAreaEnd = C45RpmStylusSetDown;
+  CCorrectAreaBegin = C45RpmLabelOuterSize;
+  CCorrectAreaEnd = C45RpmOuterSize;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
@@ -689,7 +689,7 @@ begin
   centerY  := baseScan.Center.Y;
   skewY := baseScan.SkewY;
 
-  SetLength(Coords.PreparedRelativities, Length(Coords.RadiusAngleLUT));
+  SetLength(Coords.PreparedValues, Length(Coords.RadiusAngleLUT));
   for iLut := 0 to High(Coords.RadiusAngleLUT) do
   begin
     ra := @Coords.RadiusAngleLUT[iLut];
@@ -700,9 +700,9 @@ begin
     py := sc^.Sin * r * skewY + centerY;
 
     if baseScan.InRangePointD(py, px) then
-      Coords.PreparedRelativities[iLut] := CompareValue(baseScan.GetPointD_Linear(baseScan.LeveledImage, py, px), Coords.BaseMean)
+      Coords.PreparedValues[iLut] := TanH((baseScan.GetPointD_Linear(baseScan.LeveledImage, py, px) - Coords.BaseMean) * (1.0 / 512.0))
     else
-      Coords.PreparedRelativities[iLut] := High(ShortInt);
+      Coords.PreparedValues[iLut] := 1e6;
   end;
 
   sinCosLUT := OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, scan.RelativeAngle);
@@ -732,15 +732,15 @@ begin
     sc := @Coords.SinCosLUT[iLut];
 
     r := ra^.Radius;
-    r := Sqr(r) * SqrSkew + (r) * MulSkew + ConstSkew;
+    r := Sqr(r) * SqrSkew + r * MulSkew + ConstSkew;
 
     px := sc^.Cos * r + centerX;
     py := sc^.Sin * r * skewY + centerY;
 
     if scan.InRangePointD(py, px) then
-      Result += Sqr((Coords.PreparedRelativities[iLut] - CompareValue(scan.GetPointD_Linear(scan.LeveledImage, py, px), Coords.Mean)) * Coords.Weights[iLut])
+      Result += Sqr((Coords.PreparedValues[iLut] - TanH((scan.GetPointD_Linear(scan.LeveledImage, py, px) - Coords.Mean) * (1.0 / 512.0))) * Coords.Weights[iLut])
     else
-      Result += 1e6;
+      Result += Sqr(1e6);
   end;
 
   Result := Sqrt(Result / Length(Coords.RadiusAngleLUT));
@@ -749,6 +749,50 @@ end;
 function TScanCorrelator.NelderMeadCorrect(const arg: TDoubleDynArray; data: Pointer): Double;
 begin
   Result := GridSearchCorrect(arg[0], arg[1], arg[2], PAngleScanCoords(data)^);
+end;
+
+procedure TScanCorrelator.GradientCorrect(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj:
+ Pointer);
+const
+  CH = 1e-8;
+var
+  iFD: Integer;
+  ConstSkew, MulSkew, SqrSkew, fdx, fdy, gskc, gskm, gsks: Double;
+begin
+  ConstSkew := arg[0];
+  MulSkew := arg[1];
+  SqrSkew := arg[2];
+
+  func := GridSearchCorrect(ConstSkew, MulSkew, SqrSkew, PAngleScanCoords(obj)^);
+
+  if Assigned(grad) then
+  begin
+    gskc := 0.0;
+    gskm := 0.0;
+    gsks := 0.0;
+
+    for iFD := Low(CFiniteDifferencesYFactor) to High(CFiniteDifferencesYFactor) do
+    begin
+      if iFD = 0 then
+        Continue;
+
+      fdx := iFD * CH;
+      fdy := CFiniteDifferencesYFactor[iFD] / CH;
+
+      gskc += GridSearchCorrect(ConstSkew + fdx, MulSkew, SqrSkew, PAngleScanCoords(obj)^) * fdy;
+      gskm += GridSearchCorrect(ConstSkew, MulSkew + fdx, SqrSkew, PAngleScanCoords(obj)^) * fdy;
+      gsks += GridSearchCorrect(ConstSkew, MulSkew, SqrSkew + fdx, PAngleScanCoords(obj)^) * fdy;
+    end;
+
+    grad[0] := gskc;
+    grad[1] := gskm;
+    grad[2] := gsks;
+  end;
+
+  //if Assigned(grad) then
+  //  WriteLn(func:12:9, arg[0]:12:6, arg[1]:12:6, arg[2]:12:9, grad[0]:12:6, grad[1]:12:6, grad[2]:12:6)
+  //else
+  //  WriteLn(func:12:9, arg[0]:12:6, arg[1]:12:6, arg[2]:12:9);
 end;
 
 procedure TScanCorrelator.Correct;
@@ -778,11 +822,12 @@ var
     X := [0.0, 1.0, 0.0];
     Extents := [0.015 * scan.DPI, 0.002, 5e-7];
     loss := GridReduceMinimize(@NelderMeadCorrect, X, [20, 20, 20], Extents, 1e-3, '', coords);
+    loss := CGScaledMinimize(@GradientCorrect, X, [1e-3, 1e-6, 1e-9], 1e-9, coords);
 
     // free up memory
     SetLength(coords^.RadiusAngleLUT, 0);
     SetLength(coords^.SinCosLUT, 0);
-    SetLength(coords^.PreparedRelativities, 0);
+    SetLength(coords^.PreparedValues, 0);
     SetLength(coords^.Weights, 0);
 
     FPerAngleSkew[AIndex, 0].ConstSkew := X[0];

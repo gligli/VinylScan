@@ -972,7 +972,7 @@ begin
   for iRec := 0 to recCnt - 1 do
   begin
     x1 := phase + recurence * (iRec + 0) + 1;
-    x2 := phase + recurence * (iRec + 1) + 1;
+    x2 := Min(FWidth - 1, phase + recurence * (iRec + 1) + 1);
 
     Resample(x1, x2, offset);
   end;
@@ -1000,48 +1000,26 @@ begin
 end;
 
 procedure TInputScan.GetGradientsD(const Image: TWordDynArray; Y, X: Double; out GY: Double; out GX: Double);
+const
+  CH = 0.25;
 var
-  i, iy, ix, xy, iw: Integer;
-  lG00, lG01, lG10, lG11, lgx, lgy, fdy: Double;
+  iFD: Integer;
+  lgx, lgy, fdx, fdy: Double;
 begin
-  ix := trunc(X);
-  iy := trunc(Y);
-
-  xy := iy * FWidth + ix;
-
   lgx := 0.0;
   lgy := 0.0;
 
-  lG00 := 0.0; lG01 := 0.0; lG10 := 0.0; lG11 := 0.0;
-  for i := Low(CFiniteDifferencesYFactor) to High(CFiniteDifferencesYFactor) do
+  for iFD := Low(CFiniteDifferencesYFactor) to High(CFiniteDifferencesYFactor) do
   begin
-    if i = 0 then
+    if iFD = 0 then
       Continue;
 
-    fdy := CFiniteDifferencesYFactor[i];
+    fdx := iFD * CH;
+    fdy := CFiniteDifferencesYFactor[iFD] / CH;
 
-    lG00 += Image[xy + i] * fdy;
-    lG01 += Image[xy + 1 + i] * fdy;
-    lG10 += Image[xy + FWidth + i] * fdy;
-    lG11 += Image[xy + FWidth + 1 + i] * fdy;
+    lgx += GetPointD_Linear(Image, y, x + fdx) * fdy;
+    lgy += GetPointD_Linear(Image, y + fdx, x) * fdy;
   end;
-  lgx += lerp(lerp(lG00, lG01, X - ix), lerp(lG10, lG11, X - ix), Y - iy);
-
-  lG00 := 0.0; lG01 := 0.0; lG10 := 0.0; lG11 := 0.0;
-  for i := Low(CFiniteDifferencesYFactor) to High(CFiniteDifferencesYFactor) do
-  begin
-    if i = 0 then
-      Continue;
-
-    iw := i * FWidth;
-    fdy := CFiniteDifferencesYFactor[i];
-
-    lG00 += Image[xy + iw] * fdy;
-    lG01 += Image[xy + 1 + iw] * fdy;
-    lG10 += Image[xy + FWidth + iw] * fdy;
-    lG11 += Image[xy + FWidth + 1 + iw] * fdy;
-  end;
-  lgy += lerp(lerp(lG00, lG01, X - ix), lerp(lG10, lG11, X - ix), Y - iy);
 
   GX := lgx;
   GY := lgy;
