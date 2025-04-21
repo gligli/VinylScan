@@ -82,6 +82,10 @@ procedure TMainForm.btScan2TrackClick(Sender: TObject);
 var
   s2t: TScan2Track;
 begin
+  if not pnSettings.Enabled then
+    Exit;
+
+  pnSettings.Enabled := False;
   s2t := TScan2Track.Create(StrToIntDef(cbDPI.Text, 2400), False, StrToIntDef(cbSR.Text, 48000), sePrec.Value);
   try
     s2t.OnSample := @OnSample;
@@ -97,6 +101,7 @@ begin
 
   finally
     s2t.Free;
+    pnSettings.Enabled := True;
   end;
 end;
 
@@ -128,6 +133,10 @@ procedure TMainForm.btScansCorrelatorClick(Sender: TObject);
 var
   sc: TScanCorrelator;
 begin
+  if not pnSettings.Enabled then
+    Exit;
+
+  pnSettings.Enabled := False;
   sc := TScanCorrelator.Create(mmInputPNGs.Lines, StrToIntDef(cbDPI.Text, 2400));
   try
     sc.OutputPNGFileName := edOutputPNG.Text;
@@ -154,6 +163,7 @@ begin
       sc.Save;
   finally
     sc.Free;
+    pnSettings.Enabled := True;
   end;
 end;
 
