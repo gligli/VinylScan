@@ -19,6 +19,7 @@ type
     btOutWAV: TButton;
     btScan2Track: TButton;
     btScansCorrelator: TButton;
+    cbQSRatio: TComboBox;
     chkFixCIS: TCheckBox;
     chkDefaultDPI: TCheckBox;
     chkCorrect: TCheckBox;
@@ -30,6 +31,7 @@ type
     edOutputPNG: TEdit;
     edOutputWAV: TEdit;
     Image: TImage;
+    llQSRatio: TLabel;
     llDPI: TLabel;
     llBlend: TLabel;
     llSR: TLabel;
@@ -146,6 +148,7 @@ begin
     sc.CorrectAngles := chkCorrect.Checked;
     sc.RebuildBlendCount := seBlend.Value;
     sc.RebuildScaled := not chkDefaultDPI.Checked;
+    sc.QualitySpeedRatio := StrToFloatDef(cbQSRatio.Text, 1.0, InvariantFormatSettings);
 
     sc.LoadScans;
 
@@ -265,6 +268,7 @@ begin
     chkCorrect.Checked := sc.CorrectAngles;
     seBlend.Value := sc.RebuildBlendCount;
     chkDefaultDPI.Checked := not sc.RebuildScaled;
+    cbQSRatio.Text := FormatFloat('0.0', sc.QualitySpeedRatio, InvariantFormatSettings);
     cbDPI.Text := IntToStr(sc.OutputDPI);
     cbSR.Text := IntToStr(s2t.SampleRate);
     sePrec.Value := s2t.DecoderPrecision;

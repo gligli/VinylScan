@@ -96,6 +96,8 @@ const
   //CFiniteDifferencesYFactor: array[-4 .. 4] of Double = (1/280, -4/105, 1/5, -4/5, 0, 4/5, -1/5, 4/105, -1/280);
   //CFiniteDifferencesYFactor: array[-2 .. 2] of Double = (1/12, -2/3, 0, 2/3, -1/12);
 
+function InvariantFormatSettings: TFormatSettings;
+
 procedure SpinEnter(Lock: PSpinLock); assembler;
 procedure SpinLeave(Lock: PSpinLock); assembler;
 function NumberOfProcessors: Integer;
@@ -170,7 +172,9 @@ function BurgAlgorithm_PredictOne(const coeffs: TDoubleDynArray; const x: TDoubl
 implementation
 uses utypes, ubfgs, usimplex;
 
-var GSerpCoeffs9ByWord: TSerpCoeffs9ByWord;
+var
+  GInvariantFormatSettings: TFormatSettings;
+  GSerpCoeffs9ByWord: TSerpCoeffs9ByWord;
 
 procedure SpinEnter(Lock: PSpinLock); assembler;
 label spin_lock;
@@ -1401,8 +1405,15 @@ begin
     Result -= coeffs[ i ] * x[ from - 1 - i ];
 end;
 
+function InvariantFormatSettings: TFormatSettings;
+begin
+  Result := GInvariantFormatSettings;
+end;
+
 
 initialization
+  GetLocaleFormatSettings(LOCALE_INVARIANT, GInvariantFormatSettings);
+
 {$ifdef DEBUG}
   ProcThreadPool.MaxThreadCount := 1;
 {$else}

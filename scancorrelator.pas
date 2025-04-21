@@ -35,6 +35,7 @@ type
     FCorrectAngles: Boolean;
     FRebuildScaled: Boolean;
     FRebuildBlendCount: Integer;
+    FQualitySpeedRatio: Double;
     FOutputPNGFileName: String;
     FOutputDPI: Integer;
     FLock: TSpinlock;
@@ -75,6 +76,7 @@ type
     property CorrectAngles: Boolean read FCorrectAngles write FCorrectAngles;
     property RebuildBlendCount: Integer read FRebuildBlendCount write FRebuildBlendCount;
     property RebuildScaled: Boolean read FRebuildScaled write FRebuildScaled;
+    property QualitySpeedRatio: Double read FQualitySpeedRatio write FQualitySpeedRatio;
 
     property OutputDPI: Integer read FOutputDPI;
     property OutputWidth: Integer read FOutputWidth;
@@ -131,6 +133,7 @@ begin
   FCorrectAngles := True;
   FRebuildScaled := True;
   FRebuildBlendCount := 32;
+  FQualitySpeedRatio := 1.0;
 end;
 
 destructor TScanCorrelator.Destroy;
@@ -307,7 +310,7 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * baseScan.DPI, CAnalyzeAreaEnd * 0.5 * baseScan.DPI, -Pi, Pi, 1.0);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * baseScan.DPI, CAnalyzeAreaEnd * 0.5 * baseScan.DPI, -Pi, Pi, 1.0 / FQualitySpeedRatio);
   sinCosLUT := OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, baseScan.RelativeAngle);
 
   Coords.BaseMeanSD := baseScan.GetMeanSD(CAnalyzeAreaBegin * 0.5 * baseScan.DPI, CAnalyzeAreaEnd * 0.5 * baseScan.DPI, -Pi, Pi);
@@ -624,7 +627,7 @@ begin
 
   // build radius / angle lookup table
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, Coords.StartAngle, Coords.EndAngle, 1.0);
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CCorrectAreaBegin * 0.5 * baseScan.DPI, CCorrectAreaEnd * 0.5 * baseScan.DPI, Coords.StartAngle, Coords.EndAngle, 1.0 / FQualitySpeedRatio);
 
   // build weights lookup table
 
