@@ -131,6 +131,9 @@
             <CustomOptions Value="-Xs-
 -Fwlib\$(TargetCPU)-$(TargetOS)-fb.wpo
 -OwALL"/>
+            <ExecuteAfter>
+              <Command Value="$(LazarusDir)fpc\$(FPCVer)\bin\x86_64-win64\strip.exe $(OutputFile)"/>
+            </ExecuteAfter>
           </Other>
         </CompilerOptions>
       </Item>
