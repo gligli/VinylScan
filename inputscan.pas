@@ -38,7 +38,6 @@ type
     FCenterExtents: TRect;
     FCenter: TPointD;
     FConcentricGrooveRadius: Double;
-    FSkewY: Double;
     FSetDownRadius: Double;
     FGrooveStartAngle: Double;
     FGrooveStartPoint: TPointD;
@@ -77,14 +76,14 @@ type
     procedure LoadImage;
     procedure BrickwallLimit;
     procedure FindTrack(AUseGradient: Boolean; AForcedSampleRate: Integer = -1);
-    procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle, ASkewY: Double);
+    procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle: Double);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
     procedure FixCISScanners;
 
     function InRangePointD(Y, X: Double): Boolean;
     function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
-    procedure GetGradientsD(const Image: TWordDynArray; Y, X: Double; out GY: Double; out GX: Double);
     function GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single;
+    function GetMeanSD(AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;
 
     procedure AddCorrectRef(AngleIdx, ScanIdx: Integer);
     function HasCorrectRef(const AList: TInputScanDynArray; AngleIdx, ScanIdx: Integer): Boolean;
@@ -103,9 +102,9 @@ type
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
 
+    property CenterExtents: TRect read FCenterExtents;
     property Center: TPointD read FCenter;
     property RelativeAngle: Double read FRelativeAngle;
-    property SkewY: Double read FSkewY;
     property CropData: TCropData read FCropData;
 
     property CenterQuality: Double read FCenterQuality;
@@ -165,79 +164,72 @@ end;
 procedure TInputScan.FindConcentricGroove_GridSearch;
 const
   CPointsPerRevolution = 512;
-  CSkewDivisor = 1000.0;
-  CMinSkew = round(0.98 * CSkewDivisor);
-  CMaxSkew = round(1.02 * CSkewDivisor);
 var
   sinCosLUT: TSinCosDynArray;
+  mnRadius, mxRadius: Integer;
   stencilX: array[TValueSign] of Double;
   stencilY: array[TValueSign] of Integer;
-  results: array[CMinSkew .. CMaxSkew] of record
+  results: array of record
     Objective: Int64;
     X: TVector;
   end;
 
   procedure DoSkew(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
-    cx, cy, k, iLut, px, py, ff, resIdx: Integer;
-    sky, r: Double;
+    cx, cy, iLut, px, py, ff, resIdx: Integer;
+    r: Double;
     f: Int64;
     vs: TValueSign;
     pxArr, pyArr: array[TValueSign, 0 .. CPointsPerRevolution div 4 - 1] of Integer;
   begin
-    resIdx := AIndex;
-    if not InRange(resIdx, CMinSkew, CMaxSkew) then
+    if not InRange(AIndex, mnRadius, mxRadius) then
       Exit;
 
+    r := AIndex;
+    resIdx := AIndex - mnRadius;
     results[resIdx].Objective := Low(Int64);
 
-    sky := resIdx / CSkewDivisor;
-    for k := round(C45RpmMinConcentricGroove * FDPI * 0.5) to round(C45RpmMaxConcentricGroove * FDPI * 0.5) do
-    begin
-      r := k;
+    for vs := Low(TValueSign) to High(TValueSign) do
+      for iLut := 0 to High(sinCosLUT) do
+      begin
+        pxArr[vs, ilut] := round(sinCosLUT[iLut].Cos * (r + stencilX[vs]));
+        pyArr[vs, ilut] := round(sinCosLUT[iLut].Sin * (r + stencilX[vs]))
+      end;
 
-      for vs := Low(TValueSign) to High(TValueSign) do
-        for iLut := 0 to High(sinCosLUT) do
+    for cy := FCenterExtents.Top to FCenterExtents.Bottom do
+      for cx := FCenterExtents.Left to FCenterExtents.Right do
+      begin
+        f := 0;
+        for vs := Low(TValueSign) to High(TValueSign) do
         begin
-          pxArr[vs, ilut] := round(sinCosLUT[iLut].Cos * (r + stencilX[vs]));
-          pyArr[vs, ilut] := round(sinCosLUT[iLut].Sin * (r + stencilX[vs]) * sky);
-        end;
+          ff := 0;
 
-      for cy := FCenterExtents.Top to FCenterExtents.Bottom do
-        for cx := FCenterExtents.Left to FCenterExtents.Right do
-        begin
-          f := 0;
-          for vs := Low(TValueSign) to High(TValueSign) do
+          for iLut := 0 to High(sinCosLUT) do
           begin
-            ff := 0;
+            px := pxArr[vs, iLut];
+            py := pyArr[vs, iLut];
 
-            for iLut := 0 to High(sinCosLUT) do
-            begin
-              px := pxArr[vs, iLut];
-              py := pyArr[vs, iLut];
-
-              ff += FLeveledImage[(cy - py) * Width + cx + px];
-              ff += FLeveledImage[(cy - py) * Width + cx - px];
-              ff += FLeveledImage[(cy + py) * Width + cx + px];
-              ff += FLeveledImage[(cy + py) * Width + cx - px];
-            end;
-
-            f += ff * stencilY[vs];
+            ff += FLeveledImage[(cy - py) * Width + cx + px];
+            ff += FLeveledImage[(cy - py) * Width + cx - px];
+            ff += FLeveledImage[(cy + py) * Width + cx + px];
+            ff += FLeveledImage[(cy + py) * Width + cx - px];
           end;
 
-          if f > results[resIdx].Objective then
-          begin
-            results[resIdx].Objective := f;
-            results[resIdx].X := [cx, cy, r, sky];
-          end;
+          f += ff * stencilY[vs];
         end;
-    end;
+
+        if f > results[resIdx].Objective then
+        begin
+          results[resIdx].Objective := f;
+          results[resIdx].X := [cx, cy, r];
+        end;
+      end;
   end;
 
 var
   iRes: Integer;
   bestf: Int64;
-  x: TDoubleDynArray;
+  X: TDoubleDynArray;
 begin
   // grid search algorithm to find the concentric groove
 
@@ -251,41 +243,71 @@ begin
   stencilX[ZeroValue] := 0;
   stencilX[PositiveValue] := C45RpmLeadOutGrooveThickness * FDPI;
 
-  x := [FCenter.X, FCenter.Y, C45RpmConcentricGroove * FDPI * 0.5, 1.0];
+  X := [FCenter.X, FCenter.Y, C45RpmConcentricGroove * FDPI * 0.5];
 
-  ProcThreadPool.DoParallelLocalProc(@DoSkew, CMinSkew, CMaxSkew);
+  mnRadius := Ceil(C45RpmMinConcentricGroove * FDPI * 0.5);
+  mxRadius := Ceil(C45RpmMaxConcentricGroove * FDPI * 0.5);
+  SetLength(results, mxRadius - mnRadius + 1);
+  ProcThreadPool.DoParallelLocalProc(@DoSkew, mnRadius, mxRadius);
 
   bestf := Low(Int64);
-  for iRes := CMinSkew to CMaxSkew do
+  for iRes := 0 to High(results) do
     if results[iRes].Objective > bestf then
     begin
       bestf := results[iRes].Objective;
-      x := results[iRes].X;
+      X := results[iRes].X;
     end;
 
-  FCenter.X := x[0];
-  FCenter.Y := x[1];
-  FConcentricGrooveRadius := x[2];
-  FSkewY := x[3];
+  FCenter.X := X[0];
+  FCenter.Y := X[1];
+  FConcentricGrooveRadius := X[2];
   FCenterQuality := bestf / High(Word);
 
-  //WriteLn(ImageShortName, FCenter.X:12:3, FCenter.Y:12:3, FConcentricGrooveRadius:12:3, FSkewY:12:6, FCenterQuality:12:0);
+  //WriteLn(ImageShortName, FCenter.X:12:3, FCenter.Y:12:3, FConcentricGrooveRadius:12:3, FCenterQuality:12:0);
 end;
 
 procedure TInputScan.GradientConcentricGroove(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray;
   obj: Pointer);
 var
-  iLut: Integer;
-  px, py, cx, cy, sky, r, cs, sn, gix, giy, gcx, gcy, gr, gsky, rsx, sy: Double;
+  meanSD: ^TPointD absolute obj;
   stencilX: array[TValueSign] of Double;
   stencilY: array[TValueSign] of Integer;
-  vs: TValueSign;
-begin
-  cx := arg[0];
-  cy := arg[1];
-  r := arg[2];
-  sky := arg[3];
 
+  function DoFunc(CenterX, CenterY, Radius: Double): Double;
+  var
+    iLut: Integer;
+    px, py, cs, sn, rsx, sy: Double;
+    vs: TValueSign;
+  begin
+    Result := 0.0;
+
+    for iLut := 0 to High(FSinCosLUT) do
+    begin
+      cs := FSinCosLUT[iLut].Cos;
+      sn := FSinCosLUT[iLut].Sin;
+
+      for vs := Low(TValueSign) to High(TValueSign) do
+      begin
+        rsx := Radius + stencilX[vs];
+        sy := stencilY[vs];
+
+        px := cs * rsx + CenterX;
+        py := sn * rsx + CenterY;
+
+        if InRangePointD(py, px) then
+          Result -= TanH((GetPointD_Linear(FLeveledImage, py, px) - meanSD^.X) / meanSD^.Y) * sy
+        else
+          Result += 1e6;
+      end;
+    end;
+  end;
+
+const
+  CH = 1e-8;
+var
+  iFD: Integer;
+  CenterX, CenterY, Radius, fdx, fdy, gskc, gskm, gsks: Double;
+begin
   stencilY[NegativeValue] := -1;
   stencilY[ZeroValue] := 2;
   stencilY[PositiveValue] := -1;
@@ -294,53 +316,34 @@ begin
   stencilX[ZeroValue] := 0;
   stencilX[PositiveValue] := C45RpmLeadOutGrooveThickness * FDPI;
 
-  func := 0.0;
+  CenterX := arg[0];
+  CenterY := arg[1];
+  Radius := arg[2];
+
+  func := DoFunc(CenterX, CenterY, Radius);
+
   if Assigned(grad) then
-    FillQWord(grad[0], Length(grad), 0);
-
-  gcx := 0.0;
-  gcy := 0.0;
-  gr := 0.0;
-  gsky := 0.0;
-
-  for iLut := 0 to High(FSinCosLUT) do
   begin
-    cs := FSinCosLUT[iLut].Cos;
-    sn := FSinCosLUT[iLut].Sin;
+    gskc := 0.0;
+    gskm := 0.0;
+    gsks := 0.0;
 
-    for vs := Low(TValueSign) to High(TValueSign) do
+    for iFD := Low(CFiniteDifferencesYFactor) to High(CFiniteDifferencesYFactor) do
     begin
-      rsx := r + stencilX[vs];
-      sy := stencilY[vs];
+      if iFD = 0 then
+        Continue;
 
-      px := cs * rsx + cx;
-      py := sn * rsx * sky + cy;
+      fdx := iFD * CH;
+      fdy := CFiniteDifferencesYFactor[iFD] / CH;
 
-      if InRangePointD(py, px) then
-      begin
-        func -= GetPointD_Linear(FLeveledImage, py, px) * sy;
-
-        if Assigned(grad) then
-        begin
-          GetGradientsD(FLeveledImage, py, px, giy, gix);
-
-          gcx -= gix * sy;
-          gcy -= giy * sy;
-          gr -= (gix * cs + giy * sn * sky) * sy;
-          gsky -= giy * sn * sy;
-        end;
-      end;
+      gskc += DoFunc(CenterX + fdx, CenterY, Radius) * fdy;
+      gskm += DoFunc(CenterX, CenterY + fdx, Radius) * fdy;
+      gsks += DoFunc(CenterX, CenterY, Radius + fdx) * fdy;
     end;
-  end;
 
-  func /= High(Word);
-
-  if Assigned(grad) then
-  begin
-    grad[0] := gcx / High(Word);
-    grad[1] := gcy / High(Word);
-    grad[2] := gr / High(Word);
-    grad[3] := gsky / High(Word);
+    grad[0] := gskc;
+    grad[1] := gskm;
+    grad[2] := gsks;
   end;
 end;
 
@@ -352,18 +355,20 @@ end;
 procedure TInputScan.FindConcentricGroove_Gradient;
 var
   ff: Double;
+  meanSD: TPointD;
   X: TDoubleDynArray;
 begin
   BuildSinCosLUT(Ceil(Pi * C45RpmConcentricGroove * FDPI), FSinCosLUT);
 
-  X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius, FSkewY];
+  meanSD := GetMeanSD(C45RpmMinConcentricGroove * 0.5 * FDPI, C45RpmMaxConcentricGroove * 0.5 * FDPI, -Pi, Pi);
 
-  ff := GradientDescentMinimize(@GradientConcentricGroove, X, [0.0005, 0.0005, 0.0002, 0.0000001], 1e-6, 10000, True);
+  X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius];
+
+  ff := BFGSMinimize(@GradientConcentricGroove, X, 1e-6, @meanSD);
 
   FCenter.X := X[0];
   FCenter.Y := X[1];
   FConcentricGrooveRadius := X[2];
-  FSkewY := X[3];
   FCenterQuality := -ff;
 end;
 
@@ -383,7 +388,7 @@ begin
     SinCos(i * FRadiansPerRevolutionPoint, sn, cs);
 
     x := cs * FSetDownRadius + FCenter.X;
-    y := sn * FSetDownRadius * FSkewY + FCenter.Y;
+    y := sn * FSetDownRadius + FCenter.Y;
 
     if InRangePointD(y, x) then
     begin
@@ -412,7 +417,6 @@ begin
   FSilent := ASilent;
   FCenterQuality := -Infinity;
   FObjective := Infinity;
-  FSkewY := 1.0;
 
   SetRevolutionFromDPI(FDPI);
 end;
@@ -630,7 +634,6 @@ begin
   begin
     WriteLn('Center:', FCenter.X:12:3, ',', FCenter.Y:12:3);
     WriteLn('ConcentricGrooveRadius:', FConcentricGrooveRadius:12:3);
-    WriteLn('SkewY:', FSkewY:12:6);
     WriteLn('CenterQuality:', FCenterQuality:12:6);
     WriteLn('SetDownRadius:', FSetDownRadius:12:3);
     WriteLn('GrooveStartPoint:', FGrooveStartPoint.X:12:3, ',', FGrooveStartPoint.Y:12:3);
@@ -638,16 +641,15 @@ begin
   end
   else
   begin
-    WriteLn(ImageFileName, ', CenterX:', FCenter.X:9:3, ', CenterY:', FCenter.Y:9:3, ', ConcentricGroove:', FConcentricGrooveRadius:10:3, ', SkewY:', FSkewY:9:6, ', Quality:', FCenterQuality:12:3);
+    WriteLn(ImageFileName, ', CenterX:', FCenter.X:9:3, ', CenterY:', FCenter.Y:9:3, ', ConcentricGroove:', FConcentricGrooveRadius:10:3, ', Quality:', FCenterQuality:12:3);
   end;
 end;
 
-procedure TInputScan.CorrectByModel(ACenterX, ACenterY, ARelativeAngle, ASkewY: Double);
+procedure TInputScan.CorrectByModel(ACenterX, ACenterY, ARelativeAngle: Double);
 begin
   if not IsNan(ACenterX) then FCenter.X := ACenterX;
   if not IsNan(ACenterY) then FCenter.Y := ACenterY;
   if not IsNan(ARelativeAngle) then FRelativeAngle := ARelativeAngle;
-  if not IsNan(ASkewY) then FSkewY := ASkewY;
 end;
 
 function TInputScan.NelderMeadCrop(const x: TVector; obj: Pointer): TScalar;
@@ -711,8 +713,7 @@ end;
 
 procedure TInputScan.FindCenterExtents;
 const
-  CCorneringThres = 7.0;
-
+  CCorneringThres = 3.0;
 var
   startBuf: TWordDynArray;
 
@@ -999,32 +1000,6 @@ begin
   Result := lerp(y1, y2, Y - iy);
 end;
 
-procedure TInputScan.GetGradientsD(const Image: TWordDynArray; Y, X: Double; out GY: Double; out GX: Double);
-const
-  CH = 0.25;
-var
-  iFD: Integer;
-  lgx, lgy, fdx, fdy: Double;
-begin
-  lgx := 0.0;
-  lgy := 0.0;
-
-  for iFD := Low(CFiniteDifferencesYFactor) to High(CFiniteDifferencesYFactor) do
-  begin
-    if iFD = 0 then
-      Continue;
-
-    fdx := iFD * CH;
-    fdy := CFiniteDifferencesYFactor[iFD] / CH;
-
-    lgx += GetPointD_Linear(Image, y, x + fdx) * fdy;
-    lgy += GetPointD_Linear(Image, y + fdx, x) * fdy;
-  end;
-
-  GX := lgx;
-  GY := lgy;
-end;
-
 function TInputScan.GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single;
 var
   ix, iy: Integer;
@@ -1040,6 +1015,42 @@ begin
   serpFromCoeffsXY(coeffsX, @Image[iy * FWidth + ix], FWidth, @intData[0]);
 
   Result := serpFromCoeffs(coeffsY, @intData[0]);
+end;
+
+function TInputScan.GetMeanSD(AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;
+var
+  iRadius, iLut, cnt: Integer;
+  diff: Double;
+  sinCosLUT: TSinCosDynArray;
+begin
+  diff := NormalizedAngleDiff(AStartAngle, AEndAngle);
+  if diff = 0 then
+    diff := 2.0 * Pi;
+
+  BuildSinCosLUT(Ceil(AEndRadius * diff), sinCosLUT, AStartAngle, diff);
+
+  cnt := 0;
+  Result.X := 0.0;
+  for iRadius := Floor(AStartRadius) to Ceil(AEndRadius) do
+    for iLut := 0 to High(sinCosLUT) do
+    begin
+      Result.X += GetPointD_Linear(FLeveledImage, sinCosLUT[iLut].Sin * iRadius + FCenter.Y, sinCosLUT[iLut].Cos * iRadius + FCenter.X);
+      Inc(cnt);
+    end;
+  Result.X /= cnt;
+
+  cnt := 0;
+  Result.Y := 0.0;
+  for iRadius := Floor(AStartRadius) to Ceil(AEndRadius) do
+    for iLut := 0 to High(sinCosLUT) do
+    begin
+      Result.Y += Sqr(GetPointD_Linear(FLeveledImage, sinCosLUT[iLut].Sin * iRadius + FCenter.Y, sinCosLUT[iLut].Cos * iRadius + FCenter.X) - Result.X);
+      Inc(cnt);
+    end;
+  Result.Y /= cnt;
+  Result.Y := Sqrt(Result.Y);
+
+  //WriteLn(Result.X:16:6, Result.Y:16:6);
 end;
 
 procedure TInputScan.AddCorrectRef(AngleIdx, ScanIdx: Integer);

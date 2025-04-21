@@ -58,7 +58,7 @@ var
   odLimit, ox, oy: Double;
 begin
   ox := X - Sender.Scan.Center.X;
-  oy := (Y - Sender.Scan.Center.Y) / Sender.Scan.SkewY;
+  oy := Y - Sender.Scan.Center.Y;
 
   ppv.Radius := Sqrt(Sqr(oy) + Sqr(ox));
   ppv.Angle := ArcTan2(oy, ox);

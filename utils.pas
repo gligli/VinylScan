@@ -69,7 +69,7 @@ const
   C45RpmLabelOuterSize = 3.5;
   C45RpmConcentricGroove = 3.875;
   C45RpmMinConcentricGroove = C45RpmConcentricGroove - 0.078 * 1.5;
-  C45RpmMaxConcentricGroove = C45RpmConcentricGroove + 0.078;
+  C45RpmMaxConcentricGroove = C45RpmConcentricGroove;
   C45RpmStylusSetDown = 6.781;
   C45RpmFirstMusicGroove = 6.625;
   C45RpmLastMusicGroove = 4.25;

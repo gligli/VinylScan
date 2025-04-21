@@ -150,7 +150,7 @@ begin
 
   r := radius + decoderMax * cxa;
   px := angleCos * r + Scan.Center.X;
-  py := angleSin * r * Scan.SkewY + Scan.Center.Y;
+  py := angleSin * r + Scan.Center.Y;
 
   if not Scan.InRangePointD(py, px) then
     Exit(0.0);
@@ -171,7 +171,7 @@ begin
   begin
     r := radius + (iSmp + 0.5) * cxa;
     px := angleCos * r + Scan.Center.X;
-    py := angleSin * r * Scan.SkewY + Scan.Center.Y;
+    py := angleSin * r + Scan.Center.Y;
 
     sample := Scan.GetPointD_Sinc(Scan.Image, py, px);
 
@@ -276,7 +276,7 @@ begin
       if Assigned(FOnSample) then
       begin
         ox := cs * radius;
-        oy := sn * radius * Scan.SkewY;
+        oy := sn * radius;
 
         instantPct := (radius - Scan.ConcentricGrooveRadius) / (Scan.SetDownRadius - Scan.ConcentricGrooveRadius);
         instantPct := EnsureRange(1.0 - instantPct, 0.0, 1.0) * 100.0;

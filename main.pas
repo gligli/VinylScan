@@ -321,6 +321,7 @@ procedure TMainForm.DrawExtents(AScan: TInputScan);
 var
   C: TCanvas;
   cx, cy, sx, sy, rfx, rfy, rcx, rcy, rax, ray: Integer;
+  cer: TRect;
 begin
   C := Image.Picture.Bitmap.Canvas;
 
@@ -328,16 +329,24 @@ begin
   C.Pen.Color := clRed;
   C.Pen.Style := psDot;
 
+  cer := AScan.CenterExtents;
+  cer.Left := Round(cer.Left * FReducFactor);
+  cer.Top := Round(cer.Top * FReducFactor);
+  cer.Right := Round(cer.Right * FReducFactor);
+  cer.Bottom := Round(cer.Bottom * FReducFactor);
+
   cx := Round(AScan.Center.X * FReducFactor);
   cy := Round(AScan.Center.Y * FReducFactor);
   sx := Round(AScan.GrooveStartPoint.X * FReducFactor);
   sy := Round(AScan.GrooveStartPoint.Y * FReducFactor);
-  rfx := Round(AScan.SetDownRadius) div FReducRatio;
-  rfy := Round(AScan.SetDownRadius * AScan.SkewY) div FReducRatio;
-  rcx := Round(AScan.ConcentricGrooveRadius) div FReducRatio;
-  rcy := Round(AScan.ConcentricGrooveRadius * AScan.SkewY) div FReducRatio;
-  rax := Round(C45RpmAdapterSize * 0.5 * AScan.DPI) div FReducRatio;
-  ray := Round(C45RpmAdapterSize * 0.5 * AScan.DPI * AScan.SkewY) div FReducRatio;
+  rfx := Round(AScan.SetDownRadius * FReducFactor);
+  rfy := Round(AScan.SetDownRadius * FReducFactor);
+  rcx := Round(AScan.ConcentricGrooveRadius * FReducFactor);
+  rcy := Round(AScan.ConcentricGrooveRadius * FReducFactor);
+  rax := Round(C45RpmAdapterSize * 0.5 * AScan.DPI * FReducFactor);
+  ray := Round(C45RpmAdapterSize * 0.5 * AScan.DPI * FReducFactor);
+
+  C.Rectangle(cer);
 
   C.Line(cx - 8, cy, cx + 9, cy);
   C.Line(cx, cy - 8, cx, cy + 9);
