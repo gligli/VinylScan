@@ -328,7 +328,7 @@ begin
     ox := sc^.Cos * r + cx;
     oy := sc^.Sin * r + cy;
 
-    Coords.PreparedValues[ilut] := TanH((baseScan.GetPointD_Linear(baseScan.LeveledImage, oy, ox) - Coords.BaseMeanSD.X) / Coords.BaseMeanSD.Y);
+    Coords.PreparedValues[ilut] := TanH((baseScan.GetPointD_Linear(baseScan.LeveledImage, oy, ox) - Coords.BaseMeanSD.X) * Coords.BaseMeanSD.Y);
   end;
 end;
 
@@ -373,7 +373,7 @@ begin
       px := sc.Cos * r + centerX;
       py := sc.Sin * r + centerY;
 
-      Result += Sqr(coords^.PreparedValues[ilut] - TanH((scan.GetPointD_Linear(scan.LeveledImage, py, px) - coords^.MeanSD.X) / coords^.MeanSD.Y));
+      Result += Sqr(coords^.PreparedValues[ilut] - TanH((scan.GetPointD_Linear(scan.LeveledImage, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y));
     end;
 
     Result := Sqrt(Result / Length(coords^.RadiusAngleLUT));
@@ -499,16 +499,12 @@ begin
   begin
     scan := FInputScans[coords.ScanIdx];
 
-    //WriteLn(scan.ImageShortName, RadToDeg(angle):12:6, RadToDeg(startAngle):12:6, RadToDeg(endAngle):12:6);
-
     // use CropData to potentially reduce angle span
 
     a0a := NormalizeAngle(scan.CropData.StartAngle - scan.RelativeAngle);
     a0b := NormalizeAngle(scan.CropData.EndAngle - scan.RelativeAngle);
     a1a := NormalizeAngle(scan.CropData.StartAngleMirror - scan.RelativeAngle);
     a1b := NormalizeAngle(scan.CropData.EndAngleMirror - scan.RelativeAngle);
-
-    //WriteLn(scan.ImageShortName, RadToDeg(a0a):12:6, RadToDeg(a0b):12:6, RadToDeg(a1a):12:6, RadToDeg(a1b):12:6);
 
     croppedCnt := 0;
 
@@ -536,22 +532,12 @@ begin
       Inc(croppedCnt);
     end;
 
-    //WriteLn(scan.ImageShortName, RadToDeg(angle):12:6, RadToDeg(startAngle):12:6, RadToDeg(endAngle):12:6);
-
     // entirely cropped angle? -> not to be computed
 
     if croppedCnt >= 2 then
     begin
-      Assert(croppedCnt = 2);
-
       startAngle := NaN;
       endAngle := NaN;
-
-      //WriteLn(scan.ImageShortName, RadToDeg(angle):12:6, startAngle:12:6, endAngle:12:6);
-    end
-    else
-    begin
-      //WriteLn(scan.ImageShortName, RadToDeg(angle):12:6, RadToDeg(startAngle):12:6, RadToDeg(endAngle):12:6);
     end;
   end;
 
@@ -586,9 +572,9 @@ begin
       Continue;
 
     v := 0;
-    for iAngle := -180 to 179 do
+    for iAngle := -1800 to 1799 do
     begin
-      bt := DegToRad(iAngle);
+      bt := DegToRad(iAngle / 10.0);
 
       if InNormalizedAngle(bt, Coords.StartAngle, Coords.EndAngle) then
       begin
@@ -666,7 +652,7 @@ begin
     py := sc^.Sin * r + centerY;
 
     if baseScan.InRangePointD(py, px) then
-      Coords.PreparedValues[iLut] := TanH((baseScan.GetPointD_Linear(baseScan.LeveledImage, py, px) - Coords.BaseMeanSD.X) / Coords.BaseMeanSD.Y)
+      Coords.PreparedValues[iLut] := TanH((baseScan.GetPointD_Linear(baseScan.LeveledImage, py, px) - Coords.BaseMeanSD.X) * Coords.BaseMeanSD.Y)
     else
       Coords.PreparedValues[iLut] := 1e6;
   end;
@@ -708,7 +694,7 @@ begin
     py := sc^.Sin * r + centerY;
 
     if scan.InRangePointD(py, px) then
-      Result += Sqr((Coords.PreparedValues[iLut] - TanH((scan.GetPointD_Linear(scan.LeveledImage, py, px) - Coords.MeanSD.X) / Coords.MeanSD.Y)) * Coords.Weights[iLut])
+      Result += Sqr((Coords.PreparedValues[iLut] - TanH((scan.GetPointD_Linear(scan.LeveledImage, py, px) - Coords.MeanSD.X) * Coords.MeanSD.Y)) * Coords.Weights[iLut])
     else
       Result += Sqr(1e6);
   end;

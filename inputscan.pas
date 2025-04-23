@@ -59,7 +59,6 @@ type
     function GetImageShortName: String;
 
     procedure GradientConcentricGroove(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
-    function GridReduceConcentricGroove(const x: TVector; obj: Pointer): TScalar;
     function NelderMeadCrop(const x: TVector; obj: Pointer): TScalar;
 
     procedure FindCenterExtents;
@@ -295,7 +294,7 @@ var
         py := sn * rsx + CenterY;
 
         if InRangePointD(py, px) then
-          Result -= TanH((GetPointD_Linear(FLeveledImage, py, px) - meanSD^.X) / meanSD^.Y) * sy
+          Result -= TanH((GetPointD_Linear(FLeveledImage, py, px) - meanSD^.X) * meanSD^.Y) * sy
         else
           Result += 1e6;
       end;
@@ -345,11 +344,6 @@ begin
     grad[1] := gskm;
     grad[2] := gsks;
   end;
-end;
-
-function TInputScan.GridReduceConcentricGroove(const x: TVector; obj: Pointer): TScalar;
-begin
-  GradientConcentricGroove(x, Result, nil, obj);
 end;
 
 procedure TInputScan.FindConcentricGroove_Gradient;
@@ -652,65 +646,6 @@ begin
   if not IsNan(ARelativeAngle) then FRelativeAngle := ARelativeAngle;
 end;
 
-function TInputScan.NelderMeadCrop(const x: TVector; obj: Pointer): TScalar;
-var
-  iLut, iMean: Integer;
-  a0a, a1a, a0b, a1b, cx, cy, r, px, py, bt, rOuter: Double;
-  cropped: Boolean;
-  cnt: array[Boolean] of TIntegerDynArray;
-  acc: array[Boolean] of TDoubleDynArray;
-  ra: ^TRadiusAngle;
-  sc: ^TSinCos;
-begin
-  Result := 1e6;
-
-  if not InRange(NormalizeAngle(x[1] - x[0]), DegToRad(30.0), DegToRad(120.0)) then
-    Exit;
-
-  a0a := NormalizeAngle(x[0]);
-  a0b := NormalizeAngle(x[1]);
-  a1a := NormalizeAngle(x[0] + Pi);
-  a1b := NormalizeAngle(x[1] + Pi);
-
-  rOuter := C45RpmOuterSize * 0.5 * FDPI;
-
-  cx := FCenter.X;
-  cy := FCenter.Y;
-
-  for cropped := False to True do
-  begin
-    SetLength(acc[cropped], Ceil(rOuter));
-    SetLength(cnt[cropped], Ceil(rOuter));
-  end;
-
-  for iLut := 0 to High(FCropData.RadiusAngleLut) do
-  begin
-    ra := @FCropData.RadiusAngleLut[iLut];
-    sc := @FCropData.SinCosLut[iLut];
-
-    bt := ra^.Angle;
-    r := ra^.Radius;
-
-    px := sc^.Cos * r + cx;
-    py := sc^.Sin * r + cy;
-
-    if InRangePointD(py, px) then
-    begin
-      cropped := InNormalizedAngle(bt, a0a, a0b) or InNormalizedAngle(bt, a1a, a1b);
-      acc[cropped, Round(r)] += GetPointD_Linear(FLeveledImage, py, px);
-      Inc(cnt[cropped, Round(r)]);
-    end;
-  end;
-
-  for cropped := False to True do
-    for iMean := 0 to High(cnt[cropped]) do
-      acc[cropped, iMean] := DivDef(acc[cropped, iMean], cnt[cropped, iMean], 0.0);
-
-  Result := -MAE(acc[False], acc[True]);
-
-  //WriteLn(ImageShortName, ', begin:', RadToDeg(a0a):9:3, ', end:', RadToDeg(a0b):9:3, result:18:6);
-end;
-
 procedure TInputScan.FindCenterExtents;
 const
   CCorneringThres = 3.0;
@@ -814,16 +749,73 @@ begin
   FCenter.Y := lerp(FCenterExtents.Top, FCenterExtents.Bottom, 0.5);
 end;
 
+function TInputScan.NelderMeadCrop(const x: TVector; obj: Pointer): TScalar;
+const
+  CMinCrop = 30.0;
+  CMaxCrop = 120.0;
+var
+  iLut: Integer;
+  a0a, a1a, a0b, a1b, cx, cy, r, px, py, bt: Double;
+  cropped: Boolean;
+  cnt: array[Boolean] of Integer;
+  acc: array[Boolean] of Double;
+  ra: ^TRadiusAngle;
+  sc: ^TSinCos;
+begin
+  Result := 1e6;
+
+  if not InRange(NormalizeAngle(x[1] - x[0]), DegToRad(CMinCrop), DegToRad(CMaxCrop)) or
+     not InRange(NormalizeAngle(x[3] - x[2]), DegToRad(CMinCrop), DegToRad(CMaxCrop)) then
+    Exit;
+
+  a0a := NormalizeAngle(x[0]);
+  a0b := NormalizeAngle(x[1]);
+  a1a := NormalizeAngle(x[2]);
+  a1b := NormalizeAngle(x[3]);
+
+  cx := FCenter.X;
+  cy := FCenter.Y;
+
+  for cropped := False to True do
+  begin
+    acc[cropped] := 0.0;
+    cnt[cropped] := 0;
+  end;
+
+  for iLut := 0 to High(FCropData.RadiusAngleLut) do
+  begin
+    ra := @FCropData.RadiusAngleLut[iLut];
+    sc := @FCropData.SinCosLut[iLut];
+
+    bt := ra^.Angle;
+    r := ra^.Radius;
+
+    px := sc^.Cos * r + cx;
+    py := sc^.Sin * r + cy;
+
+    if InRangePointD(py, px) then
+    begin
+      cropped := InNormalizedAngle(bt, a0a, a0b) or InNormalizedAngle(bt, a1a, a1b);
+      acc[cropped] += GetPointD_Linear(FLeveledImage, py, px);
+      Inc(cnt[cropped]);
+    end;
+  end;
+
+  Result := DivDef(acc[True], cnt[True], 0.0) - DivDef(acc[False], cnt[False], 0.0);
+
+  //WriteLn(ImageShortName, ', begin:', RadToDeg(a0a):9:3, ', end:', RadToDeg(a0b):9:3, result:18:6);
+end;
+
 procedure TInputScan.Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
 var
   X: TVector;
 begin
-  X := [NormalizeAngle(DegToRad(-30.0)), NormalizeAngle(DegToRad(30.0))];
+  X := [NormalizeAngle(DegToRad(-30.0)), NormalizeAngle(DegToRad(30.0)), NormalizeAngle(DegToRad(-30.0) + Pi), NormalizeAngle(DegToRad(30.0) + Pi)];
 
   FCropData.RadiusAngleLut := RadiusAngleLut;
   FCropData.SinCosLut := SinCosLut;
   try
-    NelderMeadMinimize(@NelderMeadCrop, X, [DegToRad(15.0), DegToRad(15.0)], 1e-3);
+    NelderMeadMinimize(@NelderMeadCrop, X, [DegToRad(15.0), DegToRad(15.0), DegToRad(15.0), DegToRad(15.0)], 1e-3);
   finally
     FCropData.RadiusAngleLut := nil;
     FCropData.SinCosLut := nil;
@@ -831,8 +823,8 @@ begin
 
   FCropData.StartAngle := NormalizeAngle(X[0]);
   FCropData.EndAngle := NormalizeAngle(X[1]);
-  FCropData.StartAngleMirror := NormalizeAngle(X[0] + Pi);
-  FCropData.EndAngleMirror := NormalizeAngle(X[1] + Pi);
+  FCropData.StartAngleMirror := NormalizeAngle(X[2]);
+  FCropData.EndAngleMirror := NormalizeAngle(X[3]);
 end;
 
 procedure TInputScan.FixCISScanners;
@@ -1049,6 +1041,7 @@ begin
     end;
   Result.Y /= cnt;
   Result.Y := Sqrt(Result.Y);
+  Result.Y := DivDef(1.0, Result.Y, 1.0);
 
   //WriteLn(Result.X:16:6, Result.Y:16:6);
 end;
