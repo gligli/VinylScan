@@ -308,9 +308,8 @@ begin
   cx  := baseScan.Center.X;
   cy  := baseScan.Center.Y;
 
-  // build radius / angle lookup table
+  // build lookup tables
 
-  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * baseScan.DPI, CAnalyzeAreaEnd * 0.5 * baseScan.DPI, -Pi, Pi, 1.0 / FQualitySpeedRatio);
   sinCosLUT := OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, baseScan.RelativeAngle);
 
   Coords.BaseMeanSD := baseScan.GetMeanSD(CAnalyzeAreaBegin * 0.5 * baseScan.DPI, CAnalyzeAreaEnd * 0.5 * baseScan.DPI, -Pi, Pi);
@@ -403,6 +402,8 @@ begin
 end;
 
 procedure TScanCorrelator.Analyze;
+var
+  RadiusAngleLUT: TRadiusAngleDynArray;
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
@@ -419,6 +420,7 @@ procedure TScanCorrelator.Analyze;
     FillChar(coords, SizeOf(coords), 0);
     coords.AngleIdx := -1;
     coords.ScanIdx := AIndex;
+    coords.RadiusAngleLUT := RadiusAngleLUT;
     PrepareAnalyze(coords);
 
     X := [scan.Center.X, scan.Center.Y, scan.RelativeAngle, 1.0, 1.0];
@@ -436,6 +438,8 @@ begin
 
   if Length(FInputScans) <= 1 then
     Exit;
+
+  RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * FInputScans[0].DPI, CAnalyzeAreaEnd * 0.5 * FInputScans[0].DPI, -Pi, Pi, 1.0 / FQualitySpeedRatio);
 
   for i := 0 to High(FInputScans) do
     WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (before)');
