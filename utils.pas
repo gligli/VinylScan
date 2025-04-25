@@ -115,21 +115,22 @@ procedure FromRGB(col: Integer; out r, g, b: Byte); inline; overload;
 function ToLuma(r, g, b: Integer): Integer; inline;
 function ToBW(col: Integer): Byte;
 
+function Sinc(x: Double): Double;
+function BlackmanExactWindow(p: Double): Double;
+
 function lerp(x, y, alpha: Double): Double; overload;
 function lerp(x, y: Word; alpha: Double): Double; overload;
 function lerp(x, y: Integer; alpha: Double): Double; overload;
 
-procedure DrawPointValue(const AImage: TDoubleDynArray; const APoint: TPointValue; AWidth, AHeight: Integer; ASign: TValueSign);
-
-function Sinc(x: Double): Double;
-function BlackmanExactWindow(p: Double): Double;
+function herp(y0, y1, y2, y3, alpha: Double): Double;
 
 procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
 function serpCoeffs(alpha: Double): PSingle;
 procedure serpFromCoeffsXY(coeffs: PSingle; centerPx: PWORD; stride: Integer; res: PSingle);
 function serpFromCoeffs(coeffs, data: PSingle): Single;
-
 function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
+
+procedure DrawPointValue(const AImage: TDoubleDynArray; const APoint: TPointValue; AWidth, AHeight: Integer; ASign: TValueSign);
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: array of Double; EpsilonG: Double; MaxIter: Integer; Silent: Boolean; Data: Pointer = nil): Double;
@@ -165,9 +166,6 @@ procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string;
 procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFunction:TCompareFunction;AUserParameter:Pointer=nil);
 
 function GetTIFFSize(AStream: TStream; out AWidth, AHeight: DWord; out dpiX, dpiY: Double): Boolean;
-
-procedure BurgAlgorithm(var coeffs: TDoubleDynArray; const x: TDoubleDynArray; lb, ub: Integer);
-function BurgAlgorithm_PredictOne(const coeffs: TDoubleDynArray; const x: TDoubleDynArray; from: Integer): Double;
 
 implementation
 uses utypes, ubfgs, usimplex;
@@ -282,6 +280,15 @@ begin
   Result := ToLuma(r, g, b) div cLumaDiv;
 end;
 
+function Sinc(x: Double): Double;
+begin
+  Result := DivDef(Sin(x), x, 1.0);
+end;
+
+function BlackmanExactWindow(p: Double): Double;
+begin
+  Result := 7938/18608 - 9240/18608 * Cos(2.0 * Pi * p) + 1430/18608 * Cos(4.0 * Pi * p);
+end;
 
 function lerp(x, y, alpha: Double): Double;
 begin
@@ -326,14 +333,20 @@ begin
   end;
 end;
 
-function Sinc(x: Double): Double;
+function herp(y0, y1, y2, y3, alpha: Double): Double;
+var
+  alpha2, alpha3: Double;
+  a0, a1, a2, a3: Double;
 begin
-  Result := DivDef(Sin(x), x, 1.0);
-end;
+  alpha2 := alpha * alpha;
+  alpha3 := alpha2 * alpha;
 
-function BlackmanExactWindow(p: Double): Double;
-begin
-  Result := 7938/18608 - 9240/18608 * Cos(2.0 * Pi * p) + 1430/18608 * Cos(4.0 * Pi * p);
+  a3 := 0.5 * (-1 * y0 + +3 * y1 + -3 * y2 + +1 * y3);
+  a2 := 0.5 * (+2 * y0 + -5 * y1 + +4 * y2 + -1 * y3);
+  a1 := 0.5 * (-1 * y0 + +0 * y1 + +1 * y2 + +0 * y3);
+  a0 := y1;
+
+  Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
 end;
 
 procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
@@ -1322,87 +1335,6 @@ begin
   end;
 
   Result := true;
-end;
-
-// from https://github.com/cchafe/burgbare/blob/main/burgalgorithm.cpp
-procedure BurgAlgorithm(var coeffs: TDoubleDynArray; const x: TDoubleDynArray; lb, ub: Integer);
-var
-  i, j, k, m, ni, N, xsz: Integer;
-  Ak, f, b: TDoubleDynArray;
-  Dk, mu, t1, t2: Double;
-begin
-  // GET SIZE FROM INPUT VECTORS
-  xsz := ub - lb + 1;
-  N := xsz - 1;
-  m := Length(coeffs);
-
-  ////
-  Assert(xsz >= m, 'time_series should have more elements than the AR order is');
-
-  // INITIALIZE Ak
-  SetLength(Ak, m + 1);
-  Ak[ 0 ] := 1.0;
-
-  // INITIALIZE f and b
-  SetLength(f, xsz);
-  SetLength(b, xsz);
-  for i := 0 to High(f) do
-  begin
-    f[i] := x[i + lb];
-    b[i] := x[i + lb];
-  end;
-
-  // INITIALIZE Dk
-  Dk := 0.0;
-  for j := 0 to N do
-    Dk += 2.0 * f[ j ] * f[ j ];
-  Dk -= f[ 0 ] * f[ 0 ] + b[ N ] * b[ N ];
-
-  // BURG RECURSION
-  for k := 0 to m - 1 do
-  begin
-    // COMPUTE MU
-    mu := 0.0;
-    for ni := 0 to N - k do
-      mu += f[ni + k] * b[ni];
-    mu *= DivDef(-2.0, Dk, 1.0);
-
-    // UPDATE Ak
-    for ni := 0 to k div 2 do
-    begin
-      t1 := Ak[ ni ] + mu * Ak[ k + 1 - ni ];
-      t2 := Ak[ k + 1 - ni ] + mu * Ak[ ni ];
-      Ak[ ni ] := t1;
-      Ak[ k + 1 - ni ] := t2;
-    end;
-
-    // UPDATE f and b
-    for ni := 0 to  N - k do
-    begin
-      t1 := f[ ni + k ] + mu * b[ ni ];
-      t2 := b[ ni ] + mu * f[ ni + k ];
-      f[ ni + k ] := t1;
-      b[ ni ] := t2;
-    end;
-
-    // UPDATE Dk
-    Dk := ( 1.0 - mu * mu ) * Dk - f[ k ] * f[ k ] - b[ N - k ] * b[ N - k ];
-  end;
-
-  // ASSIGN COEFFICIENTS
-  for i := 1 to High(Ak) do
-    coeffs[i - 1] := Ak[i];
-end;
-
-function BurgAlgorithm_PredictOne(const coeffs: TDoubleDynArray; const x: TDoubleDynArray; from: Integer): Double;
-var
-  m, i: Integer;
-begin
-  m := Length(coeffs);
-
-  Result := 0.0;
-  for i := 0 to m - 1 do
-    Result -= coeffs[ i ] * x[ from - 1 - i ];
 end;
 
 function InvariantFormatSettings: TFormatSettings;
