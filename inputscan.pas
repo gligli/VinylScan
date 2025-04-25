@@ -37,6 +37,7 @@ type
 
     FCenterExtents: TRect;
     FCenter: TPointD;
+    FSkew: TPointD;
     FConcentricGrooveRadius: Double;
     FSetDownRadius: Double;
     FGrooveStartAngle: Double;
@@ -75,7 +76,7 @@ type
     procedure LoadImage;
     procedure BrickwallLimit;
     procedure FindTrack(AUseGradient: Boolean; AForcedSampleRate: Integer = -1);
-    procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle: Double);
+    procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle, ASkewX, ASkewY: Double);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
     procedure FixCISScanners;
 
@@ -103,6 +104,7 @@ type
 
     property CenterExtents: TRect read FCenterExtents;
     property Center: TPointD read FCenter;
+    property Skew: TPointD read FSkew;
     property RelativeAngle: Double read FRelativeAngle;
     property CropData: TCropData read FCropData;
 
@@ -164,6 +166,7 @@ procedure TInputScan.FindConcentricGroove_GridSearch;
 const
   CPointsPerRevolution = 512;
 var
+  extents: TRect;
   sinCosLUT: TSinCosDynArray;
   mnRadius, mxRadius: Integer;
   stencilX: array[TValueSign] of Double;
@@ -195,8 +198,8 @@ var
         pyArr[vs, ilut] := round(sinCosLUT[iLut].Sin * (r + stencilX[vs]))
       end;
 
-    for cy := FCenterExtents.Top to FCenterExtents.Bottom do
-      for cx := FCenterExtents.Left to FCenterExtents.Right do
+    for cy := extents.Top to extents.Bottom do
+      for cx := extents.Left to extents.Right do
       begin
         f := 0;
         for vs := Low(TValueSign) to High(TValueSign) do
@@ -235,16 +238,19 @@ begin
   BuildSinCosLUT(CPointsPerRevolution div 4, sinCosLUT, 0.0, Pi / 2.0);
 
   stencilY[NegativeValue] := -1;
-  stencilY[ZeroValue] := 2;
+  stencilY[ZeroValue] := 4;
   stencilY[PositiveValue] := -1;
 
   stencilX[NegativeValue] := -C45RpmLeadOutGrooveThickness * FDPI;
   stencilX[ZeroValue] := 0;
   stencilX[PositiveValue] := C45RpmLeadOutGrooveThickness * FDPI;
 
-  X := [FCenter.X, FCenter.Y, C45RpmConcentricGroove * FDPI * 0.5];
+  extents := FCenterExtents;
+  extents.Inflate(extents.Right - extents.CenterPoint.X, extents.Bottom - extents.CenterPoint.Y);
 
-  mnRadius := Ceil(C45RpmMinConcentricGroove * FDPI * 0.5);
+  X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius];
+
+  mnRadius := Floor(C45RpmMinConcentricGroove * FDPI * 0.5);
   mxRadius := Ceil(C45RpmMaxConcentricGroove * FDPI * 0.5);
   SetLength(results, mxRadius - mnRadius + 1);
   ProcThreadPool.DoParallelLocalProc(@DoSkew, mnRadius, mxRadius);
@@ -308,7 +314,7 @@ var
   CenterX, CenterY, Radius, fdx, fdy, gskc, gskm, gsks: Double;
 begin
   stencilY[NegativeValue] := -1;
-  stencilY[ZeroValue] := 2;
+  stencilY[ZeroValue] := 4;
   stencilY[PositiveValue] := -1;
 
   stencilX[NegativeValue] := -C45RpmLeadOutGrooveThickness * FDPI;
@@ -411,6 +417,8 @@ begin
   FSilent := ASilent;
   FCenterQuality := -Infinity;
   FObjective := Infinity;
+  FSkew.X := 1.0;
+  FSkew.Y := 1.0;
 
   SetRevolutionFromDPI(FDPI);
 end;
@@ -639,11 +647,13 @@ begin
   end;
 end;
 
-procedure TInputScan.CorrectByModel(ACenterX, ACenterY, ARelativeAngle: Double);
+procedure TInputScan.CorrectByModel(ACenterX, ACenterY, ARelativeAngle, ASkewX, ASkewY: Double);
 begin
   if not IsNan(ACenterX) then FCenter.X := ACenterX;
   if not IsNan(ACenterY) then FCenter.Y := ACenterY;
   if not IsNan(ARelativeAngle) then FRelativeAngle := ARelativeAngle;
+  if not IsNan(ASkewX) then FSkew.X := ASkewX;
+  if not IsNan(ASkewY) then FSkew.Y := ASkewY;
 end;
 
 procedure TInputScan.FindCenterExtents;
