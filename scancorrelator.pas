@@ -48,6 +48,7 @@ type
     procedure CorrectAnglesFromCoords(const coords: TAngleScanCoords; out AStartAngle, AEndAngle: Double;
       AReduceAngles: Boolean);
 
+    procedure InitAnalyze(var Coords: TAngleScanCoords);
     procedure PrepareAnalyze(var Coords: TAngleScanCoords);
     function NelderMeadAnalyze(const arg: TVector; data: Pointer): TScalar;
     function InitCorrect(var Coords: TAngleScanCoords): Boolean;
@@ -293,29 +294,29 @@ begin
   ProcThreadPool.DoParallelLocalProc(@DoScan, 1, High(FInputScans));
 end;
 
-procedure TScanCorrelator.PrepareAnalyze(var Coords: TAngleScanCoords);
+procedure TScanCorrelator.InitAnalyze(var Coords: TAngleScanCoords);
 var
   ilut: Integer;
   cx, cy, r, ox, oy: Double;
-  baseScan, scan: TInputScan;
+  baseScan: TInputScan;
   ra: ^TRadiusAngle;
   sc: ^TSinCos;
   sinCosLUT: TSinCosDynArray;
 begin
   baseScan := FInputScans[Coords.BaseScanIdx];
-  scan := FInputScans[Coords.ScanIdx];
-
-  cx  := baseScan.Center.X;
-  cy  := baseScan.Center.Y;
 
   // build lookup tables
+
+  Coords.RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * baseScan.DPI, CAnalyzeAreaEnd * 0.5 * baseScan.DPI, -Pi, Pi, 1.0 / FQualitySpeedRatio);
 
   sinCosLUT := OffsetRadiusAngleLUTAngle(Coords.RadiusAngleLUT, baseScan.RelativeAngle);
 
   Coords.BaseMeanSD := baseScan.GetMeanSD(CAnalyzeAreaBegin * 0.5 * baseScan.DPI, CAnalyzeAreaEnd * 0.5 * baseScan.DPI, -Pi, Pi);
-  Coords.MeanSD := scan.GetMeanSD(CAnalyzeAreaBegin * 0.5 * scan.DPI, CAnalyzeAreaEnd * 0.5 * scan.DPI, -Pi, Pi);
 
   // parse image using LUTs
+
+  cx  := baseScan.Center.X;
+  cy  := baseScan.Center.Y;
 
   SetLength(Coords.PreparedValues, Length(Coords.RadiusAngleLUT));
   for iLut := 0 to High(Coords.RadiusAngleLUT) do
@@ -329,6 +330,15 @@ begin
 
     Coords.PreparedValues[ilut] := TanH((baseScan.GetPointD_Linear(baseScan.LeveledImage, oy, ox) - Coords.BaseMeanSD.X) * Coords.BaseMeanSD.Y);
   end;
+end;
+
+procedure TScanCorrelator.PrepareAnalyze(var Coords: TAngleScanCoords);
+var
+  scan: TInputScan;
+begin
+  scan := FInputScans[Coords.ScanIdx];
+
+  Coords.MeanSD := scan.GetMeanSD(CAnalyzeAreaBegin * 0.5 * scan.DPI, CAnalyzeAreaEnd * 0.5 * scan.DPI, -Pi, Pi);
 end;
 
 function TScanCorrelator.NelderMeadAnalyze(const arg: TVector; data: Pointer): TScalar;
@@ -403,7 +413,7 @@ end;
 
 procedure TScanCorrelator.Analyze;
 var
-  RadiusAngleLUT: TRadiusAngleDynArray;
+  baseCoords: TAngleScanCoords;
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
@@ -417,10 +427,8 @@ var
 
     scan := FInputScans[AIndex];
 
-    FillChar(coords, SizeOf(coords), 0);
-    coords.AngleIdx := -1;
+    coords := baseCoords;
     coords.ScanIdx := AIndex;
-    coords.RadiusAngleLUT := RadiusAngleLUT;
     PrepareAnalyze(coords);
 
     X := [scan.Center.X, scan.Center.Y, scan.RelativeAngle, 1.0, 1.0];
@@ -439,7 +447,9 @@ begin
   if Length(FInputScans) <= 1 then
     Exit;
 
-  RadiusAngleLUT := BuildRadiusAngleLUT(CAnalyzeAreaBegin * 0.5 * FInputScans[0].DPI, CAnalyzeAreaEnd * 0.5 * FInputScans[0].DPI, -Pi, Pi, 1.0 / FQualitySpeedRatio);
+  FillChar(baseCoords, SizeOf(baseCoords), 0);
+  baseCoords.AngleIdx := -1;
+  InitAnalyze(baseCoords);
 
   for i := 0 to High(FInputScans) do
     WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (before)');
