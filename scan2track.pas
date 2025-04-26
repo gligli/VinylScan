@@ -159,7 +159,7 @@ begin
   posMax := decoderMax - 1;
   if not IsNan(estSample) and FPrevSamplesReady then
   begin
-    estSampleIdx := estSample * decoderMax - 0.5;
+    estSampleIdx := estSample * decoderMax;
     psExtents := GetPrevSamplesExtents;
     posMin := Max(Low(smpBuf), Floor(estSampleIdx - psExtents));
     posMax := Min(High(smpBuf), Ceil(estSampleIdx + psExtents));
@@ -199,15 +199,10 @@ begin
     Inc(idxCnt[up]);
   end;
 
+  sampleIdx := DivDef(idxAcc[True], idxCnt[True], 0.0) + 0.5;
+
   if not IsNan(estSample) then
-  begin
-    sampleIdx := DivDef(idxAcc[True], idxCnt[True], 0.0) + 0.5;
     UpdatePrevSamples(sampleIdx);
-  end
-  else
-  begin
-    sampleIdx := DivDef(idxAcc[True], idxCnt[True], 0.0) - DivDef(idxAcc[False], idxCnt[False], 0.0);
-  end;
 
   Result := sampleIdx / decoderMax;
 end;
