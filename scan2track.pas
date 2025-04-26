@@ -125,8 +125,6 @@ begin
 end;
 
 function TScan2Track.GetPrevSamplesExtents: Double;
-var
-  i: Integer;
 begin
   if not FPrevSamplesReady then
     Exit(NaN);
@@ -235,11 +233,11 @@ begin
   try
     fltSample.FreqCut1 := CLowCutoffFreq;
     fltSample.SampleRate := FSampleRate;
-    fltSample.Order := 1;
+    fltSample.Order := 4;
 
     BuildSinCosLUT(FPointsPerRevolution, sinCosLut, Scan.GrooveStartAngle, -2.0 * Pi);
 
-    fbRatio := CutoffToFeedbackRatio(CLowCutoffFreq, FSampleRate) * C45RpmRecordingGrooveWidth * 0.5 * Scan.DPI;
+    fbRatio := CutoffToFeedbackRatio(C45RpmLoopbackLowCutoffFreq, FSampleRate) * C45RpmRecordingGrooveWidth * 0.5 * Scan.DPI;
 
     radius := Scan.SetDownRadius;
     maxPct := 0.0;

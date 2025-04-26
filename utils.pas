@@ -75,7 +75,9 @@ const
   C45RpmLastMusicGroove = 4.25;
   C45RpmAdapterSize = 1.496;
 
-  CLowCutoffFreq = 30.0;
+  C45RpmLoopbackLowCutoffFreq = 40.0;
+
+  CLowCutoffFreq = 20.0;
 
 {$if 1}
   cRedMul = 1;
