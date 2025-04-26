@@ -109,7 +109,7 @@ const
   CAnalyzeAreaEnd = C45RpmLabelOuterSize;
 
   CCorrectAngleCount = 36;
-  CCorrectAreaBegin = C45RpmInnerSize;
+  CCorrectAreaBegin = C45RpmLabelOuterSize;
   CCorrectAreaEnd = C45RpmOuterSize;
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
@@ -783,8 +783,8 @@ var
 
     X := [0.0, 1.0 * 1e3, 0.0];
     Extents := [0.015 * scan.DPI, 0.002 * 1e3, 5e-7 * 1e6];
-    loss := GridReduceMinimize(@NelderMeadCorrect, X, [10, 10, 10], Extents, 0.01, '', coords);
-    loss := BFGSMinimize(@GradientCorrect, X, 1e-3, coords);
+    loss := GridReduceMinimize(@NelderMeadCorrect, X, [7, 7, 7], Extents, 0.001, '', coords);
+    loss := NelderMeadMinimize(@NelderMeadCorrect, X, Extents, 1e-6, coords);
 
     // free up memory
     SetLength(coords^.RadiusAngleLUT, 0);
