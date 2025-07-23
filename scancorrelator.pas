@@ -980,7 +980,7 @@ var
 
           sample := High(Word);
           if scan.InRangePointD(py, px) then
-            sample := scan.GetPointD_Sinc(scan.Image, py, px);
+            sample := scan.GetPointD_Sinc(scan.LeveledImage, py, px);
 
           FOutputScans[iScan].Image[yx + ox] := EnsureRange(Round(sample), 0, High(Word))
         end;

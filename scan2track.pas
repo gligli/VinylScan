@@ -99,11 +99,11 @@ end;
 function TScan2Track.DecodeSample(AScan: TInputScan; radius, angleSin, angleCos: Double; precision: Integer): Double;
 var
   iSmp, posMin, posMax, decoderMax: Integer;
-  r, cx, cy, px, py, cxa: Double;
-  sample, sampleMiddle, sampleIdx: Single;
+  r, cx, cy, px, py, cxa, invSampleMaxMin: Double;
+  sample, sampleMiddle, sampleMin, sampleMax, sampleIdx: Single;
   smpBuf: array[SmallInt] of Single;
-  idxCnt: array[Boolean] of Integer;
-  idxAcc: array[Boolean] of Integer;
+  idxCnt: array[Boolean] of Double;
+  idxAcc: array[Boolean] of Double;
   up: Boolean;
 begin
   decoderMax := 1 shl (precision - 1);
@@ -122,6 +122,8 @@ begin
 
   posMin := -decoderMax;
   posMax := decoderMax - 1;
+  sampleMin := Infinity;
+  sampleMax := -Infinity;
   sampleMiddle := 0.0;
   for iSmp := posMin to posMax do
   begin
@@ -131,12 +133,17 @@ begin
 
     sample := AScan.GetPointD_Sinc(AScan.Image, py, px);
 
+    sampleMin := Min(sampleMin, sample);
+    sampleMax := Max(sampleMax, sample);
     sampleMiddle += sample;
 
     smpBuf[iSmp] := sample;
   end;
 
+  invSampleMaxMin := DivDef(1.0, sampleMax - sampleMin, 0.0);
+
   sampleMiddle /= posMax - posMin + 1;
+  sampleMiddle := (sampleMiddle - sampleMin) * invSampleMaxMin;
 
   for up := False to True do
   begin
@@ -146,15 +153,17 @@ begin
 
   for iSmp := posMin to posMax do
   begin
-    sample := smpBuf[iSmp];
+    sample := (smpBuf[iSmp] - sampleMin) * invSampleMaxMin;
 
     up := sample >= sampleMiddle;
 
-    idxAcc[up] += iSmp;
-    Inc(idxCnt[up]);
+    sample := Sqr(sample);
+
+    idxAcc[up] += iSmp * sample;
+    idxCnt[up] += sample;
   end;
 
-  sampleIdx := DivDef(idxAcc[True], idxCnt[True], 0.0) - DivDef(idxAcc[False], idxCnt[False], 0.0);
+  sampleIdx := DivDef(idxAcc[True], idxCnt[True], 0.0);
 
   Result := sampleIdx / decoderMax;
 end;

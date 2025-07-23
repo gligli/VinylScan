@@ -95,7 +95,7 @@ begin
 
     s2t.LoadScans;
 
-    DrawImage(s2t.InputScans[0].Image, s2t.InputScans[0].Width, s2t.InputScans[0].Height);
+    DrawImage(s2t.InputScans[0].LeveledImage, s2t.InputScans[0].Width, s2t.InputScans[0].Height);
     DrawExtents(s2t.InputScans[0]);
 
     s2t.EvalTrack;
@@ -168,7 +168,7 @@ begin
     s2t.OnSample := @OnSample;
     s2t.OutputWAVFileName := edOutputWAV.Text;
 
-    DrawImage(s2t.InputScans[0].Image, s2t.InputScans[0].Width, s2t.InputScans[0].Height);
+    DrawImage(s2t.InputScans[0].LeveledImage, s2t.InputScans[0].Width, s2t.InputScans[0].Height);
     DrawExtents(s2t.InputScans[0]);
 
     s2t.EvalTrack;

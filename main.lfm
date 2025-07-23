@@ -17,7 +17,7 @@ object MainForm: TMainForm
   DoubleBuffered = True
   KeyPreview = True
   ParentDoubleBuffered = False
-  LCLVersion = '4.0.0.4'
+  LCLVersion = '4.2.0.0'
   Scaled = False
   WindowState = wsMaximized
   OnCreate = FormCreate
