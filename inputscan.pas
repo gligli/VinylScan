@@ -73,10 +73,12 @@ type
     constructor Create(ADefaultDPI: Integer = 2400; ASilent: Boolean = False);
     destructor Destroy; override;
 
+    procedure InitImage(AWidth, AHeight, ADPI: Integer);
     procedure LoadImage;
     procedure BrickwallLimit;
     procedure FindTrack(AUseGradient: Boolean; AForcedSampleRate: Integer = -1);
     procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle, ASkewX, ASkewY: Double);
+    procedure ImportCropData(AScan: TInputScan);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
     procedure FixCISScanners;
 
@@ -428,6 +430,19 @@ begin
   inherited Destroy;
 end;
 
+procedure TInputScan.InitImage(AWidth, AHeight, ADPI: Integer);
+begin
+  FDPI := ADPI;
+  FWidth := AWidth;
+  FHeight := AHeight;
+  SetLength(FImage, FHeight * FWidth);
+  FLeveledImage := FImage;
+  FCenter.X := AWidth * 0.5;
+  FCenter.Y := AHeight * 0.5;
+
+  FindCenterExtents;
+end;
+
 procedure TInputScan.LoadImage;
 begin
   if SameText(ExtractFileExt(FImageFileName), '.tif') or
@@ -654,6 +669,18 @@ begin
   if not IsNan(ARelativeAngle) then FRelativeAngle := ARelativeAngle;
   if not IsNan(ASkewX) then FSkew.X := ASkewX;
   if not IsNan(ASkewY) then FSkew.Y := ASkewY;
+end;
+
+procedure TInputScan.ImportCropData(AScan: TInputScan);
+var
+  diff: Double;
+begin
+  diff := FRelativeAngle - AScan.RelativeAngle;
+
+  FCropData.StartAngle := NormalizeAngle(AScan.CropData.StartAngle + diff);
+  FCropData.EndAngle := NormalizeAngle(AScan.CropData.EndAngle + diff);
+  FCropData.StartAngleMirror := NormalizeAngle(AScan.CropData.StartAngleMirror + diff);
+  FCropData.EndAngleMirror := NormalizeAngle(AScan.CropData.EndAngleMirror + diff);
 end;
 
 procedure TInputScan.FindCenterExtents;

@@ -43,7 +43,7 @@ type
     FPerAngleSkew: array of array of TCorrectSkew;
 
     FOutputWidth, FOutputHeight: Integer;
-    FOutputImage: TWordDynArray;
+    FOutputScans: TInputScanDynArray;
 
     procedure CorrectAnglesFromCoords(const coords: TAngleScanCoords; out AStartAngle, AEndAngle: Double;
       AReduceAngles: Boolean);
@@ -84,7 +84,7 @@ type
     property OutputHeight: Integer read FOutputHeight;
 
     property InputScans: TInputScanDynArray read FInputScans;
-    property OutputImage: TWordDynArray read FOutputImage;
+    property OutputScans: TInputScanDynArray read FOutputScans;
   end;
 
   { TDPIAwareWriterPNG }
@@ -115,15 +115,17 @@ const
 
 constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
 var
-  i: Integer;
+  iScan: Integer;
 begin
   FOutputDPI := AOutputDPI;
   SetLength(FInputScans, AFileNames.Count);
+  SetLength(FOutputScans, Length(FInputScans));
 
-  for i := 0 to AFileNames.Count - 1 do
+  for iScan := 0 to AFileNames.Count - 1 do
   begin
-    FInputScans[i] := TInputScan.Create(AOutputDPI, True);
-    FInputScans[i].ImageFileName := AFileNames[i];
+    FInputScans[iScan] := TInputScan.Create(FOutputDPI, True);
+    FInputScans[iScan].ImageFileName := AFileNames[iScan];
+    FOutputScans[iScan] := TInputScan.Create(FOutputDPI, True);
   end;
 
   SpinLeave(@FLock);
@@ -135,6 +137,10 @@ begin
   FRebuildScaled := True;
   FRebuildBlendCount := 32;
   FQualitySpeedRatio := 1.0;
+
+  FFixCISScanners := True;
+  FCorrectAngles := True;
+  FQualitySpeedRatio := 0.5;
 end;
 
 destructor TScanCorrelator.Destroy;
@@ -142,7 +148,10 @@ var
   i: Integer;
 begin
   for i := 0 to High(FInputScans) do
+  begin
     FInputScans[i].Free;
+    FOutputScans[i].Free;
+	end;
 
   inherited Destroy;
 end;
@@ -941,8 +950,8 @@ var
 
   procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
-    i, ox, cnt, yx: Integer;
-    r, sn, cs, px, py, acc, bt, ct, rsk, d2d: Double;
+    iScan, ox, yx: Integer;
+    r, sn, cs, px, py, sample, bt, ct, rsk, d2d: Double;
     scan: TInputScan;
   begin
     yx := AIndex * FOutputWidth;
@@ -955,15 +964,13 @@ var
       begin
         bt := ArcTan2(AIndex - center, ox - center);
 
-        cnt := 0;
-        acc := 0;
-        for i := 0 to High(FInputScans) do
+        for iScan := 0 to High(FInputScans) do
         begin
-          scan := FInputScans[i];
+          scan := FInputScans[iScan];
 
           d2d := scan.DPI / FOutputDPI;
 
-          rsk := InterpolateSkew(bt, r * d2d, i);
+          rsk := InterpolateSkew(bt, r * d2d, iScan);
 
           ct := NormalizeAngle(bt + scan.RelativeAngle);
 
@@ -971,39 +978,35 @@ var
           px := cs * rsk + scan.Center.X;
           py := sn * rsk + scan.Center.Y;
 
-          if scan.InRangePointD(py, px) and
-              (not InNormalizedAngle(ct, scan.CropData.StartAngle, scan.CropData.EndAngle) and
-               not InNormalizedAngle(ct, scan.CropData.StartAngleMirror, scan.CropData.EndAngleMirror) or
-               (r < rLbl)) then
-          begin
-            acc += scan.GetPointD_Sinc(scan.Image, py, px);
-            Inc(cnt);
-            if cnt >= FRebuildBlendCount then
-              Break;
-          end;
+          sample := High(Word);
+          if scan.InRangePointD(py, px) then
+            sample := scan.GetPointD_Sinc(scan.Image, py, px);
+
+          FOutputScans[iScan].Image[yx + ox] := EnsureRange(Round(sample), 0, High(Word))
         end;
-
-        acc := DivDef(acc, cnt, High(Word));
-
-        if r >= rLbl then
-          FOutputImage[yx + ox] := EnsureRange(Round(acc), 0, High(Word))
-        else
-          FOutputImage[yx + ox] := EnsureRange(Round(acc * CLabelDepthMaxValue / High(Word)), 0, CLabelDepthMaxValue) * High(Word) div CLabelDepthMaxValue; // lower bit depth for label
       end
       else
       begin
         // dark outside the disc, inner inside
-        FOutputImage[yx + ox] := IfThen(r >= rLbl, Round(0.25 * High(Word)), Round(1.0 * High(Word)));
+        sample := IfThen(r >= rLbl, Round(0.25 * High(Word)), Round(1.0 * High(Word)));
+        for iScan := 0 to High(FInputScans) do
+          FOutputScans[iScan].Image[yx + ox] := Round(sample);
       end;
     end;
   end;
 
+var
+  iScan: Integer;
 begin
   WriteLn('Rebuild');
 
   FOutputWidth := Ceil(C45RpmOuterSize * FOutputDPI);
   FOutputHeight := FOutputWidth;
-  SetLength(FOutputImage, sqr(FOutputWidth));
+  for iScan := 0 to High(FInputScans) do
+  begin
+    FOutputScans[iScan].InitImage(FOutputWidth, FOutputHeight, FOutputDPI);
+    FOutputScans[iScan].ImportCropData(FInputScans[iScan]);
+	end;
 
   center := FOutputWidth / 2.0;
   rBeg := C45RpmAdapterSize * 0.5 * FOutputDPI;
@@ -1020,33 +1023,33 @@ var
   fs: TFileStream;
   img: TScanImage;
 begin
-  WriteLn('Save ', FOutputPNGFileName);
-
-  fs := TFileStream.Create(FOutputPNGFileName, fmCreate or fmShareDenyNone);
-  img := TScanImage.Create(FOutputWidth, FOutputHeight);
-  png := TDPIAwareWriterPNG.Create;
-  try
-    img.Image := OutputImage;
-    img.UsePalette := True;
-    for i := 0 to High(Word) do
-      img.Palette.Add(FPColor(i, i, i, High(Word)));
-
-    png.DPI := Point(FOutputDPI, FOutputDPI);
-    png.CompressedText := True;
-    png.CompressionLevel := clmax;
-    png.GrayScale := True;
-    png.WordSized := True;
-    png.Indexed := False;
-    png.UseAlpha := False;
-
-    png.ImageWrite(fs, img);
-  finally
-    png.Free;
-    img.Free;
-    fs.Free;
-  end;
-
-  WriteLn('Done!');
+  //WriteLn('Save ', FOutputPNGFileName);
+  //
+  //fs := TFileStream.Create(FOutputPNGFileName, fmCreate or fmShareDenyNone);
+  //img := TScanImage.Create(FOutputWidth, FOutputHeight);
+  //png := TDPIAwareWriterPNG.Create;
+  //try
+  //  img.Image := OutputImage;
+  //  img.UsePalette := True;
+  //  for i := 0 to High(Word) do
+  //    img.Palette.Add(FPColor(i, i, i, High(Word)));
+  //
+  //  png.DPI := Point(FOutputDPI, FOutputDPI);
+  //  png.CompressedText := True;
+  //  png.CompressionLevel := clmax;
+  //  png.GrayScale := True;
+  //  png.WordSized := True;
+  //  png.Indexed := False;
+  //  png.UseAlpha := False;
+  //
+  //  png.ImageWrite(fs, img);
+  //finally
+  //  png.Free;
+  //  img.Free;
+  //  fs.Free;
+  //end;
+  //
+  //WriteLn('Done!');
 end;
 
 procedure TScanCorrelator.Process;

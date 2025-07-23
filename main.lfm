@@ -11,12 +11,13 @@ object MainForm: TMainForm
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 1181
+  ClientHeight = 1461
   ClientWidth = 1488
   Color = 4210752
   DoubleBuffered = True
   KeyPreview = True
   ParentDoubleBuffered = False
+  LCLVersion = '4.0.0.4'
   Scaled = False
   WindowState = wsMaximized
   OnCreate = FormCreate
@@ -32,12 +33,12 @@ object MainForm: TMainForm
   end
   object pnSettings: TPanel
     Left = 0
-    Height = 1181
+    Height = 1421
     Top = 0
     Width = 264
     Align = alLeft
     BevelOuter = bvLowered
-    ClientHeight = 1181
+    ClientHeight = 1421
     ClientWidth = 264
     DoubleBuffered = False
     FullRepaint = False
@@ -47,7 +48,7 @@ object MainForm: TMainForm
     TabOrder = 0
     object edOutputWAV: TEdit
       Left = 8
-      Height = 23
+      Height = 24
       Hint = 'Scan to track output WAV file'
       Top = 425
       Width = 224
@@ -58,7 +59,7 @@ object MainForm: TMainForm
     end
     object edInputPNG: TEdit
       Left = 8
-      Height = 23
+      Height = 24
       Hint = 'Scan to track input PNG file'
       Top = 400
       Width = 224
@@ -69,7 +70,7 @@ object MainForm: TMainForm
     end
     object edOutputPNG: TEdit
       Left = 8
-      Height = 23
+      Height = 24
       Hint = 'Scans correlator output PNG file'
       Top = 176
       Width = 224
@@ -120,11 +121,11 @@ object MainForm: TMainForm
     end
     object cbDPI: TComboBox
       Left = 175
-      Height = 23
+      Height = 24
       Hint = 'Default dots per inch'
       Top = 464
       Width = 80
-      ItemHeight = 15
+      ItemHeight = 16
       ItemIndex = 2
       Items.Strings = (
         '600'
@@ -175,11 +176,11 @@ object MainForm: TMainForm
     end
     object cbSR: TComboBox
       Left = 175
-      Height = 23
+      Height = 24
       Hint = 'Sample rate'
       Top = 488
       Width = 80
-      ItemHeight = 15
+      ItemHeight = 16
       ItemIndex = 2
       Items.Strings = (
         '16000'
@@ -194,31 +195,31 @@ object MainForm: TMainForm
     end
     object chkCorrect: TCheckBox
       Left = 8
-      Height = 19
+      Height = 20
       Top = 262
-      Width = 94
+      Width = 93
       Caption = 'Correct angles'
       TabOrder = 7
     end
     object chkBrickLim: TCheckBox
       Left = 8
-      Height = 19
+      Height = 20
       Top = 224
-      Width = 160
+      Width = 158
       Caption = 'Brickwall limit scan images'
       TabOrder = 5
     end
     object chkOptimize: TCheckBox
       Left = 8
-      Height = 19
+      Height = 20
       Top = 243
-      Width = 116
+      Width = 114
       Caption = 'Analyze minimizes'
       TabOrder = 6
     end
     object chkDefaultDPI: TCheckBox
       Left = 8
-      Height = 19
+      Height = 20
       Top = 282
       Width = 133
       Caption = 'Rebuild to default DPI'
@@ -226,21 +227,21 @@ object MainForm: TMainForm
     end
     object llDPI: TLabel
       Left = 8
-      Height = 15
+      Height = 16
       Top = 468
       Width = 111
       Caption = 'Default Dots Per Inch'
     end
     object llSR: TLabel
       Left = 8
-      Height = 15
+      Height = 16
       Top = 492
-      Width = 111
+      Width = 110
       Caption = 'Decoded sample rate'
     end
     object sePrec: TSpinEdit
       Left = 175
-      Height = 23
+      Height = 24
       Top = 512
       Width = 80
       MaxValue = 16
@@ -250,7 +251,7 @@ object MainForm: TMainForm
     end
     object llPrec: TLabel
       Left = 8
-      Height = 15
+      Height = 16
       Top = 516
       Width = 102
       Caption = 'Decoding precision'
@@ -265,14 +266,14 @@ object MainForm: TMainForm
     end
     object llBlend: TLabel
       Left = 8
-      Height = 15
+      Height = 16
       Top = 308
-      Width = 133
+      Width = 131
       Caption = 'Maximum blended scans'
     end
     object seBlend: TSpinEdit
       Left = 175
-      Height = 23
+      Height = 24
       Top = 304
       Width = 80
       MaxValue = 1000
@@ -282,25 +283,25 @@ object MainForm: TMainForm
     end
     object chkFixCIS: TCheckBox
       Left = 8
-      Height = 19
+      Height = 20
       Top = 204
-      Width = 240
+      Width = 238
       Caption = 'CIS scanners fix (Canon LIDE, Viisan VF, ...)'
       TabOrder = 4
     end
     object llQSRatio: TLabel
       Left = 8
-      Height = 15
+      Height = 16
       Top = 332
       Width = 107
       Caption = 'Quality / speed ratio'
     end
     object cbQSRatio: TComboBox
       Left = 175
-      Height = 23
+      Height = 24
       Top = 328
       Width = 80
-      ItemHeight = 15
+      ItemHeight = 16
       ItemIndex = 2
       Items.Strings = (
         '0.25'

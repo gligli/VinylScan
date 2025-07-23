@@ -16,8 +16,14 @@ type
     X, Y: Double;
   end;
 
+	{ TPointValue }
+
   TPointValue = record
     X, Y, Value: Double;
+  public
+    class function Create(const ax, ay, avalue: Single): TPointValue; overload; static; inline;
+    class operator = (const apt1, apt2 : TPointValue) : Boolean;
+    class operator <> (const apt1, apt2 : TPointValue): Boolean;
   end;
 
   TPolarPointValue = record
@@ -48,7 +54,7 @@ type
   TSinCosDynArray = array of TSinCos;
   TRadiusAngleDynArray = array of TRadiusAngle;
 
-  TPointFList = specialize TFPGList<TPointF>;
+  TPointValueList = specialize TFPGList<TPointValue>;
 
   TSerpCoeffs9 = array[-4 .. 4 + 3] of Single;
   TSerpCoeffs9ByWord = array[0 .. high(Word)] of TSerpCoeffs9;
@@ -61,7 +67,7 @@ type
 const
   C45RpmRevolutionsPerSecond = 45.0 / 60.0;
 
-  C45RpmRecordingGrooveWidth = 0.006;
+  C45RpmRecordingGrooveWidth = 0.009;
   C45RpmLeadOutGrooveThickness = 0.006;
 
   C45RpmOuterSize = 6.875;
@@ -79,7 +85,7 @@ const
 
   CLowCutoffFreq = 20.0;
 
-{$if 1}
+{$if 0}
   cRedMul = 1;
   cGreenMul = 1;
   cBlueMul = 1;
@@ -1342,6 +1348,25 @@ end;
 function InvariantFormatSettings: TFormatSettings;
 begin
   Result := GInvariantFormatSettings;
+end;
+
+{ TPointValue }
+
+class function TPointValue.Create(const ax, ay, avalue: Single): TPointValue;
+begin
+  Result.X := ax;
+  Result.Y := ay;
+  Result.Value := avalue;
+end;
+
+class operator TPointValue. = (const apt1, apt2: TPointValue): Boolean;
+begin
+  Result := SameValue(apt1.X, apt2.X) and SameValue(apt1.Y, apt2.Y) and SameValue(apt1.Value, apt2.Value);
+end;
+
+class operator TPointValue.<>(const apt1, apt2: TPointValue): Boolean;
+begin
+  Result := not (SameValue(apt1.X, apt2.X) and SameValue(apt1.Y, apt2.Y) and SameValue(apt1.Value, apt2.Value));
 end;
 
 

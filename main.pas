@@ -58,9 +58,9 @@ type
     FReducRatio: Integer;
     FReducFactor: Double;
     FLastTickCount: QWord;
-    FPoints: TPointFList;
+    FPoints: TPointValueList;
 
-    function OnSample(Sender: TScan2Track; Sample, X, Y: Double; var Radius: Double; Percent: Double; Finished: Boolean): Boolean;
+    function OnSample(Sender: TScan2Track; ScanIdx: Integer; Sample, X, Y: Double; var Radius: Double; Percent: Double; Finished: Boolean): Boolean;
   public
     procedure UnitTests;
 
@@ -68,7 +68,7 @@ type
     procedure DrawExtents(AScan: TInputScan);
     procedure DrawImage(const Img: TWordDynArray; AWidth, AHeight: Integer);
     procedure DrawImage(const Img: TDoubleDynArray; AWidth, AHeight: Integer);
-    procedure DrawPoints(const APoints: TPointFList; AColor: TColor);
+    procedure DrawPoints(const APoints: TPointValueList);
   end;
 
 var
@@ -88,16 +88,15 @@ begin
     Exit;
 
   pnSettings.Enabled := False;
-  s2t := TScan2Track.Create(StrToIntDef(cbDPI.Text, 2400), False, StrToIntDef(cbSR.Text, 48000), sePrec.Value);
+  s2t := TScan2Track.Create(edInputPNG.Text, StrToIntDef(cbDPI.Text, 2400), False, StrToIntDef(cbSR.Text, 48000), sePrec.Value);
   try
     s2t.OnSample := @OnSample;
     s2t.OutputWAVFileName := edOutputWAV.Text;
-    s2t.Scan.ImageFileName := edInputPNG.Text;
 
-    s2t.LoadScan;
+    s2t.LoadScans;
 
-    DrawImage(s2t.Scan.Image, s2t.Scan.Width, s2t.Scan.Height);
-    DrawExtents(s2t.Scan);
+    DrawImage(s2t.InputScans[0].Image, s2t.InputScans[0].Width, s2t.InputScans[0].Height);
+    DrawExtents(s2t.InputScans[0]);
 
     s2t.EvalTrack;
 
@@ -134,12 +133,14 @@ end;
 procedure TMainForm.btScansCorrelatorClick(Sender: TObject);
 var
   sc: TScanCorrelator;
+  s2t: TScan2Track;
 begin
   if not pnSettings.Enabled then
     Exit;
 
   pnSettings.Enabled := False;
   sc := TScanCorrelator.Create(mmInputPNGs.Lines, StrToIntDef(cbDPI.Text, 2400));
+  s2t := TScan2Track.CreateFromInputScans(sc.OutputScans, False, StrToIntDef(cbSR.Text, 48000), sePrec.Value);
   try
     sc.OutputPNGFileName := edOutputPNG.Text;
     sc.FixCISScanners := chkFixCIS.Checked;
@@ -160,11 +161,20 @@ begin
 
     sc.Process;
 
-    DrawImage(sc.OutputImage, sc.OutputWidth, sc.OutputHeight);
-
     if Trim(sc.OutputPNGFileName) <> '' then
       sc.Save;
+
+    s2t.LoadScans;
+    s2t.OnSample := @OnSample;
+    s2t.OutputWAVFileName := edOutputWAV.Text;
+
+    DrawImage(s2t.InputScans[0].Image, s2t.InputScans[0].Width, s2t.InputScans[0].Height);
+    DrawExtents(s2t.InputScans[0]);
+
+    s2t.EvalTrack;
+
   finally
+    s2t.Free;
     sc.Free;
     pnSettings.Enabled := True;
   end;
@@ -236,7 +246,7 @@ begin
 
       scm.LoadScans;
       scm.Process;
-      DrawImage(scm.OutputImage, scm.OutputWidth, scm.OutputHeight);
+      DrawImage(scm.OutputScans[0].Image, scm.OutputWidth, scm.OutputHeight);
       scm.Save;
     finally
       scm.Free;
@@ -256,11 +266,11 @@ var
 begin
   pnSettings.ControlStyle := pnSettings.ControlStyle + [csOpaque];
   Image.ControlStyle := Image.ControlStyle + [csOpaque];
-  FPoints := TPointFList.Create;
+  FPoints := TPointValueList.Create;
 
   sl := TStringList.Create;
   sc := TScanCorrelator.Create(sl);
-  s2t := TScan2Track.Create;
+  s2t := TScan2Track.Create('');
   try
     chkFixCIS.Checked := sc.FixCISScanners;
     chkBrickLim.Checked := sc.BrickwallLimitScans;
@@ -286,18 +296,19 @@ end;
 
 procedure TMainForm.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
-  case Key of
-    VK_F10:
-      btScansCorrelatorClick(nil);
-    VK_F11:
-      btScan2TrackClick(nil);
-    VK_F12:
-      UnitTests;
-  end;
+  if pnSettings.Enabled then
+    case Key of
+      VK_F10:
+        btScansCorrelatorClick(nil);
+      VK_F11:
+        btScan2TrackClick(nil);
+      VK_F12:
+        UnitTests;
+    end;
 end;
 
-function TMainForm.OnSample(Sender: TScan2Track; Sample, X, Y: Double; var Radius: Double; Percent: Double;
-  Finished: Boolean): Boolean;
+function TMainForm.OnSample(Sender: TScan2Track; ScanIdx: Integer; Sample, X, Y: Double; var Radius: Double;
+  Percent: Double; Finished: Boolean): Boolean;
 const
   CSecondsAtATime = 0.25 / C45RpmRevolutionsPerSecond;
 var
@@ -305,16 +316,16 @@ var
 begin
   Result := True;
 
-  FPoints.Add(TPointF.Create(X, Y));
+  FPoints.Add(TPointValue.Create(X, Y, ToRGB(0, High(Byte) - iDiv0(ScanIdx * High(Byte), High(Sender.InputScans)), iDiv0(ScanIdx * High(Byte), High(Sender.InputScans)))));
 
-  if Finished or (FPoints.Count >= Sender.SampleRate * CSecondsAtATime) then
+  if Finished or (FPoints.Count >= Sender.SampleRate * CSecondsAtATime * Length(Sender.InputScans)) then
   begin
     Result := not ((GetForegroundWindow = Handle) and (GetAsyncKeyState(VK_ESCAPE) and $8000 <> 0));
 
-    DrawPoints(FPoints, clLime);
+    DrawPoints(FPoints);
 
     tc := GetTickCount64;
-    Write(Percent:6:2, '%,', DivDef(FPoints.Count / Sender.SampleRate * 1000.0, tc - FLastTickCount, 0.0):6:3, 'x', #13);
+    Write(Percent:6:2, '%,', DivDef(FPoints.Count / (Sender.SampleRate * Length(Sender.InputScans)) * 1000.0, tc - FLastTickCount, 0.0):6:3, 'x', #13);
     pbS2T.Position := Round(Percent);
     FLastTickCount := tc;
 
@@ -456,7 +467,7 @@ begin
   Application.ProcessMessages;
 end;
 
-procedure TMainForm.DrawPoints(const APoints: TPointFList; AColor: TColor);
+procedure TMainForm.DrawPoints(const APoints: TPointValueList);
 var
   i: Integer;
   sc: PCardinal;
@@ -467,7 +478,7 @@ begin
     begin
       sc := Image.Picture.Bitmap.ScanLine[round(APoints[i].Y * FReducFactor)];
       Inc(sc, round(APoints[i].X * FReducFactor));
-      sc^ := SwapRB(AColor);
+      sc^ := SwapRB(round(APoints[i].Value));
     end;
   finally
     Image.Picture.Bitmap.EndUpdate;

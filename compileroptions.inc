@@ -6,6 +6,7 @@
   {$optimization FORCENOSTACKFRAME}
 {$endif}
 {$TYPEDADDRESS ON}
+{$modeswitch advancedrecords}
 //{$CODEALIGN CONSTMIN=16}
 //{$CODEALIGN VARMIN=16}
 {$CODEALIGN LOCALMIN=16}
