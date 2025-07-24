@@ -139,8 +139,6 @@ begin
   FQualitySpeedRatio := 1.0;
 
   FFixCISScanners := True;
-  FCorrectAngles := True;
-  FQualitySpeedRatio := 0.5;
 end;
 
 destructor TScanCorrelator.Destroy;

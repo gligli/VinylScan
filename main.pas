@@ -60,7 +60,7 @@ type
     FLastTickCount: QWord;
     FPoints: TPointValueList;
 
-    function OnSample(Sender: TScan2Track; ScanIdx: Integer; Sample, X, Y: Double; var Radius: Double; Percent: Double; Finished: Boolean): Boolean;
+    function OnSample(Sender: TScan2Track; ScanIdx: Integer; Sample: TPointD; X, Y: Double; var Radius: Double; Percent: Double; Finished: Boolean): Boolean;
   public
     procedure UnitTests;
 
@@ -307,7 +307,7 @@ begin
     end;
 end;
 
-function TMainForm.OnSample(Sender: TScan2Track; ScanIdx: Integer; Sample, X, Y: Double; var Radius: Double;
+function TMainForm.OnSample(Sender: TScan2Track; ScanIdx: Integer; Sample: TPointD; X, Y: Double; var Radius: Double;
   Percent: Double; Finished: Boolean): Boolean;
 const
   CSecondsAtATime = 0.25 / C45RpmRevolutionsPerSecond;

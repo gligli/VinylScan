@@ -547,7 +547,7 @@ end;
 
 procedure TInputScan.BrickwallLimit;
 const
-  CRadius = 32;
+  CRadius = 8;
   CSigma = 2;
 var
   offsets: TIntegerDynArray;
