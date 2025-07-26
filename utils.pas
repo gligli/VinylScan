@@ -130,6 +130,8 @@ function lerp(x, y, alpha: Double): Double; overload;
 function lerp(x, y: Word; alpha: Double): Double; overload;
 function lerp(x, y: Integer; alpha: Double): Double; overload;
 
+function lerpXY(topleftPx_rcx: PWORD; stride_edx: Integer; alphax_xmm2, alphay_xmm3: Double): Double;
+
 function herp(y0, y1, y2, y3, alpha: Double): Double;
 
 procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
@@ -166,7 +168,7 @@ procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TSinCosDynArray; 
 function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle, PxCountDiv: Double): TRadiusAngleDynArray;
 function OffsetRadiusAngleLUTAngle(const LUT: TRadiusAngleDynArray; AngleOffset: Double): TSinCosDynArray;
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
-procedure IncrementalSinCos(Angle: Double; var PrevAngle: Double; var SinCos: TSinCos);
+procedure IncrementalSinCos(Angle: Double; var PrevAngle: Double; var ASinCos: TSinCos);
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray); overload;
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TDoubleDynArray); overload;
@@ -340,6 +342,38 @@ begin
     AImage[xy + AWidth + 1] += y * x * p;
   end;
 end;
+
+{$ifdef CPUX64}
+
+function lerpXY(topleftPx_rcx: PWORD; stride_edx: Integer; alphax_xmm2, alphay_xmm3: Double): Double; register; assembler;
+asm
+  pxor xmm0, xmm0
+  pxor xmm1, xmm1
+
+  pinsrw xmm0, word ptr [rcx], 0
+  pinsrw xmm0, word ptr [rcx + rdx * 2], 2
+  pinsrw xmm1, word ptr [rcx + 2], 0
+  pinsrw xmm1, word ptr [rcx + rdx * 2 + 2], 2
+
+  cvtdq2pd xmm0, xmm0
+  cvtdq2pd xmm1, xmm1
+
+  subpd xmm1, xmm0
+  movlhps xmm2,xmm2
+  mulpd xmm1, xmm2
+  addpd xmm0, xmm1
+
+  movhlps xmm1,xmm0
+
+  subsd xmm1,xmm0
+  mulsd xmm1,xmm3
+  addsd xmm0,xmm1
+end;
+
+{$else}
+
+{$endif}
+
 
 function herp(y0, y1, y2, y3, alpha: Double): Double;
 var
@@ -1122,11 +1156,11 @@ begin
   Result := (Cutoff * 2.0 / SampleRate) / sqrt(0.1024 + sqr(Cutoff * 2.0 / SampleRate));
 end;
 
-procedure IncrementalSinCos(Angle: Double; var PrevAngle: Double; var SinCos: TSinCos);
+procedure IncrementalSinCos(Angle: Double; var PrevAngle: Double; var ASinCos: TSinCos);
 begin
   if Angle <> PrevAngle then
   begin
-    Math.SinCos(Angle, SinCos.Sin, SinCos.Cos);
+    SinCos(Angle, ASinCos.Sin, ASinCos.Cos);
     PrevAngle := Angle;
   end;
 end;

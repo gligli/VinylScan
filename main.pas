@@ -20,6 +20,7 @@ type
     btScan2Track: TButton;
     btScansCorrelator: TButton;
     cbQSRatio: TComboBox;
+    chkMulti: TCheckBox;
     chkFixCIS: TCheckBox;
     chkDefaultDPI: TCheckBox;
     chkCorrect: TCheckBox;
@@ -82,26 +83,50 @@ implementation
 
 procedure TMainForm.btScan2TrackClick(Sender: TObject);
 var
+  iScan: Integer;
+  fn: String;
+  sl: TStringList;
   s2t: TScan2Track;
 begin
   if not pnSettings.Enabled then
     Exit;
 
   pnSettings.Enabled := False;
-  s2t := TScan2Track.Create(edInputPNG.Text, StrToIntDef(cbDPI.Text, 2400), False, StrToIntDef(cbSR.Text, 48000), sePrec.Value);
+  sl := TStringList.Create;
   try
-    s2t.OnSample := @OnSample;
-    s2t.OutputWAVFileName := edOutputWAV.Text;
+    if chkMulti.Checked then
+    begin
+      iScan := 0;
+      repeat
+        fn := ChangeFileExt(edInputPNG.Text, '.' + IntToStr(iScan) + ExtractFileExt(edInputPNG.Text));
+        if not FileExists(fn) then
+          Break;
+        sl.Add(fn);
+        Inc(iScan);
+      until False;
+    end
+    else
+    begin
+      sl.Add(edInputPNG.Text);
+    end;
 
-    s2t.LoadScans;
+    s2t := TScan2Track.Create(sl, StrToIntDef(cbDPI.Text, 2400), False, StrToIntDef(cbSR.Text, 48000), sePrec.Value);
+    try
+      s2t.OnSample := @OnSample;
+      s2t.OutputWAVFileName := edOutputWAV.Text;
 
-    DrawImage(s2t.InputScans[0].LeveledImage, s2t.InputScans[0].Width, s2t.InputScans[0].Height);
-    DrawExtents(s2t.InputScans[0]);
+      s2t.LoadScans(True);
 
-    s2t.EvalTrack;
+      DrawImage(s2t.InputScans[0].LeveledImage, s2t.InputScans[0].Width, s2t.InputScans[0].Height);
+      DrawExtents(s2t.InputScans[0]);
 
+      s2t.EvalTrack;
+
+    finally
+      s2t.Free;
+    end;
   finally
-    s2t.Free;
+    sl.Free;
     pnSettings.Enabled := True;
   end;
 end;
@@ -133,14 +158,12 @@ end;
 procedure TMainForm.btScansCorrelatorClick(Sender: TObject);
 var
   sc: TScanCorrelator;
-  s2t: TScan2Track;
 begin
   if not pnSettings.Enabled then
     Exit;
 
   pnSettings.Enabled := False;
   sc := TScanCorrelator.Create(mmInputPNGs.Lines, StrToIntDef(cbDPI.Text, 2400));
-  s2t := TScan2Track.CreateFromInputScans(sc.OutputScans, False, StrToIntDef(cbSR.Text, 48000), sePrec.Value);
   try
     sc.OutputPNGFileName := edOutputPNG.Text;
     sc.FixCISScanners := chkFixCIS.Checked;
@@ -161,20 +184,11 @@ begin
 
     sc.Process;
 
+    DrawImage(sc.OutputImage, sc.OutputWidth, sc.OutputHeight);
+
     if Trim(sc.OutputPNGFileName) <> '' then
       sc.Save;
-
-    s2t.LoadScans;
-    s2t.OnSample := @OnSample;
-    s2t.OutputWAVFileName := edOutputWAV.Text;
-
-    DrawImage(s2t.InputScans[0].LeveledImage, s2t.InputScans[0].Width, s2t.InputScans[0].Height);
-    DrawExtents(s2t.InputScans[0]);
-
-    s2t.EvalTrack;
-
   finally
-    s2t.Free;
     sc.Free;
     pnSettings.Enabled := True;
   end;
@@ -246,7 +260,7 @@ begin
 
       scm.LoadScans;
       scm.Process;
-      DrawImage(scm.OutputScans[0].Image, scm.OutputWidth, scm.OutputHeight);
+      DrawImage(scm.OutputImage, scm.OutputWidth, scm.OutputHeight);
       scm.Save;
     finally
       scm.Free;
@@ -270,7 +284,7 @@ begin
 
   sl := TStringList.Create;
   sc := TScanCorrelator.Create(sl);
-  s2t := TScan2Track.Create('');
+  s2t := TScan2Track.Create(sl);
   try
     chkFixCIS.Checked := sc.FixCISScanners;
     chkBrickLim.Checked := sc.BrickwallLimitScans;

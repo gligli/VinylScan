@@ -11,13 +11,12 @@ object MainForm: TMainForm
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 1461
+  ClientHeight = 1421
   ClientWidth = 1488
   Color = 4210752
   DoubleBuffered = True
   KeyPreview = True
   ParentDoubleBuffered = False
-  LCLVersion = '4.2.0.0'
   Scaled = False
   WindowState = wsMaximized
   OnCreate = FormCreate
@@ -113,17 +112,17 @@ object MainForm: TMainForm
     object btScan2Track: TButton
       Left = 8
       Height = 25
-      Top = 544
+      Top = 552
       Width = 131
       Caption = 'Scan to track (F11)'
-      TabOrder = 19
+      TabOrder = 20
       OnClick = btScan2TrackClick
     end
     object cbDPI: TComboBox
       Left = 175
       Height = 24
       Hint = 'Default dots per inch'
-      Top = 464
+      Top = 472
       Width = 80
       ItemHeight = 16
       ItemIndex = 2
@@ -135,7 +134,7 @@ object MainForm: TMainForm
       )
       ParentShowHint = False
       ShowHint = True
-      TabOrder = 16
+      TabOrder = 17
       Text = '2400'
     end
     object btInPNGs: TButton
@@ -178,7 +177,7 @@ object MainForm: TMainForm
       Left = 175
       Height = 24
       Hint = 'Sample rate'
-      Top = 488
+      Top = 496
       Width = 80
       ItemHeight = 16
       ItemIndex = 2
@@ -190,7 +189,7 @@ object MainForm: TMainForm
       )
       ParentShowHint = False
       ShowHint = True
-      TabOrder = 17
+      TabOrder = 18
       Text = '48000'
     end
     object chkCorrect: TCheckBox
@@ -228,31 +227,31 @@ object MainForm: TMainForm
     object llDPI: TLabel
       Left = 8
       Height = 16
-      Top = 468
+      Top = 476
       Width = 111
       Caption = 'Default Dots Per Inch'
     end
     object llSR: TLabel
       Left = 8
       Height = 16
-      Top = 492
+      Top = 500
       Width = 110
       Caption = 'Decoded sample rate'
     end
     object sePrec: TSpinEdit
       Left = 175
       Height = 24
-      Top = 512
+      Top = 520
       Width = 80
       MaxValue = 16
       MinValue = 1
-      TabOrder = 18
+      TabOrder = 19
       Value = 1
     end
     object llPrec: TLabel
       Left = 8
       Height = 16
-      Top = 516
+      Top = 524
       Width = 102
       Caption = 'Decoding precision'
     end
@@ -262,7 +261,7 @@ object MainForm: TMainForm
       Top = 600
       Width = 247
       Smooth = True
-      TabOrder = 20
+      TabOrder = 21
     end
     object llBlend: TLabel
       Left = 8
@@ -312,6 +311,16 @@ object MainForm: TMainForm
       )
       TabOrder = 10
       Text = '1.0'
+    end
+    object chkMulti: TCheckBox
+      Left = 8
+      Height = 20
+      Top = 452
+      Width = 202
+      Caption = 'Extract audio from individual scans'
+      Checked = True
+      State = cbChecked
+      TabOrder = 16
     end
   end
   object odInPNGs: TOpenDialog

@@ -78,8 +78,8 @@ type
     procedure BrickwallLimit;
     procedure FindTrack(AUseGradient: Boolean; AForcedSampleRate: Integer = -1);
     procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle, ASkewX, ASkewY: Double);
-    procedure ImportCropData(AScan: TInputScan);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
+    procedure FindCroppedArea;
     procedure FixCISScanners;
 
     function InRangePointD(Y, X: Double): Boolean;
@@ -547,8 +547,8 @@ end;
 
 procedure TInputScan.BrickwallLimit;
 const
-  CRadius = 8;
-  CSigma = 2;
+  CRadius = 16;
+  CSigma = 1;
 var
   offsets: TIntegerDynArray;
 
@@ -669,18 +669,6 @@ begin
   if not IsNan(ARelativeAngle) then FRelativeAngle := ARelativeAngle;
   if not IsNan(ASkewX) then FSkew.X := ASkewX;
   if not IsNan(ASkewY) then FSkew.Y := ASkewY;
-end;
-
-procedure TInputScan.ImportCropData(AScan: TInputScan);
-var
-  diff: Double;
-begin
-  diff := FRelativeAngle - AScan.RelativeAngle;
-
-  FCropData.StartAngle := NormalizeAngle(AScan.CropData.StartAngle + diff);
-  FCropData.EndAngle := NormalizeAngle(AScan.CropData.EndAngle + diff);
-  FCropData.StartAngleMirror := NormalizeAngle(AScan.CropData.StartAngleMirror + diff);
-  FCropData.EndAngleMirror := NormalizeAngle(AScan.CropData.EndAngleMirror + diff);
 end;
 
 procedure TInputScan.FindCenterExtents;
@@ -864,6 +852,65 @@ begin
   FCropData.EndAngleMirror := NormalizeAngle(X[3]);
 end;
 
+procedure TInputScan.FindCroppedArea;
+var
+  iAngle, iRadius, beginRadius, endRadius: Integer;
+  toRad, angle, sn, cs: Double;
+  prevAngleCropped, isMirror: Boolean;
+  angleCropped: TBooleanDynArray;
+  angleData: TDoubleDynArray;
+begin
+  beginRadius := Ceil(C45RpmLastMusicGroove * 0.5 * FDPI);
+  endRadius := Floor(C45RpmFirstMusicGroove * 0.5 * FDPI);
+
+  SetLength(angleCropped, 720);
+  SetLength(angleData, endRadius - beginRadius + 1);
+
+  toRad := 2.0 * Pi / Length(angleCropped);
+
+  for iAngle := 0 to High(angleCropped) do
+  begin
+    angle := iAngle * toRad;
+    SinCos(angle, sn, cs);
+
+    for iRadius := beginRadius to endRadius do
+      angleData[iRadius - beginRadius] := GetPointD_Linear(FImage, sn * iRadius + FCenter.Y, cs * iRadius + FCenter.X);
+
+    angleCropped[iAngle] := IsZero(StdDev(angleData));
+  end;
+
+  isMirror := False;
+  prevAngleCropped := angleCropped[High(angleCropped)];
+  for iAngle := 0 to High(angleCropped) do
+  begin
+    if angleCropped[iAngle] and not prevAngleCropped then
+    begin
+      angle := NormalizeAngle((iAngle - 1) * toRad);
+
+      if isMirror then
+        FCropData.StartAngleMirror := angle
+      else
+        FCropData.StartAngle := angle;
+    end
+    else if not angleCropped[iAngle] and prevAngleCropped then
+    begin
+      angle := NormalizeAngle((iAngle + 1) * toRad);
+
+      if isMirror then
+        FCropData.EndAngleMirror := angle
+      else
+        FCropData.EndAngle := angle;
+
+      isMirror := not isMirror;
+    end;
+
+    prevAngleCropped := angleCropped[iAngle];
+  end;
+
+  if not FSilent then
+    WriteLn(ImageShortName, ', begin:', RadToDeg(CropData.StartAngle):9:3, ', end:', RadToDeg(CropData.EndAngle):9:3, ', begin2:', RadToDeg(CropData.StartAngleMirror):9:3, ', end2:', RadToDeg(CropData.EndAngleMirror):9:3);
+end;
+
 procedure TInputScan.FixCISScanners;
 
   function FindPhaseAlongX(Recurence, ReccurenceCount: Integer; out Loss: Double): Integer;
@@ -1015,18 +1062,12 @@ end;
 
 function TInputScan.GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
 var
-  ix, iy, yx: Integer;
-  y1, y2: Double;
+  ix, iy: Integer;
 begin
   ix := trunc(X);
   iy := trunc(Y);
 
-  yx := iy * FWidth + ix;
-
-  y1 := lerp(Image[yx], Image[yx + 1], X - ix);
-  y2 := lerp(Image[yx + FWidth], Image[yx + FWidth + 1], X - ix);
-
-  Result := lerp(y1, y2, Y - iy);
+  Result := lerpXY(@Image[iy * FWidth + ix], FWidth, X - ix, Y - iy);
 end;
 
 function TInputScan.GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single;
@@ -1049,7 +1090,7 @@ end;
 function TInputScan.GetMeanSD(AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;
 var
   iRadius, iLut, cnt: Integer;
-  diff: Double;
+  diff, px, py: Double;
   sinCosLUT: TSinCosDynArray;
 begin
   diff := NormalizedAngleDiff(AStartAngle, AEndAngle);
@@ -1063,8 +1104,13 @@ begin
   for iRadius := Floor(AStartRadius) to Ceil(AEndRadius) do
     for iLut := 0 to High(sinCosLUT) do
     begin
-      Result.X += GetPointD_Linear(FLeveledImage, sinCosLUT[iLut].Sin * iRadius + FCenter.Y, sinCosLUT[iLut].Cos * iRadius + FCenter.X);
-      Inc(cnt);
+      px := sinCosLUT[iLut].Cos * iRadius + FCenter.X;
+      py := sinCosLUT[iLut].Sin * iRadius + FCenter.Y;
+      if InRangePointD(py, px) then
+      begin
+        Result.X += GetPointD_Linear(FLeveledImage, py, px);
+        Inc(cnt);
+      end;
     end;
   Result.X /= cnt;
 
@@ -1073,8 +1119,13 @@ begin
   for iRadius := Floor(AStartRadius) to Ceil(AEndRadius) do
     for iLut := 0 to High(sinCosLUT) do
     begin
-      Result.Y += Sqr(GetPointD_Linear(FLeveledImage, sinCosLUT[iLut].Sin * iRadius + FCenter.Y, sinCosLUT[iLut].Cos * iRadius + FCenter.X) - Result.X);
-      Inc(cnt);
+      px := sinCosLUT[iLut].Cos * iRadius + FCenter.X;
+      py := sinCosLUT[iLut].Sin * iRadius + FCenter.Y;
+      if InRangePointD(py, px) then
+      begin
+        Result.Y += Sqr(GetPointD_Linear(FLeveledImage, py, px) - Result.X);
+        Inc(cnt);
+      end;
     end;
   Result.Y /= cnt;
   Result.Y := Sqrt(Result.Y);

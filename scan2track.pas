@@ -35,11 +35,11 @@ type
     function DecodeSample(AScan: TInputScan; radius, angleSin, angleCos: Double; precision: Integer): TPointD;
 
   public
-    constructor Create(AImageFileName: String; ADefaultDPI: Integer = 2400; ASilent: Boolean = False; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 8);
+    constructor Create(AScanFileNames: TStrings; ADefaultDPI: Integer = 2400; ASilent: Boolean = False; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 8);
     constructor CreateFromInputScans(AInputScans: TInputScanDynArray; ASilent: Boolean; ASampleRate: Integer; ADecoderPrecision: Integer);
     destructor Destroy; override;
 
-    procedure LoadScans;
+    procedure LoadScans(AForceBrickwall: Boolean);
     procedure EvalTrack;
 
     property OnSample: TSampleEvent read FOnSample write FOnSample;
@@ -56,14 +56,19 @@ implementation
 
 { TScan2Track }
 
-constructor TScan2Track.Create(AImageFileName: String; ADefaultDPI: Integer; ASilent: Boolean; ASampleRate: Integer;
- ADecoderPrecision: Integer);
+constructor TScan2Track.Create(AScanFileNames: TStrings; ADefaultDPI: Integer; ASilent: Boolean; ASampleRate: Integer;
+  ADecoderPrecision: Integer);
+var
+  iScan: Integer;
 begin
   Init(ASilent, ASampleRate, ADecoderPrecision);
 
-  SetLength(FInputScans, 1);
-  FInputScans[0] := TInputScan.Create(ADefaultDPI);
-  FInputScans[0].ImageFileName := AImageFileName;
+  SetLength(FInputScans, AScanFileNames.Count);
+  for iScan := 0 to High(FInputScans) do
+  begin
+    FInputScans[iScan] := TInputScan.Create(ADefaultDPI);
+    FInputScans[iScan].ImageFileName := AScanFileNames[iScan];
+  end;
 
   FScansOwned := True;
 end;
@@ -103,13 +108,19 @@ var
   iSmp, posMin, posMax, decoderMax: Integer;
   r, cx, cy, px, py, cxa: Double;
 
-  function GetSample(iSmp: Integer): Single;
+  function GetSampleIdx(iSmp: Integer): Single;
   begin
     r := radius + (iSmp + 0.5) * cxa;
     px := angleCos * r + cx;
     py := angleSin * r + cy;
 
     Result := AScan.GetPointD_Sinc(AScan.LeveledImage, py, px);
+  end;
+
+  function ConvertToSampleValue(ASampleIdxAcc: Double): Double;
+  begin
+    Result := ASampleIdxAcc / decoderMax;
+    Result := Result * 2.0 / High(Word) - 1.0;
   end;
 
 begin
@@ -135,13 +146,14 @@ begin
 
   Result.X := 0.0;
   for iSmp := 0 to posMax do
-    Result.X += GetSample(iSmp);
-  Result.X := Result.X * 2.0 / (High(Word) * decoderMax) - 1.0;
+    Result.X += GetSampleIdx(iSmp);
 
   Result.Y := 0.0;
   for iSmp := posMin to -1 do
-    Result.Y += GetSample(iSmp);
-  Result.Y := Result.Y * 2.0 / (High(Word) * decoderMax) - 1.0;
+    Result.Y += GetSampleIdx(iSmp);
+
+  Result.X := ConvertToSampleValue(Result.X);
+  Result.Y := ConvertToSampleValue(Result.Y);
 
   Result.Y := -Result.Y;
 end;
@@ -196,7 +208,7 @@ begin
     fltSampleR.SampleRate := FSampleRate;
     fltSampleR.Order := 4;
 
-    BuildSinCosLUT(FPointsPerRevolution, sinCosLut, FInputScans[0].GrooveStartAngle, -2.0 * Pi);
+    BuildSinCosLUT(FPointsPerRevolution, sinCosLut, 0.0, -2.0 * Pi);
 
     SetLength(fSmps, Length(FInputScans));
     SetLength(radiuses, Length(FInputScans));
@@ -222,7 +234,7 @@ begin
     iLut := 0;
 
     repeat
-      angle := NormalizeAngle(iLut * FRadiansPerRevolutionPoint + FInputScans[0].GrooveStartAngle);
+      angle := NormalizeAngle(iLut * FRadiansPerRevolutionPoint);
       cs := sinCosLut[iLut].Cos;
       sn := sinCosLut[iLut].Sin;
 
@@ -237,8 +249,8 @@ begin
       begin
         scan := FInputScans[iScan];
 
-        if not FScansOwned and
-           (InNormalizedAngle(angle, scan.CropData.StartAngle, scan.CropData.EndAngle) or
+        if (Length(FInputScans) > 1) and
+            (InNormalizedAngle(angle, scan.CropData.StartAngle, scan.CropData.EndAngle) or
             InNormalizedAngle(angle, scan.CropData.StartAngleMirror, scan.CropData.EndAngleMirror)) then
         begin
           fSmps[iScan].X := NaN;
@@ -317,16 +329,21 @@ begin
   end;
 end;
 
-procedure TScan2Track.LoadScans;
+procedure TScan2Track.LoadScans(AForceBrickwall: Boolean);
 var
   iScan: Integer;
 begin
   for iScan := 0 to High(FInputScans) do
   begin
     if FScansOwned then
-      InputScans[iScan].LoadImage;
-    InputScans[iScan].BrickwallLimit;
-    InputScans[iScan].FindTrack(False, FSampleRate);
+    begin
+      FInputScans[iScan].LoadImage;
+      if Length(InputScans) > 1 then
+        FInputScans[iScan].FindCroppedArea;
+    end;
+    if FScansOwned or AForceBrickwall then
+      FInputScans[iScan].BrickwallLimit;
+    FInputScans[iScan].FindTrack(False, FSampleRate);
   end;
 end;
 
