@@ -70,6 +70,8 @@ type
     procedure DrawImage(const Img: TWordDynArray; AWidth, AHeight: Integer);
     procedure DrawImage(const Img: TDoubleDynArray; AWidth, AHeight: Integer);
     procedure DrawPoints(const APoints: TPointValueList);
+
+    property ReducFactor: Double read FReducFactor;
   end;
 
 var

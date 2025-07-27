@@ -121,7 +121,7 @@ function ToRGB(r, g, b: Byte): Integer; inline;
 procedure FromRGB(col: Integer; out r, g, b: Integer); inline; overload;
 procedure FromRGB(col: Integer; out r, g, b: Byte); inline; overload;
 function ToLuma(r, g, b: Integer): Integer; inline;
-function ToBW(col: Integer): Byte;
+function ToBW(r, g, b: Integer): Integer; inline;
 
 function Sinc(x: Double): Double;
 function BlackmanExactWindow(p: Double): Double;
@@ -130,7 +130,7 @@ function lerp(x, y, alpha: Double): Double; overload;
 function lerp(x, y: Word; alpha: Double): Double; overload;
 function lerp(x, y: Integer; alpha: Double): Double; overload;
 
-function lerpXY(topleftPx_rcx: PWORD; stride_edx: Integer; alphax_xmm2, alphay_xmm3: Double): Double;
+function lerpXY(topleftPx_rcx: PWORD; stride_rdx: UInt64; alphax_xmm2, alphay_xmm3: Double): Double; register; assembler;
 
 function herp(y0, y1, y2, y3, alpha: Double): Double;
 
@@ -282,11 +282,8 @@ begin
   Result := r * cRedMul + g * cGreenMul + b * cBlueMul;
 end;
 
-function ToBW(col: Integer): Byte;
-var
-  r, g, b: Byte;
+function ToBW(r, g, b: Integer): Integer; inline;
 begin
-  FromRGB(col, r, g, b);
   Result := ToLuma(r, g, b) div cLumaDiv;
 end;
 
@@ -345,7 +342,7 @@ end;
 
 {$ifdef CPUX64}
 
-function lerpXY(topleftPx_rcx: PWORD; stride_edx: Integer; alphax_xmm2, alphay_xmm3: Double): Double; register; assembler;
+function lerpXY(topleftPx_rcx: PWORD; stride_rdx: UInt64; alphax_xmm2, alphay_xmm3: Double): Double; register; assembler;
 asm
   pxor xmm0, xmm0
   pxor xmm1, xmm1

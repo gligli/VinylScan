@@ -82,9 +82,9 @@ type
     procedure FindCroppedArea;
     procedure FixCISScanners;
 
-    function InRangePointD(Y, X: Double): Boolean;
-    function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
-    function GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single;
+    function InRangePointD(Y, X: Double): Boolean; inline;
+    function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double; inline;
+    function GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single; inline;
     function GetMeanSD(AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;
 
     procedure AddCorrectRef(AngleIdx, ScanIdx: Integer);
@@ -394,7 +394,7 @@ begin
 
     if InRangePointD(y, x) then
     begin
-      v := v * 0.99 + GetPointD_Linear(FLeveledImage, y, x) * 0.01;
+      v := v * 0.99 + GetPointD_Linear(FImage, y, x) * 0.01;
 
       if v > best then
       begin
@@ -1205,7 +1205,7 @@ end;
 
 procedure TScanImage.SetInternalColor(x, y: integer; const Value: TFPColor);
 begin
-  FImage[y * Width + x] := ToLuma(Value.Red, Value.Green, Value.Blue) div cLumaDiv;
+  FImage[y * Width + x] := ToBW(Value.Red, Value.Green, Value.Blue);
 end;
 
 { TDPIAwareReaderPNG }

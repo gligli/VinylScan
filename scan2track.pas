@@ -208,7 +208,7 @@ begin
     fltSampleR.SampleRate := FSampleRate;
     fltSampleR.Order := 4;
 
-    BuildSinCosLUT(FPointsPerRevolution, sinCosLut, 0.0, -2.0 * Pi);
+    BuildSinCosLUT(FPointsPerRevolution, sinCosLut, FInputScans[0].GrooveStartAngle, -2.0 * Pi);
 
     SetLength(fSmps, Length(FInputScans));
     SetLength(radiuses, Length(FInputScans));
@@ -234,7 +234,7 @@ begin
     iLut := 0;
 
     repeat
-      angle := NormalizeAngle(iLut * FRadiansPerRevolutionPoint);
+      angle := NormalizeAngle(iLut * FRadiansPerRevolutionPoint + FInputScans[0].GrooveStartAngle);
       cs := sinCosLut[iLut].Cos;
       sn := sinCosLut[iLut].Sin;
 
