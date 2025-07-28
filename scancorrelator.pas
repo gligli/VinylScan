@@ -339,7 +339,7 @@ begin
     oy := sc^.Sin * r + cy;
 
     if baseScan.InRangePointD(oy, ox) then
-      Coords.PreparedValues[ilut] := TanH((baseScan.GetPointD_Linear(baseScan.LeveledImage, oy, ox) - Coords.BaseMeanSD.X) * Coords.BaseMeanSD.Y)
+      Coords.PreparedValues[ilut] := CompressRange((baseScan.GetPointD_Linear(baseScan.LeveledImage, oy, ox) - Coords.BaseMeanSD.X) * Coords.BaseMeanSD.Y)
     else
       Coords.PreparedValues[ilut] := 1e6;
   end;
@@ -397,7 +397,7 @@ begin
       px := sc.Cos * r * skewX + centerX;
       py := sc.Sin * r * skewY + centerY;
 
-      Result += Sqr(coords^.PreparedValues[ilut] - TanH((scan.GetPointD_Linear(scan.LeveledImage, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y));
+      Result += Sqr(coords^.PreparedValues[ilut] - CompressRange((scan.GetPointD_Linear(scan.LeveledImage, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y));
     end;
 
     Result := Sqrt(Result / Length(coords^.RadiusAngleLUT));
@@ -446,7 +446,7 @@ var
 
     X := [scan.Center.X, scan.Center.Y, scan.RelativeAngle, 1.0, 1.0];
 
-    func := NelderMeadMinimize(@NelderMeadAnalyze, X, [0.02 * scan.DPI, 0.02 * scan.DPI, DegToRad(1.0), 0.01, 0.01], 1e-9, @coords);
+    func := NelderMeadMinimize(@NelderMeadAnalyze, X, [0.02 * scan.DPI, 0.02 * scan.DPI, DegToRad(1.0), 0.01, 0.01], 1e-6, @coords);
 
     scan.Objective := func;
     FInputScans[AIndex].CorrectByModel(X[0], X[1], X[2], X[3], X[4]);
@@ -681,7 +681,7 @@ begin
     py := sc^.Sin * r + centerY;
 
     if baseScan.InRangePointD(py, px) then
-      Coords.PreparedValues[iLut] := TanH((baseScan.GetPointD_Linear(baseScan.LeveledImage, py, px) - Coords.BaseMeanSD.X) * Coords.BaseMeanSD.Y)
+      Coords.PreparedValues[iLut] := CompressRange((baseScan.GetPointD_Linear(baseScan.LeveledImage, py, px) - Coords.BaseMeanSD.X) * Coords.BaseMeanSD.Y)
     else
       Coords.PreparedValues[iLut] := 1e6;
   end;
@@ -723,7 +723,7 @@ begin
     py := sc^.Sin * r + centerY;
 
     if scan.InRangePointD(py, px) then
-      Result += Sqr((Coords.PreparedValues[iLut] - TanH((scan.GetPointD_Linear(scan.LeveledImage, py, px) - Coords.MeanSD.X) * Coords.MeanSD.Y)) * Coords.Weights[iLut])
+      Result += Sqr((Coords.PreparedValues[iLut] - CompressRange((scan.GetPointD_Linear(scan.LeveledImage, py, px) - Coords.MeanSD.X) * Coords.MeanSD.Y)) * Coords.Weights[iLut])
     else
       Result += Sqr(1e6);
   end;

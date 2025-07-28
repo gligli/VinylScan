@@ -302,7 +302,7 @@ var
         py := sn * rsx + CenterY;
 
         if InRangePointD(py, px) then
-          Result -= TanH((GetPointD_Linear(FLeveledImage, py, px) - meanSD^.X) * meanSD^.Y) * sy
+          Result -= CompressRange((GetPointD_Linear(FLeveledImage, py, px) - meanSD^.X) * meanSD^.Y) * sy
         else
           Result += 1e6;
       end;

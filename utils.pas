@@ -123,6 +123,7 @@ procedure FromRGB(col: Integer; out r, g, b: Byte); inline; overload;
 function ToLuma(r, g, b: Integer): Integer; inline;
 function ToBW(r, g, b: Integer): Integer; inline;
 
+function CompressRange(x: Double): Double; inline;
 function Sinc(x: Double): Double;
 function BlackmanExactWindow(p: Double): Double;
 
@@ -285,6 +286,11 @@ end;
 function ToBW(r, g, b: Integer): Integer; inline;
 begin
   Result := ToLuma(r, g, b) div cLumaDiv;
+end;
+
+function CompressRange(x: Double): Double;
+begin
+  Result := EnsureRange(x, -1.0, 1.0);
 end;
 
 function Sinc(x: Double): Double;
