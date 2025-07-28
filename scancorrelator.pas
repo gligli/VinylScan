@@ -173,24 +173,26 @@ procedure TScanCorrelator.LoadScans;
   begin
     Scan := FInputScans[AIndex];
 
-    Scan.LoadImage;
     if FFixCISScanners then Scan.FixCISScanners;
     if FBrickwallLimitScans then Scan.BrickwallLimit;
     Scan.FindTrack(True);
   end;
 
 var
-  i, dpi: Integer;
+  iScan, dpi: Integer;
 begin
   WriteLn('LoadScans');
+
+  for iScan := 0 to High(FInputScans) do
+    FInputScans[iScan].LoadImage;
 
   ProcThreadPool.DoParallelLocalProc(@DoOne, 0, high(FInputScans));
 
   if Length(FInputScans) > 0 then
   begin
     dpi := FInputScans[0].DPI;
-    for i := 1 to High(FInputScans) do
-      Assert(FInputScans[i].DPI = dpi, 'InputScans mixed DPIs!');
+    for iScan := 1 to High(FInputScans) do
+      Assert(FInputScans[iScan].DPI = dpi, 'InputScans mixed DPIs!');
     if FRebuildScaled then
       FOutputDPI := dpi;
   end;

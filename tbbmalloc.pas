@@ -163,7 +163,7 @@ Var
 
 Initialization
   GetMemoryManager(OldMemoryManager);
-  //scalable_allocation_mode(TBBMALLOC_USE_HUGE_PAGES, 1);
+  scalable_allocation_mode(TBBMALLOC_USE_HUGE_PAGES, 1);
   SetMemoryManager(TbbMemMgr);
 
 Finalization
