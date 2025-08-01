@@ -32,7 +32,7 @@ type
     FUsedSampleValues: array[SmallInt] of Boolean;
 
     procedure Init(ASilent: Boolean; ASampleRate: Integer; ADecoderPrecision: Integer);
-    function DecodeSample(AScan: TInputScan; radius, angleSin, angleCos: Double; precision: Integer): TPointD;
+    function DecodeSample(AScan: TInputScan; radius, angleSin, angleCos: Double; iLut, precision: Integer): TPointD;
 
   public
     constructor Create(AScanFileNames: TStrings; ADefaultDPI: Integer = 2400; ASilent: Boolean = False; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 8);
@@ -102,19 +102,16 @@ begin
   FRadiansPerRevolutionPoint := -Pi * 2.0 / FPointsPerRevolution;
 end;
 
-function TScan2Track.DecodeSample(AScan: TInputScan; radius, angleSin, angleCos: Double; precision: Integer): TPointD;
+function TScan2Track.DecodeSample(AScan: TInputScan; radius, angleSin, angleCos: Double; iLut, precision: Integer): TPointD;
 
 var
-  iSmp, posMin, posMax, decoderMax: Integer;
+  iSmp, posMin, posMax, decoderMax, radiusOffset: Integer;
   r, cx, cy, px, py, cxa: Double;
 
   function GetSampleIdx(iSmp: Integer): Single;
   begin
     r := radius + (iSmp + 0.5) * cxa;
-    px := angleCos * r + cx;
-    py := angleSin * r + cy;
-
-    Result := AScan.GetPointD_Sinc(AScan.LeveledImage, py, px);
+    Result := AScan.GetPolarPointD_Sinc(AScan.PolarImage, r - radiusOffset, iLut);
   end;
 
   function ConvertToSampleValue(ASampleIdxAcc: Double): Double;
@@ -128,6 +125,7 @@ begin
   Result.Y := 0.0;
 
   decoderMax := 1 shl (precision - 1);
+  radiusOffset := Floor(C45RpmLabelOuterSize * 0.5 * AScan.DPI);
 
   cxa := C45RpmRecordingGrooveWidth * 0.5 * AScan.DPI / decoderMax;
 
@@ -258,7 +256,7 @@ begin
         end
         else
         begin
-          fSmps[iScan] := DecodeSample(scan, radiuses[iScan], sn, cs, FDecoderPrecision);
+          fSmps[iScan] := DecodeSample(scan, radiuses[iScan], sn, cs, iLut, FDecoderPrecision);
           validSmpAcc.X += fSmps[iScan].X;
           validSmpAcc.Y += fSmps[iScan].Y;
           Inc(validSmpCnt);
@@ -332,18 +330,24 @@ end;
 procedure TScan2Track.LoadScans(AForceBrickwall: Boolean);
 var
   iScan: Integer;
+  scan: TInputScan;
 begin
   for iScan := 0 to High(FInputScans) do
   begin
+    scan := FInputScans[iScan];
+
     if FScansOwned then
     begin
-      FInputScans[iScan].LoadImage;
+      scan.LoadImage;
       if Length(InputScans) > 1 then
-        FInputScans[iScan].FindCroppedArea;
+        scan.FindCroppedArea;
     end;
     if FScansOwned or AForceBrickwall then
-      FInputScans[iScan].BrickwallLimit;
-    FInputScans[iScan].FindTrack(False, FSampleRate);
+      scan.BrickwallLimit;
+
+    scan.FindTrack(False, FSampleRate);
+
+    scan.RenderPolarImage;
   end;
 end;
 

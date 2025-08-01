@@ -51,6 +51,7 @@ type
     FWidth, FHeight: Integer;
     FImage: TWordDynArray;
     FLeveledImage: TWordDynArray;
+    FPolarImage: TWordDynArray;
 
     FCorrectRefs: array of TCorrectRef;
     FLock: TSpinlock;
@@ -81,10 +82,12 @@ type
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
     procedure FindCroppedArea;
     procedure FixCISScanners;
+    procedure RenderPolarImage;
 
     function InRangePointD(Y, X: Double): Boolean; inline;
     function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double; inline;
     function GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single; inline;
+    function GetPolarPointD_Sinc(const Image: TWordDynArray; R, T: Double): Single; inline;
     function GetMeanSD(AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;
 
     procedure AddCorrectRef(AngleIdx, ScanIdx: Integer);
@@ -115,6 +118,7 @@ type
 
     property Image: TWordDynArray read FImage;
     property LeveledImage: TWordDynArray read FLeveledImage;
+    property PolarImage: TWordDynArray read FPolarImage;
   end;
 
   { TScanImage }
@@ -1039,6 +1043,8 @@ var
   iRec, phase, recurence, recCnt, offset, x1, x2: Integer;
   loss: Double;
 begin
+  if not FSilent then WriteLn('FixCISScanners');
+
   recurence := (C2400DPIRecurence * FDPI) div 2400;
   offset := (C2400DPIOffset * FDPI) div 2400;
   recCnt := (FWidth - 1) div Recurence;
@@ -1055,9 +1061,35 @@ begin
   end;
 end;
 
+procedure TInputScan.RenderPolarImage;
+var
+  iRadius, iAngle, w, h, radiusOffset: Integer;
+  px, py: Double;
+begin
+  if not FSilent then WriteLn('RenderPolarImage');
+
+  w := FPointsPerRevolution;
+  h := Ceil((C45RpmOuterSize - C45RpmLabelOuterSize) * 0.5 * FDPI);
+  radiusOffset := Floor(C45RpmLabelOuterSize * 0.5 * FDPI);
+
+  BuildSinCosLUT(w, FSinCosLUT, FGrooveStartAngle, -2.0 * Pi);
+
+  SetLength(FPolarImage, w * h);
+
+  for iRadius := radiusOffset to h + radiusOffset - 1 do
+    for iAngle := 0 to w - 1 do
+    begin
+      px := FSinCosLUT[iAngle].Cos * iRadius + FCenter.X;
+      py := FSinCosLUT[iAngle].Sin * iRadius + FCenter.Y;
+
+      if InRangePointD(py, px) then
+        FPolarImage[(iRadius - radiusOffset) * w + iAngle] := EnsureRange(Round(GetPointD_Sinc(FLeveledImage, py, px)), 0, High(Word));
+    end;
+end;
+
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
 begin
-  Result := InRange(Y, 8, Height - 10) and InRange(X, 8, Width - 10);
+  Result := InRange(Y, -Low(TSerpCoeffs9), Height  + Low(TSerpCoeffs9) - 2) and InRange(X, -Low(TSerpCoeffs9), Height  + Low(TSerpCoeffs9) - 2);
 end;
 
 function TInputScan.GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
@@ -1085,6 +1117,23 @@ begin
   serpFromCoeffsXY(coeffsX, @Image[iy * FWidth + ix], FWidth, @intData[0]);
 
   Result := serpFromCoeffs(coeffsY, @intData[0]);
+end;
+
+function TInputScan.GetPolarPointD_Sinc(const Image: TWordDynArray; R, T: Double): Single;
+var
+  it, ir: Integer;
+  intData: TSerpCoeffs9;
+  coeffsT, coeffsR: PSingle;
+begin
+  it := trunc(T);
+  ir := trunc(R);
+
+  coeffsT := serpCoeffs(T - it);
+  coeffsR := serpCoeffs(R - ir);
+
+  serpFromCoeffsXY(coeffsT, @Image[ir * FPointsPerRevolution + it], FPointsPerRevolution, @intData[0]);
+
+  Result := serpFromCoeffs(coeffsR, @intData[0]);
 end;
 
 function TInputScan.GetMeanSD(AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;

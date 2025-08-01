@@ -57,7 +57,7 @@ type
   TPointValueList = specialize TFPGList<TPointValue>;
 
   TSerpCoeffs9 = array[-4 .. 4 + 3] of Single;
-  TSerpCoeffs9ByWord = array[0 .. high(Word)] of TSerpCoeffs9;
+  TSerpCoeffs9ByWord = array[0 .. High(Word)] of TSerpCoeffs9;
 
   TGRSEvalFunc = function(arg: Double; obj: Pointer): Double of object;
   TEvalFunc = function(const arg: TDoubleDynArray; data: Pointer): Double of object;
@@ -125,7 +125,7 @@ function ToBW(r, g, b: Integer): Integer; inline;
 
 function CompressRange(x: Double): Double; inline;
 function Sinc(x: Double): Double;
-function BlackmanExactWindow(p: Double): Double;
+function BlackmanExactWindow(w: Double): Double;
 
 function lerp(x, y, alpha: Double): Double; overload;
 function lerp(x, y: Word; alpha: Double): Double; overload;
@@ -298,9 +298,16 @@ begin
   Result := DivDef(Sin(x), x, 1.0);
 end;
 
-function BlackmanExactWindow(p: Double): Double;
+function BlackmanExactWindow(w: Double): Double;
 begin
-  Result := 7938/18608 - 9240/18608 * Cos(2.0 * Pi * p) + 1430/18608 * Cos(4.0 * Pi * p);
+  Result := 0.0;
+  if not InRange(w, 0.0, 1.0) then
+    Exit;
+
+  Result := 7938/18608 - 9240/18608 * Cos(2.0 * Pi * w) + 1430/18608 * Cos(4.0 * Pi * w);
+  //Result := 0.5 * (1.0 - Cos(2.0 * Pi * w));
+  //Result := 0.355768 - 0.487396 * Cos(2.0 * Pi * w) + 0.144232 * Cos(4.0 * Pi * w) - 0.012604 * Cos(6.0 * Pi * w);
+  //Result := 1;
 end;
 
 function lerp(x, y, alpha: Double): Double;
@@ -396,23 +403,23 @@ end;
 
 procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
 var
-  w, i: Integer;
-  alpha, p: Double;
+  iAlpha, iCoeff: Integer;
+  alpha, w: Double;
 begin
-  for w := 0 to High(TSerpCoeffs9ByWord) do
+  for iAlpha := 0 to High(TSerpCoeffs9ByWord) do
   begin
-    alpha := w * (1 / (High(TSerpCoeffs9ByWord) + 1));
-    for i := Low(TSerpCoeffs9) to -Low(TSerpCoeffs9) do
+    alpha := iAlpha * (1.0 / Length(TSerpCoeffs9ByWord));
+    for iCoeff := Low(TSerpCoeffs9) to -Low(TSerpCoeffs9) do
     begin
-      p := ((i - alpha) - -Low(TSerpCoeffs9)) / (2 * -Low(TSerpCoeffs9));
-      coeffs[w, i] :=Sinc((i - alpha) * Pi) * BlackmanExactWindow(p);
+      w := ((iCoeff - alpha) - Low(TSerpCoeffs9)) / (2.0 * -Low(TSerpCoeffs9));
+      coeffs[iAlpha, iCoeff] := Sinc((iCoeff - alpha) * Pi) * BlackmanExactWindow(w);
     end;
   end;
 end;
 
 function serpCoeffs(alpha: Double): PSingle;
 begin
-  Result := @GSerpCoeffs9ByWord[round(alpha * (High(word) + 1)), 0];
+  Result := @GSerpCoeffs9ByWord[Trunc(alpha * Length(TSerpCoeffs9ByWord)), 0];
 end;
 
 {$ifdef CPUX64}
@@ -445,16 +452,12 @@ end;
 {$else}
 
 function serpFromCoeffsX(coeffs: PSingle; img: PWORD): Single;
+var
+  iCoeff: Integer;
 begin
-  Result := img[-4] * coeffs[-4];
-  Result += img[-3] * coeffs[-3];
-  Result += img[-2] * coeffs[-2];
-  Result += img[-1] * coeffs[-1];
-  Result += img[ 0] * coeffs[ 0];
-  Result += img[ 1] * coeffs[ 1];
-  Result += img[ 2] * coeffs[ 2];
-  Result += img[ 3] * coeffs[ 3];
-  Result += img[ 4] * coeffs[ 4];
+  Result := 0;
+  for iCoeff := Low(TSerpCoeffs9) to -Low(TSerpCoeffs9) do
+    Result += img[iCoeff] * coeffs[iCoeff];
 end;
 
 {$endif}
@@ -548,18 +551,16 @@ end;
 {$else}
 procedure serpFromCoeffsXY(coeffs: PSingle; centerPx: PWORD; stride: Integer; res: PSingle);
 var
+  iCoeff: Integer;
   pp: PWORD;
 begin
-  pp := @centerPx[4 * stride]; res[+4] := serpFromCoeffsX(coeffs, pp);
-  Dec(pp, stride);             res[+3] := serpFromCoeffsX(coeffs, pp);
-  Dec(pp, stride);             res[+2] := serpFromCoeffsX(coeffs, pp);
-  Dec(pp, stride);             res[+1] := serpFromCoeffsX(coeffs, pp);
-  Dec(pp, stride);             res[+0] := serpFromCoeffsX(coeffs, pp);
-  Dec(pp, stride);             res[-1] := serpFromCoeffsX(coeffs, pp);
-  Dec(pp, stride);             res[-2] := serpFromCoeffsX(coeffs, pp);
-  Dec(pp, stride);             res[-3] := serpFromCoeffsX(coeffs, pp);
-  Dec(pp, stride);             res[-4] := serpFromCoeffsX(coeffs, pp);
+  pp := @centerPx[-Low(TSerpCoeffs9) * stride];
+  for iCoeff := Low(TSerpCoeffs9) to -Low(TSerpCoeffs9) do
+  begin
+    res[iCoeff] := serpFromCoeffsX(coeffs, pp);
+    Dec(pp, stride);
   end;
+end;
 {$endif}
 
 {$ifdef CPUX64}
@@ -593,16 +594,12 @@ end;
 {$else}
 
 function serpFromCoeffs(coeffs, data: PSingle): Single;
+var
+  iCoeff: Integer;
 begin
-  Result := data[-4] * coeffs[-4];
-  Result += data[-3] * coeffs[-3];
-  Result += data[-2] * coeffs[-2];
-  Result += data[-1] * coeffs[-1];
-  Result += data[ 0] * coeffs[ 0];
-  Result += data[ 1] * coeffs[ 1];
-  Result += data[ 2] * coeffs[ 2];
-  Result += data[ 3] * coeffs[ 3];
-  Result += data[ 4] * coeffs[ 4];
+  Result := 0;
+  for iCoeff := Low(TSerpCoeffs9) to -Low(TSerpCoeffs9) do
+    Result += data[iCoeff] * coeffs[iCoeff];
 end;
 
 {$endif}
