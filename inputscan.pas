@@ -1089,7 +1089,7 @@ end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
 begin
-  Result := InRange(Y, -Low(TSerpCoeffs9), Height  + Low(TSerpCoeffs9) - 2) and InRange(X, -Low(TSerpCoeffs9), Height  + Low(TSerpCoeffs9) - 2);
+  Result := InRange(Y, -Low(TSerpCoeffs9), Height + Low(TSerpCoeffs9) - 2) and InRange(X, -Low(TSerpCoeffs9), Height + Low(TSerpCoeffs9) - 2);
 end;
 
 function TInputScan.GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
@@ -1105,45 +1105,21 @@ end;
 function TInputScan.GetPointD_Hermite(const Image: TWordDynArray; Y, X: Double): Double;
 var
   ix, iy: Integer;
-  img: PWord;
-  alphaX, alphaY: Double;
 begin
   ix := trunc(X);
   iy := trunc(Y);
 
-  alphaX := X - ix;
-  alphaY := Y - iy;
-  img := @Image[iy * FWidth + ix];
-
-  Result := herp(
-    herp(img[(- 1) * FWidth + (- 1)], img[(- 1) * FWidth + (+ 0)], img[(- 1) * FWidth + (+ 1)], img[(- 1) * FWidth + (+ 2)], alphaX),
-    herp(img[(+ 0) * FWidth + (- 1)], img[(+ 0) * FWidth + (+ 0)], img[(+ 0) * FWidth + (+ 1)], img[(+ 0) * FWidth + (+ 2)], alphaX),
-    herp(img[(+ 1) * FWidth + (- 1)], img[(+ 1) * FWidth + (+ 0)], img[(+ 1) * FWidth + (+ 1)], img[(+ 1) * FWidth + (+ 2)], alphaX),
-    herp(img[(+ 2) * FWidth + (- 1)], img[(+ 2) * FWidth + (+ 0)], img[(+ 2) * FWidth + (+ 1)], img[(+ 2) * FWidth + (+ 2)], alphaX),
-    alphaY
-  );
+  Result := herpXY(@Image[iy * FWidth + ix], FWidth, X - ix, Y - iy);
 end;
 
 function TInputScan.GetPolarPointD_Hermite(const Image: TWordDynArray; R, T: Double): Double;
 var
   it, ir: Integer;
-  img: PWord;
-  alphaT, alphaR: Double;
 begin
   it := trunc(T);
   ir := trunc(R);
 
-  alphaT := T - it;
-  alphaR := R - ir;
-  img := @Image[ir * FPointsPerRevolution + it];
-
-  Result := herp(
-    herp(img[(- 1) * FPointsPerRevolution + (- 1)], img[(- 1) * FPointsPerRevolution + (+ 0)], img[(- 1) * FPointsPerRevolution + (+ 1)], img[(- 1) * FPointsPerRevolution + (+ 2)], alphaT),
-    herp(img[(+ 0) * FPointsPerRevolution + (- 1)], img[(+ 0) * FPointsPerRevolution + (+ 0)], img[(+ 0) * FPointsPerRevolution + (+ 1)], img[(+ 0) * FPointsPerRevolution + (+ 2)], alphaT),
-    herp(img[(+ 1) * FPointsPerRevolution + (- 1)], img[(+ 1) * FPointsPerRevolution + (+ 0)], img[(+ 1) * FPointsPerRevolution + (+ 1)], img[(+ 1) * FPointsPerRevolution + (+ 2)], alphaT),
-    herp(img[(+ 2) * FPointsPerRevolution + (- 1)], img[(+ 2) * FPointsPerRevolution + (+ 0)], img[(+ 2) * FPointsPerRevolution + (+ 1)], img[(+ 2) * FPointsPerRevolution + (+ 2)], alphaT),
-    alphaR
-  );
+  Result := herpXY(@Image[ir * FPointsPerRevolution + it], FPointsPerRevolution, T - it, R - ir);
 end;
 
 function TInputScan.GetMeanSD(AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;

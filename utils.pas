@@ -133,8 +133,9 @@ function lerp(x, y: Integer; alpha: Double): Double; overload;
 
 function lerpXY(topleftPx_rcx: PWORD; stride_rdx: UInt64; alphax_xmm2, alphay_xmm3: Double): Double; register; assembler;
 
-function herp(y0, y1, y2, y3, alpha: Double): Double;
+function herp(y0, y1, y2, y3, alpha: Double): Double; inline;
 function herp(y0, y1, y2, y3: Word; alpha: Double): Double; inline;
+function herpXY(topleftPx: PWORD; stride: UInt64; alphaX, alphaY: Double): Double; inline;
 
 procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
 function serpCoeffs(alpha: Double): PSingle;
@@ -416,6 +417,64 @@ begin
   a0 := y1;
 
   Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
+end;
+
+function herpXY(topleftPx: PWORD; stride: UInt64; alphaX, alphaY: Double): Double;
+var
+  alphaX2, alphaX3: Double;
+  a0, a1, a2, a3: Integer;
+  x0, x1, x2, x3: Word;
+  y0, y1, y2, y3: Double;
+begin
+  alphaX2 := alphaX * alphaX;
+  alphaX3 := alphaX2 * alphaX;
+
+  Dec(topleftPx, stride);
+
+  x0 := topleftPx[-1];
+  x1 := topleftPx[0];
+  x2 := topleftPx[1];
+  x3 := topleftPx[2];
+  a3 := (-1 * x0 + +3 * x1 + -3 * x2 + +1 * x3) shr 1;
+  a2 := (+2 * x0 + -5 * x1 + +4 * x2 + -1 * x3) shr 1;
+  a1 := (-1 * x0 + +0 * x1 + +1 * x2 + +0 * x3) shr 1;
+  a0 := x1;
+  y0 := a3 * alphaX3 + a2 * alphaX2 + a1 * alphaX + a0;
+  Inc(topleftPx, stride);
+
+  x0 := topleftPx[-1];
+  x1 := topleftPx[0];
+  x2 := topleftPx[1];
+  x3 := topleftPx[2];
+  a3 := (-1 * x0 + +3 * x1 + -3 * x2 + +1 * x3) shr 1;
+  a2 := (+2 * x0 + -5 * x1 + +4 * x2 + -1 * x3) shr 1;
+  a1 := (-1 * x0 + +0 * x1 + +1 * x2 + +0 * x3) shr 1;
+  a0 := x1;
+  y1 := a3 * alphaX3 + a2 * alphaX2 + a1 * alphaX + a0;
+  Inc(topleftPx, stride);
+
+  x0 := topleftPx[-1];
+  x1 := topleftPx[0];
+  x2 := topleftPx[1];
+  x3 := topleftPx[2];
+  a3 := (-1 * x0 + +3 * x1 + -3 * x2 + +1 * x3) shr 1;
+  a2 := (+2 * x0 + -5 * x1 + +4 * x2 + -1 * x3) shr 1;
+  a1 := (-1 * x0 + +0 * x1 + +1 * x2 + +0 * x3) shr 1;
+  a0 := x1;
+  y2 := a3 * alphaX3 + a2 * alphaX2 + a1 * alphaX + a0;
+  Inc(topleftPx, stride);
+
+  x0 := topleftPx[-1];
+  x1 := topleftPx[0];
+  x2 := topleftPx[1];
+  x3 := topleftPx[2];
+  a3 := (-1 * x0 + +3 * x1 + -3 * x2 + +1 * x3) shr 1;
+  a2 := (+2 * x0 + -5 * x1 + +4 * x2 + -1 * x3) shr 1;
+  a1 := (-1 * x0 + +0 * x1 + +1 * x2 + +0 * x3) shr 1;
+  a0 := x1;
+  y3 := a3 * alphaX3 + a2 * alphaX2 + a1 * alphaX + a0;
+
+  Result := herp(y0, y1, y2, y3, alphaY);
 end;
 
 procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
