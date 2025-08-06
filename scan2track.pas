@@ -111,7 +111,7 @@ var
   function GetSampleIdx(iSmp: Integer): Double;
   begin
     r := radius + (iSmp + 0.5) * cxa;
-    Result := AScan.GetPolarPointD_Hermite(AScan.PolarImage, r - radiusOffset, iLut);
+    Result := AScan.GetPolarPointD(AScan.PolarImage, r - radiusOffset, iLut);
     sampleMin := Min(sampleMin, Result);
     sampleMax := Max(sampleMax, Result);
   end;

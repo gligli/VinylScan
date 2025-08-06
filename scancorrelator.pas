@@ -236,7 +236,7 @@ var
         px := cx + cs * iRadius;
         py := cy + sn * iRadius;
         if Scan.InRangePointD(py, px) then
-          arr[Result] += Scan.GetPointD_Linear(Scan.Image, py, px);
+          arr[Result] += Scan.GetPointD(Scan.Image, py, px);
 
         Inc(pxAggr);
         if pxAggr >= aggregatedPixelCount then
@@ -341,7 +341,7 @@ begin
     oy := sc^.Sin * r + cy;
 
     if baseScan.InRangePointD(oy, ox) then
-      Coords.PreparedValues[ilut] := CompressRange((baseScan.GetPointD_Linear(baseScan.LeveledImage, oy, ox) - Coords.BaseMeanSD.X) * Coords.BaseMeanSD.Y)
+      Coords.PreparedValues[ilut] := CompressRange((baseScan.GetPointD(baseScan.LeveledImage, oy, ox) - Coords.BaseMeanSD.X) * Coords.BaseMeanSD.Y)
     else
       Coords.PreparedValues[ilut] := 1e6;
   end;
@@ -399,7 +399,7 @@ begin
       px := sc.Cos * r * skewX + centerX;
       py := sc.Sin * r * skewY + centerY;
 
-      Result += Sqr(coords^.PreparedValues[ilut] - CompressRange((scan.GetPointD_Linear(scan.LeveledImage, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y));
+      Result += Sqr(coords^.PreparedValues[ilut] - CompressRange((scan.GetPointD(scan.LeveledImage, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y));
     end;
 
     Result := Sqrt(Result / Length(coords^.RadiusAngleLUT));
@@ -683,7 +683,7 @@ begin
     py := sc^.Sin * r + centerY;
 
     if baseScan.InRangePointD(py, px) then
-      Coords.PreparedValues[iLut] := CompressRange((baseScan.GetPointD_Linear(baseScan.LeveledImage, py, px) - Coords.BaseMeanSD.X) * Coords.BaseMeanSD.Y)
+      Coords.PreparedValues[iLut] := CompressRange((baseScan.GetPointD(baseScan.LeveledImage, py, px) - Coords.BaseMeanSD.X) * Coords.BaseMeanSD.Y)
     else
       Coords.PreparedValues[iLut] := 1e6;
   end;
@@ -725,7 +725,7 @@ begin
     py := sc^.Sin * r + centerY;
 
     if scan.InRangePointD(py, px) then
-      Result += Sqr((Coords.PreparedValues[iLut] - CompressRange((scan.GetPointD_Linear(scan.LeveledImage, py, px) - Coords.MeanSD.X) * Coords.MeanSD.Y)) * Coords.Weights[iLut])
+      Result += Sqr((Coords.PreparedValues[iLut] - CompressRange((scan.GetPointD(scan.LeveledImage, py, px) - Coords.MeanSD.X) * Coords.MeanSD.Y)) * Coords.Weights[iLut])
     else
       Result += Sqr(1e6);
   end;
@@ -992,7 +992,7 @@ var
                not InNormalizedAngle(ct, scan.CropData.StartAngleMirror, scan.CropData.EndAngleMirror) or
                (r < rLbl)) then
           begin
-            sample := scan.GetPointD_Hermite(scan.Image, py, px);
+            sample := scan.GetPointD(scan.Image, py, px);
 
             if cnt < FRebuildBlendCount then
             begin
