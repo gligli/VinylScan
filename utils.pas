@@ -134,6 +134,7 @@ function lerp(x, y: Integer; alpha: Double): Double; overload;
 function lerpXY(topleftPx_rcx: PWORD; stride_rdx: UInt64; alphax_xmm2, alphay_xmm3: Double): Double; register; assembler;
 
 function herp(y0, y1, y2, y3, alpha: Double): Double;
+function herp(y0, y1, y2, y3: Word; alpha: Double): Double; inline;
 
 procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
 function serpCoeffs(alpha: Double): PSingle;
@@ -396,6 +397,22 @@ begin
   a3 := 0.5 * (-1 * y0 + +3 * y1 + -3 * y2 + +1 * y3);
   a2 := 0.5 * (+2 * y0 + -5 * y1 + +4 * y2 + -1 * y3);
   a1 := 0.5 * (-1 * y0 + +0 * y1 + +1 * y2 + +0 * y3);
+  a0 := y1;
+
+  Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;
+end;
+
+function herp(y0, y1, y2, y3: Word; alpha: Double): Double;
+var
+  alpha2, alpha3: Double;
+  a0, a1, a2, a3: Integer;
+begin
+  alpha2 := alpha * alpha;
+  alpha3 := alpha2 * alpha;
+
+  a3 := (-1 * y0 + +3 * y1 + -3 * y2 + +1 * y3) shr 1;
+  a2 := (+2 * y0 + -5 * y1 + +4 * y2 + -1 * y3) shr 1;
+  a1 := (-1 * y0 + +0 * y1 + +1 * y2 + +0 * y3) shr 1;
   a0 := y1;
 
   Result := a3 * alpha3 + a2 * alpha2 + a1 * alpha + a0;

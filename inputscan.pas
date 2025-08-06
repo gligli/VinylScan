@@ -86,8 +86,8 @@ type
 
     function InRangePointD(Y, X: Double): Boolean; inline;
     function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double; inline;
-    function GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single; inline;
-    function GetPolarPointD_Sinc(const Image: TWordDynArray; R, T: Double): Single; inline;
+    function GetPointD_Hermite(const Image: TWordDynArray; Y, X: Double): Double; inline;
+    function GetPolarPointD_Hermite(const Image: TWordDynArray; R, T: Double): Double; inline;
     function GetMeanSD(AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;
 
     procedure AddCorrectRef(AngleIdx, ScanIdx: Integer);
@@ -984,7 +984,7 @@ procedure TInputScan.FixCISScanners;
     py := sn * radius + FCenter.Y;
 
     if InRangePointD(py, px) then
-      Result := GetPointD_Sinc(FImage, py, px)
+      Result := GetPointD_Hermite(FImage, py, px)
   end;
 
   procedure Resample(X1, X2, FixLen: Integer);
@@ -1083,7 +1083,7 @@ begin
       py := FSinCosLUT[iAngle].Sin * iRadius + FCenter.Y;
 
       if InRangePointD(py, px) then
-        FPolarImage[(iRadius - radiusOffset) * w + iAngle] := EnsureRange(Round(GetPointD_Sinc(FLeveledImage, py, px)), 0, High(Word));
+        FPolarImage[(iRadius - radiusOffset) * w + iAngle] := EnsureRange(Round(GetPointD_Hermite(FLeveledImage, py, px)), 0, High(Word));
     end;
 end;
 
@@ -1102,38 +1102,48 @@ begin
   Result := lerpXY(@Image[iy * FWidth + ix], FWidth, X - ix, Y - iy);
 end;
 
-function TInputScan.GetPointD_Sinc(const Image: TWordDynArray; Y, X: Double): Single;
+function TInputScan.GetPointD_Hermite(const Image: TWordDynArray; Y, X: Double): Double;
 var
   ix, iy: Integer;
-  intData: TSerpCoeffs9;
-  coeffsX, coeffsY: PSingle;
+  img: PWord;
+  alphaX, alphaY: Double;
 begin
   ix := trunc(X);
   iy := trunc(Y);
 
-  coeffsX := serpCoeffs(X - ix);
-  coeffsY := serpCoeffs(Y - iy);
+  alphaX := X - ix;
+  alphaY := Y - iy;
+  img := @Image[iy * FWidth + ix];
 
-  serpFromCoeffsXY(coeffsX, @Image[iy * FWidth + ix], FWidth, @intData[0]);
-
-  Result := serpFromCoeffs(coeffsY, @intData[0]);
+  Result := herp(
+    herp(img[(- 1) * FWidth + (- 1)], img[(- 1) * FWidth + (+ 0)], img[(- 1) * FWidth + (+ 1)], img[(- 1) * FWidth + (+ 2)], alphaX),
+    herp(img[(+ 0) * FWidth + (- 1)], img[(+ 0) * FWidth + (+ 0)], img[(+ 0) * FWidth + (+ 1)], img[(+ 0) * FWidth + (+ 2)], alphaX),
+    herp(img[(+ 1) * FWidth + (- 1)], img[(+ 1) * FWidth + (+ 0)], img[(+ 1) * FWidth + (+ 1)], img[(+ 1) * FWidth + (+ 2)], alphaX),
+    herp(img[(+ 2) * FWidth + (- 1)], img[(+ 2) * FWidth + (+ 0)], img[(+ 2) * FWidth + (+ 1)], img[(+ 2) * FWidth + (+ 2)], alphaX),
+    alphaY
+  );
 end;
 
-function TInputScan.GetPolarPointD_Sinc(const Image: TWordDynArray; R, T: Double): Single;
+function TInputScan.GetPolarPointD_Hermite(const Image: TWordDynArray; R, T: Double): Double;
 var
   it, ir: Integer;
-  intData: TSerpCoeffs9;
-  coeffsT, coeffsR: PSingle;
+  img: PWord;
+  alphaT, alphaR: Double;
 begin
   it := trunc(T);
   ir := trunc(R);
 
-  coeffsT := serpCoeffs(T - it);
-  coeffsR := serpCoeffs(R - ir);
+  alphaT := T - it;
+  alphaR := R - ir;
+  img := @Image[ir * FPointsPerRevolution + it];
 
-  serpFromCoeffsXY(coeffsT, @Image[ir * FPointsPerRevolution + it], FPointsPerRevolution, @intData[0]);
-
-  Result := serpFromCoeffs(coeffsR, @intData[0]);
+  Result := herp(
+    herp(img[(- 1) * FPointsPerRevolution + (- 1)], img[(- 1) * FPointsPerRevolution + (+ 0)], img[(- 1) * FPointsPerRevolution + (+ 1)], img[(- 1) * FPointsPerRevolution + (+ 2)], alphaT),
+    herp(img[(+ 0) * FPointsPerRevolution + (- 1)], img[(+ 0) * FPointsPerRevolution + (+ 0)], img[(+ 0) * FPointsPerRevolution + (+ 1)], img[(+ 0) * FPointsPerRevolution + (+ 2)], alphaT),
+    herp(img[(+ 1) * FPointsPerRevolution + (- 1)], img[(+ 1) * FPointsPerRevolution + (+ 0)], img[(+ 1) * FPointsPerRevolution + (+ 1)], img[(+ 1) * FPointsPerRevolution + (+ 2)], alphaT),
+    herp(img[(+ 2) * FPointsPerRevolution + (- 1)], img[(+ 2) * FPointsPerRevolution + (+ 0)], img[(+ 2) * FPointsPerRevolution + (+ 1)], img[(+ 2) * FPointsPerRevolution + (+ 2)], alphaT),
+    alphaR
+  );
 end;
 
 function TInputScan.GetMeanSD(AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;

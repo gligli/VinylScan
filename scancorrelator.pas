@@ -992,7 +992,7 @@ var
                not InNormalizedAngle(ct, scan.CropData.StartAngleMirror, scan.CropData.EndAngleMirror) or
                (r < rLbl)) then
           begin
-            sample := scan.GetPointD_Sinc(scan.Image, py, px);
+            sample := scan.GetPointD_Hermite(scan.Image, py, px);
 
             if cnt < FRebuildBlendCount then
             begin
