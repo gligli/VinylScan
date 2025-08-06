@@ -66,7 +66,7 @@ begin
   SetLength(FInputScans, AScanFileNames.Count);
   for iScan := 0 to High(FInputScans) do
   begin
-    FInputScans[iScan] := TInputScan.Create(ADefaultDPI);
+    FInputScans[iScan] := TInputScan.Create(ADefaultDPI, True);
     FInputScans[iScan].ImageFileName := AScanFileNames[iScan];
   end;
 
@@ -106,18 +106,20 @@ function TScan2Track.DecodeSample(AScan: TInputScan; radius, angleSin, angleCos:
 
 var
   iSmp, posMin, posMax, decoderMax, radiusOffset: Integer;
-  r, cx, cy, px, py, cxa: Double;
+  r, cx, cy, px, py, cxa, sampleMin, sampleMax: Double;
 
-  function GetSampleIdx(iSmp: Integer): Single;
+  function GetSampleIdx(iSmp: Integer): Double;
   begin
     r := radius + (iSmp + 0.5) * cxa;
-    Result := AScan.GetPolarPointD_Sinc(AScan.PolarImage, r - radiusOffset, iLut);
+    Result := AScan.GetPolarPointD_Hermite(AScan.PolarImage, r - radiusOffset, iLut);
+    sampleMin := Min(sampleMin, Result);
+    sampleMax := Max(sampleMax, Result);
   end;
 
   function ConvertToSampleValue(ASampleIdxAcc: Double): Double;
   begin
     Result := ASampleIdxAcc / decoderMax;
-    Result := Result * 2.0 / High(Word) - 1.0;
+    Result := DivDef((Result - sampleMin) * 2.0, sampleMax - sampleMin, 1.0) - 1.0;
   end;
 
 begin
@@ -141,6 +143,8 @@ begin
 
   posMin := -decoderMax;
   posMax := decoderMax - 1;
+  sampleMin := Infinity;
+  sampleMax := -Infinity;
 
   Result.X := 0.0;
   for iSmp := 0 to posMax do
@@ -328,27 +332,31 @@ begin
 end;
 
 procedure TScan2Track.LoadScans(AForceBrickwall: Boolean);
-var
-  iScan: Integer;
-  scan: TInputScan;
-begin
-  for iScan := 0 to High(FInputScans) do
+
+  procedure DoOne(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  var
+    Scan: TInputScan;
   begin
-    scan := FInputScans[iScan];
+    Scan := FInputScans[AIndex];
 
-    if FScansOwned then
-    begin
-      scan.LoadImage;
-      if Length(InputScans) > 1 then
-        scan.FindCroppedArea;
-    end;
-    if FScansOwned or AForceBrickwall then
-      scan.BrickwallLimit;
+    Scan.FindTrack(False, FSampleRate);
 
-    scan.FindTrack(False, FSampleRate);
+    if FScansOwned and (Length(InputScans) > 1) then
+      scan.FindCroppedArea;
 
     scan.RenderPolarImage;
   end;
+
+var
+  iScan: Integer;
+begin
+  WriteLn('LoadScans');
+
+  if FScansOwned then
+    for iScan := 0 to High(FInputScans) do
+      FInputScans[iScan].LoadImage;
+
+  ProcThreadPool.DoParallelLocalProc(@DoOne, 0, High(FInputScans));
 end;
 
 end.
