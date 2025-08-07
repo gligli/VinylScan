@@ -290,9 +290,38 @@ begin
   Result := ToLuma(r, g, b) div cLumaDiv;
 end;
 
+{* https://stackoverflow.com/questions/73770905/best-non-trigonometric-floating-point-approximation-of-tanhx-in-10-instruction
+   Fast computation of hyperbolic tangent. Rational approximation with clamping
+   of the argument. Maximum absolute error = 1.98537030e-5, maximum relative
+   error = 1.98540995e-5, maximum ulp error = 333.089863.
+*}
+
+function fma(x, y, z: Double): Double; inline;
+begin
+  Result := (x * y) + z;
+end;
+
+function fast_tanh_rat3(x: Double): Double; inline; // 10 operations
+const cutoff = 5.76110792; //  0x1.70b5fep+2
+const n0 = -1.60153955e-4; // -0x1.4fde00p-13
+const n1 = -9.34448242e-1; // -0x1.de7000p-1
+const n2 = -2.19176636e+1; // -0x1.5eaec0p+4
+const d0 =  2.90915985e+1; //  0x1.d17730p+4
+const d1 =  6.57667847e+1; //  0x1.071130p+6
+var
+  y, y2, num, den, quot: Double;
+begin
+  y := EnsureRange(x, -cutoff, cutoff);
+  y2 := y * y;
+  num := fma(fma(n0, y2, n1), y2, n2) * y2;
+  den := fma(y2 + d0, y2, d1);
+  quot := num / den;
+  Result := fma(quot, y, y);
+end;
+
 function CompressRange(x: Double): Double;
 begin
-  Result := EnsureRange(x, -1.0, 1.0);
+  Result := fast_tanh_rat3(x);
 end;
 
 function Sinc(x: Double): Double;
