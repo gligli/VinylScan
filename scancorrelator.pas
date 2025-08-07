@@ -369,8 +369,8 @@ begin
   centerX := arg[0];
   centerY := arg[1];
   angle := arg[2];
-  skewX := arg[3];
-  skewY := arg[4];
+  skewX := arg[3] * 1e-3;
+  skewY := arg[4] * 1e-3;
 
   scan := FInputScans[coords^.ScanIdx];
 
@@ -446,9 +446,12 @@ var
     coords.ScanIdx := AIndex;
     PrepareAnalyze(coords);
 
-    X := [scan.Center.X, scan.Center.Y, scan.RelativeAngle, 1.0, 1.0];
+    X := [scan.Center.X, scan.Center.Y, scan.RelativeAngle, 1.0 * 1e3, 1.0 * 1e3];
 
-    func := NelderMeadMinimize(@NelderMeadAnalyze, X, [0.02 * scan.DPI, 0.02 * scan.DPI, DegToRad(1.0), 0.01, 0.01], 1e-6, @coords);
+    func := NelderMeadMinimize(@NelderMeadAnalyze, X, [0.02 * scan.DPI, 0.02 * scan.DPI, DegToRad(1.0), 0.01 * 1e3, 0.01 * 1e3], 1e-3, @coords);
+
+    X[3] *= 1e-3;
+    X[4] *= 1e-3;
 
     scan.Objective := func;
     FInputScans[AIndex].CorrectByModel(X[0], X[1], X[2], X[3], X[4]);
