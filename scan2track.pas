@@ -342,9 +342,9 @@ procedure TScan2Track.LoadScans(AForceBrickwall: Boolean);
     Scan.FindTrack(False, FSampleRate);
 
     if FScansOwned and (Length(InputScans) > 1) then
-      scan.FindCroppedArea;
+      Scan.FindCroppedArea;
 
-    scan.RenderPolarImage;
+    Scan.RenderPolarImage;
   end;
 
 var

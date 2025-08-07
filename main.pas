@@ -106,9 +106,12 @@ begin
         sl.Add(fn);
         Inc(iScan);
       until False;
-    end
-    else
+    end;
+
+    if sl.Count <= 0 then
     begin
+      if chkMulti.Checked then
+        WriteLn('Warning: Individual scans not found, using aggregated scan!');
       sl.Add(edInputPNG.Text);
     end;
 
