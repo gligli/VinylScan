@@ -339,6 +339,8 @@ procedure TScan2Track.LoadScans(AForceBrickwall: Boolean);
   begin
     Scan := FInputScans[AIndex];
 
+    Scan.BrickwallLimit;
+
     Scan.FindTrack(False, FSampleRate);
 
     if FScansOwned and (Length(InputScans) > 1) then
