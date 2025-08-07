@@ -197,6 +197,14 @@ begin
 end;
 
 procedure TMainForm.UnitTests;
+const
+  CHerpSample : array[0 .. 4*4 - 1] of Word = (
+    1000, 4000, 5000, 6000,
+    1100, 4100, 5100, 6100,
+    1900, 4900, 5900, 6900,
+    0,10000,0,10000
+  );
+
 var
   i: Integer;
   fn: String;
@@ -205,7 +213,13 @@ var
   fltLP: TFilterIIRLPBessel;
   fltHP: TFilterIIRHPBessel;
   smps: TSmallIntDynArray;
+  h1,h2: Double;
 begin
+  h1 := herpXY(@CHerpSample[5], 4, 0.5, 0.1);
+  h2 := herpXY_asm(@CHerpSample[5], 4, 0.5, 0.1);
+
+  Assert(h1 = h2);
+
   SetLength(smps, 48000 * 2);
   fltLP := TFilterIIRLPBessel.Create(nil);
   fltHP := TFilterIIRHPBessel.Create(nil);

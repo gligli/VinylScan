@@ -130,18 +130,18 @@ function BlackmanExactWindow(w: Double): Double;
 function lerp(x, y, alpha: Double): Double; overload;
 function lerp(x, y: Word; alpha: Double): Double; overload;
 function lerp(x, y: Integer; alpha: Double): Double; overload;
-
 function lerpXY(topleftPx_rcx: PWORD; stride_rdx: UInt64; alphax_xmm2, alphay_xmm3: Double): Double; register; assembler;
 
 function herp(y0, y1, y2, y3, alpha: Double): Double; inline;
 function herp(y0, y1, y2, y3: Word; alpha: Double): Double; inline;
-function herpXY(topleftPx: PWORD; stride: UInt64; alphaX, alphaY: Double): Double; inline;
+function herpXY(topleftPx: PWORD; stride: UInt64; alphaX, alphaY: Double): Double;
+function herpXY_asm(topleftPx_rcx: PWORD; stride_rdx: UInt64; alphax_xmm2, alphay_xmm3: Double): Double; register; assembler;
 
+function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
 procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
 function serpCoeffs(alpha: Double): PSingle;
 procedure serpFromCoeffsXY(coeffs: PSingle; centerPx: PWORD; stride: Integer; res: PSingle);
 function serpFromCoeffs(coeffs, data: PSingle): Single;
-function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
 
 procedure DrawPointValue(const AImage: TDoubleDynArray; const APoint: TPointValue; AWidth, AHeight: Integer; ASign: TValueSign);
 
@@ -475,6 +475,263 @@ begin
   y3 := a3 * alphaX3 + a2 * alphaX2 + a1 * alphaX + a0;
 
   Result := herp(y0, y1, y2, y3, alphaY);
+end;
+
+function herpXY_asm(topleftPx_rcx: PWORD; stride_rdx: UInt64; alphax_xmm2, alphay_xmm3: Double): Double; register; assembler;
+label
+  coeffsInt,coeffsDbl,funcEnd;
+asm
+  // init
+
+  push rax
+
+  sub rsp, 16 * 11
+  movdqu oword ptr [rsp],       xmm1
+  movdqu oword ptr [rsp + $10], xmm2
+  movdqu oword ptr [rsp + $20], xmm3
+  movdqu oword ptr [rsp + $30], xmm4
+  movdqu oword ptr [rsp + $40], xmm5
+  movdqu oword ptr [rsp + $50], xmm6
+  movdqu oword ptr [rsp + $60], xmm7
+  movdqu oword ptr [rsp + $70], xmm8
+  movdqu oword ptr [rsp + $80], xmm9
+  movdqu oword ptr [rsp + $90], xmm10
+  movdqu oword ptr [rsp + $a0], xmm11
+
+  pxor xmm0,xmm0
+
+  // load data
+
+  dec rcx
+  dec rcx
+  shl rdx,1
+  sub rcx,rdx
+
+  movq xmm4,qword ptr[rcx]
+  movq xmm5,qword ptr[rcx + rdx]
+  movq xmm6,qword ptr[rcx + rdx * 2]
+  add rcx,rdx
+  movq xmm7,qword ptr[rcx + rdx * 2]
+
+  punpcklwd xmm4,xmm0
+  punpcklwd xmm5,xmm0
+  punpcklwd xmm6,xmm0
+  punpcklwd xmm7,xmm0
+
+  //
+
+  movdqa xmm1,oword ptr [rip+@coeffsInt]
+
+  movdqa xmm8,xmm4
+  pmulld xmm8,xmm1
+  phaddd xmm8,xmm8
+  phaddd xmm8,xmm8
+
+  movdqa xmm0,xmm5
+  pmulld xmm0,xmm1
+  phaddd xmm0,xmm0
+  phaddd xmm0,xmm0
+  insertps xmm8,xmm0,$50
+
+  movdqa xmm0,xmm6
+  pmulld xmm0,xmm1
+  phaddd xmm0,xmm0
+  phaddd xmm0,xmm0
+  insertps xmm8,xmm0,$a0
+
+  movdqa xmm0,xmm7
+  pmulld xmm0,xmm1
+  phaddd xmm0,xmm0
+  phaddd xmm0,xmm0
+  insertps xmm8,xmm0,$f0
+
+  psrad xmm8,1
+
+  movdqa xmm1,oword ptr [rip+@coeffsInt+16]
+
+  movdqa xmm9,xmm4
+  pmulld xmm9,xmm1
+  phaddd xmm9,xmm9
+  phaddd xmm9,xmm9
+
+  movdqa xmm0,xmm5
+  pmulld xmm0,xmm1
+  phaddd xmm0,xmm0
+  phaddd xmm0,xmm0
+  insertps xmm9,xmm0,$50
+
+  movdqa xmm0,xmm6
+  pmulld xmm0,xmm1
+  phaddd xmm0,xmm0
+  phaddd xmm0,xmm0
+  insertps xmm9,xmm0,$a0
+
+  movdqa xmm0,xmm7
+  pmulld xmm0,xmm1
+  phaddd xmm0,xmm0
+  phaddd xmm0,xmm0
+  insertps xmm9,xmm0,$f0
+
+  psrad xmm9,1
+
+  movdqa xmm1,oword ptr [rip+@coeffsInt+32]
+
+  movdqa xmm10,xmm4
+  pmulld xmm10,xmm1
+  phaddd xmm10,xmm10
+  phaddd xmm10,xmm10
+
+  movdqa xmm0,xmm5
+  pmulld xmm0,xmm1
+  phaddd xmm0,xmm0
+  phaddd xmm0,xmm0
+  insertps xmm10,xmm0,$50
+
+  movdqa xmm0,xmm6
+  pmulld xmm0,xmm1
+  phaddd xmm0,xmm0
+  phaddd xmm0,xmm0
+  insertps xmm10,xmm0,$a0
+
+  movdqa xmm0,xmm7
+  pmulld xmm0,xmm1
+  phaddd xmm0,xmm0
+  phaddd xmm0,xmm0
+  insertps xmm10,xmm0,$f0
+
+  psrad xmm10,1
+
+  //
+
+  movlhps xmm2,xmm2
+
+  cvtdq2pd xmm6,xmm10
+  mulpd xmm6,xmm2
+  psrldq xmm10,8
+  cvtdq2pd xmm7,xmm10
+  mulpd xmm7,xmm2
+
+  movdqa xmm11,xmm2
+  mulpd xmm2,xmm2
+
+  cvtdq2pd xmm4,xmm9
+  mulpd xmm4,xmm2
+  psrldq xmm9,8
+  cvtdq2pd xmm5,xmm9
+  mulpd xmm5,xmm2
+
+  mulpd xmm2,xmm11
+
+  cvtdq2pd xmm0,xmm8
+  mulpd xmm0,xmm2
+  psrldq xmm8,8
+  cvtdq2pd xmm1,xmm8
+  mulpd xmm1,xmm2
+
+  addpd xmm0,xmm4
+  addpd xmm1,xmm5
+  addpd xmm0,xmm6
+  addpd xmm1,xmm7
+
+  // add the last term (from data)
+
+  inc rcx
+  inc rcx
+  sub rcx,rdx
+
+  movzx eax,word ptr[rcx + rdx]
+  cvtsi2sd xmm4,eax
+  movlhps xmm4,xmm4
+  movzx eax,word ptr[rcx]
+  cvtsi2sd xmm4,eax
+
+  add rcx,rdx
+  movzx eax,word ptr[rcx + rdx * 2]
+  cvtsi2sd xmm5,eax
+  movlhps xmm5,xmm5
+  sub rcx,rdx
+  movzx eax,word ptr[rcx + rdx * 2]
+  cvtsi2sd xmm5,eax
+
+  addpd xmm0,xmm4
+  addpd xmm1,xmm5
+
+  // simple y interpolation
+
+  movhlps xmm10,xmm0
+
+  movdqa xmm4,xmm0
+  movdqa xmm5,xmm1
+  movdqa xmm6,xmm0
+  movdqa xmm7,xmm1
+  movdqa xmm8,xmm0
+  movdqa xmm9,xmm1
+
+  mulpd xmm4,oword ptr [rip+@coeffsDbl]
+  mulpd xmm5,oword ptr [rip+@coeffsDbl+16]
+  mulpd xmm6,oword ptr [rip+@coeffsDbl+32]
+  mulpd xmm7,oword ptr [rip+@coeffsDbl+48]
+  mulpd xmm8,oword ptr [rip+@coeffsDbl+64]
+  mulpd xmm9,oword ptr [rip+@coeffsDbl+80]
+
+  addpd xmm4,xmm5
+  addpd xmm6,xmm7
+  addpd xmm8,xmm9
+
+  haddpd xmm4,xmm4
+  haddpd xmm6,xmm6
+  haddpd xmm8,xmm8
+
+  mulsd xmm8,xmm3
+
+  movdqa xmm2,xmm3
+  mulsd xmm3,xmm3
+  mulsd xmm6,xmm3
+
+  mulsd xmm3,xmm2
+  mulsd xmm4,xmm3
+
+  movsd xmm0,xmm8
+  addsd xmm4,xmm6
+  addsd xmm0,xmm4
+
+  mulsd xmm0,qword ptr [rip+@coeffsDbl+96]
+
+  addsd xmm0,xmm10
+
+  // finish
+
+  shr rdx,1
+
+  movdqu xmm1, oword ptr [rsp]
+  movdqu xmm2, oword ptr [rsp + $10]
+  movdqu xmm3, oword ptr [rsp + $20]
+  movdqu xmm4, oword ptr [rsp + $30]
+  movdqu xmm5, oword ptr [rsp + $40]
+  movdqu xmm6, oword ptr [rsp + $50]
+  movdqu xmm7, oword ptr [rsp + $60]
+  movdqu xmm8, oword ptr [rsp + $70]
+  movdqu xmm9, oword ptr [rsp + $80]
+  movdqu xmm10, oword ptr [rsp + $90]
+  movdqu xmm11, oword ptr [rsp + $a0]
+  add rsp, 16 * 11
+
+  pop rax
+
+  jmp @funcEnd
+
+  align 16
+@coeffsInt:
+  dd -1,  3, -3,  1
+  dd  2, -5,  4, -1
+  dd -1,  0,  1,  0
+@coeffsDbl:
+  dq $BFF0000000000000, $4008000000000000, $C008000000000000, $3FF0000000000000
+  dq $4000000000000000, $C014000000000000, $4010000000000000, $BFF0000000000000
+  dq $BFF0000000000000,                 0, $3FF0000000000000,                 0
+  dq $3FE0000000000000
+@funcEnd:
+
 end;
 
 procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
