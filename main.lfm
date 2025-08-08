@@ -311,8 +311,6 @@ object MainForm: TMainForm
       Top = 452
       Width = 202
       Caption = 'Extract audio from individual scans'
-      Checked = True
-      State = cbChecked
       TabOrder = 16
     end
   end
