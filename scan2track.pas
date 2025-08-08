@@ -183,7 +183,7 @@ var
   end;
 
 var
-  rOuter, sn, cs, ox, oy, fbRatio, instantPct, maxPct, angle: Double;
+  rOuter, sn, cs, ox, oy, fbRatio, instantPct, maxPct, angle, startAngle, startAngleBest: Double;
   iScan, iSample, iLut, cnt, dpi, validSmpCnt: Integer;
   hasOutFile, validSample: Boolean;
   smp, validSmpAcc, filteredSmp: TPointD;
@@ -210,11 +210,11 @@ begin
     fltSampleR.SampleRate := FSampleRate;
     fltSampleR.Order := 4;
 
-    BuildSinCosLUT(FPointsPerRevolution, sinCosLut, FInputScans[0].GrooveStartAngle, -2.0 * Pi);
-
     SetLength(fSmps, Length(FInputScans));
     SetLength(radiuses, Length(FInputScans));
 
+    startAngle := NaN;
+    startAngleBest := -Infinity;
     dpi := -1;
     for iScan := 0 to High(FInputScans) do
     begin
@@ -226,7 +226,17 @@ begin
         Assert(scan.DPI = dpi);
 
       radiuses[iScan] := scan.SetDownRadius;
+
+      if scan.GrooveStartAngleQuality >= startAngleBest then
+      begin
+        startAngleBest := scan.GrooveStartAngleQuality;
+        startAngle := scan.GrooveStartAngle;
+      end;
     end;
+
+    Assert(not IsNan(startAngle));
+
+    BuildSinCosLUT(FPointsPerRevolution, sinCosLut, startAngle, -2.0 * Pi);
 
     fbRatio := CutoffToFeedbackRatio(C45RpmLoopbackLowCutoffFreq, FSampleRate) * C45RpmRecordingGrooveWidth * 0.5 * dpi;
 
@@ -236,7 +246,7 @@ begin
     iLut := 0;
 
     repeat
-      angle := NormalizeAngle(iLut * FRadiansPerRevolutionPoint + FInputScans[0].GrooveStartAngle);
+      angle := NormalizeAngle(iLut * FRadiansPerRevolutionPoint + startAngle);
       cs := sinCosLut[iLut].Cos;
       sn := sinCosLut[iLut].Sin;
 

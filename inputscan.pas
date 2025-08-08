@@ -41,6 +41,7 @@ type
     FConcentricGrooveRadius: Double;
     FSetDownRadius: Double;
     FGrooveStartAngle: Double;
+    FGrooveStartAngleQuality: Double;
     FGrooveStartPoint: TPointD;
 
     FRelativeAngle: Double;
@@ -102,6 +103,7 @@ type
     property ConcentricGrooveRadius: Double read FConcentricGrooveRadius;
     property SetDownRadius: Double read FSetDownRadius;
     property GrooveStartAngle: Double read FGrooveStartAngle;
+    property GrooveStartAngleQuality: Double read FGrooveStartAngleQuality;
     property GrooveStartPoint: TPointD read FGrooveStartPoint;
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
@@ -380,7 +382,7 @@ end;
 procedure TInputScan.FindGrooveStart;
 var
   i: Integer;
-  v, best, sn, cs, bestr, x, y, bestx, besty: Double;
+  v, best, sn, cs, bestr, x, y, bestx, besty, angle: Double;
 begin
   best := -Infinity;
   bestx := 0;
@@ -390,6 +392,12 @@ begin
 
   for i := 0 to FPointsPerRevolution - 1  do
   begin
+    angle := NormalizeAngle(i * FRadiansPerRevolutionPoint);
+
+    if InNormalizedAngle(angle, FCropData.StartAngle, FCropData.EndAngle) or
+        InNormalizedAngle(angle, FCropData.StartAngleMirror, FCropData.EndAngleMirror) then
+      Continue;
+
     SinCos(i * FRadiansPerRevolutionPoint, sn, cs);
 
     x := cs * FSetDownRadius + FCenter.X;
@@ -404,13 +412,14 @@ begin
         best := v;
         bestx := x;
         besty := y;
-        bestr := i * FRadiansPerRevolutionPoint;
+        bestr := angle;
       end;
     end;
 
     //writeln(i:6,x:8,y:8,v:9:3,best:9:3,bestx:8,besty:8);
   end;
 
+  FGrooveStartAngleQuality := best;
   FGrooveStartAngle := bestr;
   FGrooveStartPoint.X := bestx;
   FGrooveStartPoint.Y := besty;
@@ -421,6 +430,7 @@ begin
   FDPI := ADefaultDPI;
   FSilent := ASilent;
   FCenterQuality := -Infinity;
+  FGrooveStartAngleQuality := -Infinity;
   FObjective := Infinity;
   FSkew.X := 1.0;
   FSkew.Y := 1.0;
