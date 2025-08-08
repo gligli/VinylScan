@@ -103,23 +103,24 @@ begin
 end;
 
 function TScan2Track.DecodeSample(AScan: TInputScan; radius, angleSin, angleCos: Double; iLut, precision: Integer): TPointD;
-
+const
+  CSigma = 2.5;
 var
   iSmp, posMin, posMax, decoderMax, radiusOffset: Integer;
-  r, cx, cy, px, py, cxa, sampleMin, sampleMax: Double;
+  r, cx, cy, px, py, cxa, sampleMean, sampleStdDev: Double;
+  smpBuf: array[SmallInt] of Double;
 
   function GetSampleIdx(iSmp: Integer): Double;
   begin
     r := radius + (iSmp + 0.5) * cxa;
     Result := AScan.GetPolarPointD(AScan.PolarImage, r - radiusOffset, iLut);
-    sampleMin := Min(sampleMin, Result);
-    sampleMax := Max(sampleMax, Result);
+    smpBuf[iSmp] := Result;
   end;
 
   function ConvertToSampleValue(ASampleIdxAcc: Double): Double;
   begin
     Result := ASampleIdxAcc / decoderMax;
-    Result := DivDef((Result - sampleMin) * 2.0, sampleMax - sampleMin, 1.0) - 1.0;
+    Result := DivDef((Result - sampleMean) * 2.0, sampleStdDev * CSigma, 1.0) - 1.0;
   end;
 
 begin
@@ -143,8 +144,8 @@ begin
 
   posMin := -decoderMax;
   posMax := decoderMax - 1;
-  sampleMin := Infinity;
-  sampleMax := -Infinity;
+  sampleMean := Infinity;
+  sampleStdDev := -Infinity;
 
   Result.X := 0.0;
   for iSmp := 0 to posMax do
@@ -153,6 +154,8 @@ begin
   Result.Y := 0.0;
   for iSmp := posMin to -1 do
     Result.Y += GetSampleIdx(iSmp);
+
+  MeanAndStdDev(@smpBuf[posMin], posMax - posMin + 1, sampleMean, sampleStdDev);
 
   Result.X := ConvertToSampleValue(Result.X);
   Result.Y := ConvertToSampleValue(Result.Y);
@@ -348,8 +351,6 @@ procedure TScan2Track.LoadScans(AForceBrickwall: Boolean);
     Scan: TInputScan;
   begin
     Scan := FInputScans[AIndex];
-
-    Scan.BrickwallLimit;
 
     Scan.FindTrack(False, FSampleRate);
 
