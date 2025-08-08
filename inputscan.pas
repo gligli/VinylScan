@@ -383,6 +383,7 @@ procedure TInputScan.FindGrooveStart;
 var
   i: Integer;
   v, best, sn, cs, bestr, x, y, bestx, besty, angle: Double;
+  hasCrop: Boolean;
 begin
   best := -Infinity;
   bestx := 0;
@@ -390,12 +391,16 @@ begin
   bestr := 0;
   v := 0;
 
+  hasCrop := (NormalizedAngleDiff(FCropData.StartAngle, FCropData.EndAngle) <> 0) or
+      (NormalizedAngleDiff(FCropData.StartAngleMirror, FCropData.EndAngleMirror) <> 0);
+
   for i := 0 to FPointsPerRevolution - 1  do
   begin
     angle := NormalizeAngle(i * FRadiansPerRevolutionPoint);
 
-    if InNormalizedAngle(angle, FCropData.StartAngle, FCropData.EndAngle) or
-        InNormalizedAngle(angle, FCropData.StartAngleMirror, FCropData.EndAngleMirror) then
+    if hasCrop and
+        (InNormalizedAngle(angle, FCropData.StartAngle, FCropData.EndAngle) or
+        InNormalizedAngle(angle, FCropData.StartAngleMirror, FCropData.EndAngleMirror)) then
       Continue;
 
     SinCos(i * FRadiansPerRevolutionPoint, sn, cs);
