@@ -26,10 +26,6 @@ type
     class operator <> (const apt1, apt2 : TPointValue): Boolean;
   end;
 
-  TPolarPointValue = record
-    Radius, Angle, Sin, Cos, Value: Double;
-  end;
-
   TRectD = record
     L, T, R, B: Double;
   end;
@@ -45,7 +41,6 @@ type
   TPointDDynArray = array of TPointD;
   TPointDDynArray2 = array of TPointDDynArray;
   TPointValueDynArray = array of TPointValue;
-  TPolarPointValueDynArray = array of TPolarPointValue;
   TByteDynArray2 = array of TByteDynArray;
   TWordDynArray2 = array of TWordDynArray;
   TSingleDynArray2 = array of TSingleDynArray;
@@ -142,8 +137,6 @@ procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
 function serpCoeffs(alpha: Double): PSingle;
 procedure serpFromCoeffsXY(coeffs: PSingle; centerPx: PWORD; stride: Integer; res: PSingle);
 function serpFromCoeffs(coeffs, data: PSingle): Single;
-
-procedure DrawPointValue(const AImage: TDoubleDynArray; const APoint: TPointValue; AWidth, AHeight: Integer; ASign: TValueSign);
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: array of Double; EpsilonG: Double; MaxIter: Integer; Silent: Boolean; Data: Pointer = nil): Double;
@@ -354,34 +347,6 @@ end;
 function lerp(x, y: Integer; alpha: Double): Double;
 begin
   Result := x + (y - x) * alpha;
-end;
-
-procedure DrawPointValue(const AImage: TDoubleDynArray; const APoint: TPointValue; AWidth, AHeight: Integer; ASign: TValueSign);
-var
-  ix, iy, xy: Integer;
-  x, y, rx, ry, p: Double;
-begin
-  x := APoint.X;
-  y := APoint.Y;
-  p := APoint.Value * ASign;
-
-  ix := trunc(x);
-  iy := trunc(y);
-
-  if InRange(ix, 0, AWidth - 2) and InRange(iy, 0, AHeight - 2) then
-  begin
-    xy := iy * AWidth + ix;
-
-    x -= ix;
-    y -= iy;
-    rx := 1.0 - x;
-    ry := 1.0 - y;
-
-    AImage[xy] += ry * rx * p;
-    AImage[xy + 1] += ry * x * p;
-    AImage[xy + AWidth] += y * rx * p;
-    AImage[xy + AWidth + 1] += y * x * p;
-  end;
 end;
 
 {$ifdef CPUX64}
