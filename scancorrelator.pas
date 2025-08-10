@@ -42,7 +42,7 @@ type
     FOutputScans: TInputScanDynArray;
 
     procedure CorrectAnglesFromCoords(const coords: TCorrectCoords; out AStartAngle, AEndAngle, angleInc: Double; out
-      radiusCnt, angleCnt: Integer; AReduceAngles: Boolean);
+      angleCnt: Integer; AReduceAngles: Boolean);
 
     function PrepareAnalyze: TDoubleDynArray;
     function NelderMeadAnalyze(const arg: TVector; obj: Pointer): TScalar;
@@ -508,7 +508,7 @@ begin
 end;
 
 procedure TScanCorrelator.CorrectAnglesFromCoords(const coords: TCorrectCoords; out AStartAngle, AEndAngle,
-  angleInc: Double; out radiusCnt, angleCnt: Integer; AReduceAngles: Boolean);
+  angleInc: Double; out angleCnt: Integer; AReduceAngles: Boolean);
 var
   croppedCnt: Integer;
   angle, angleExtents, startAngle, endAngle, a0a, a1a, a0b, a1b: Double;
@@ -568,8 +568,6 @@ begin
   AStartAngle := startAngle;
   AEndAngle := endAngle;
 
-  radiusCnt := Ceil(CCorrectAreaWidth * FOutputDPI);
-
   if not IsNan(startAngle) and not IsNan(endAngle) then
   begin
     angleInc := FInputScans[0].RadiansPerRevolutionPoint;
@@ -584,17 +582,19 @@ end;
 
 function TScanCorrelator.PrepareCorrect(var coords: TCorrectCoords): Boolean;
 var
-  iRadius, iAngle, iBaseScan, cnt, radiusCnt, angleCnt, v, best, dummyRC, dummyAC: Integer;
+  iRadius, iAngle, iBaseScan, cnt, radiusCnt, angleCnt, v, best, dummyAC: Integer;
   t, bt, rBeg, r, sn, cs, px, py, cx, cy, startAngle, endAngle, saRaw, eaRaw, angleInc, dummyAI: Double;
   curScan, baseScan: TInputScan;
 begin
   Result := True;
   Coords.BaseScanIdx := 0;
 
-  CorrectAnglesFromCoords(coords, startAngle, endAngle, angleInc, radiusCnt, angleCnt, True);
+  CorrectAnglesFromCoords(coords, startAngle, endAngle, angleInc, angleCnt, True);
 
   if IsNan(startAngle) or IsNan(endAngle) then
     Exit(False);
+
+  radiusCnt := Ceil(CCorrectAreaWidth * FOutputDPI);
 
   SetLength(coords.PreparedData, radiusCnt * angleCnt);
 
@@ -648,7 +648,7 @@ begin
 
   // build weights lookup table
 
-  CorrectAnglesFromCoords(Coords, saRaw, eaRaw, dummyAI, dummyRC, dummyAC, False);
+  CorrectAnglesFromCoords(Coords, saRaw, eaRaw, dummyAI, dummyAC, False);
 
   SetLength(Coords.Weights, angleCnt);
 
@@ -683,29 +683,28 @@ begin
       Inc(cnt);
     end;
   end;
-
   Assert(cnt = radiusCnt * angleCnt);
+
+  // prepare iterations
+
+  CorrectAnglesFromCoords(coords, startAngle, endAngle, angleInc, angleCnt, True);
+  BuildSinCosLUT(angleCnt, coords.sinCosLUT, startAngle + curScan.RelativeAngle, endAngle - startAngle + angleInc);
 end;
 
 function TScanCorrelator.NelderMeadCorrect(const arg: TVector; obj: Pointer): TScalar;
 var
   coords: PCorrectCoords absolute obj;
-  cnt, iRadius, iScan, iAngle, radiusCnt, angleCnt: Integer;
-  t, r, rBeg, sn, cs, px, py, cx, cy, rsk, startAngle, endAngle, angleInc: Double;
+  cnt, iRadius, iScan, iAngle, radiusCnt: Integer;
+  r, rBeg, sn, cs, px, py, cx, cy, rsk: Double;
   scan: TInputScan;
 begin
-  CorrectAnglesFromCoords(coords^, startAngle, endAngle, angleInc, radiusCnt, angleCnt, True);
-
   iScan := coords^.ScanIdx;
   scan := FInputScans[iScan];
 
-  t := scan.RelativeAngle;
   cx := scan.Center.X;
   cy := scan.Center.Y;
 
-  // build sin / cos lookup table
-
-  BuildSinCosLUT(angleCnt, coords^.sinCosLUT, startAngle + t, endAngle - startAngle + angleInc);
+  radiusCnt := Ceil(CCorrectAreaWidth * FOutputDPI);
 
   // parse image arcs
 
@@ -739,7 +738,7 @@ begin
     end;
   end;
 
-  Assert(cnt = radiusCnt * angleCnt);
+  Assert(cnt = radiusCnt * Length(coords^.SinCosLUT));
 
   Result /= cnt;
 end;
