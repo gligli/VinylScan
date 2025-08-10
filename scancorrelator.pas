@@ -31,6 +31,7 @@ type
     FCorrectAngles: Boolean;
     FRebuildScaled: Boolean;
     FRebuildBlendCount: Integer;
+    FQualitySpeedRatio: Double;
     FOutputPNGFileName: String;
     FOutputDPI: Integer;
     FLock: TSpinlock;
@@ -71,6 +72,7 @@ type
     property CorrectAngles: Boolean read FCorrectAngles write FCorrectAngles;
     property RebuildBlendCount: Integer read FRebuildBlendCount write FRebuildBlendCount;
     property RebuildScaled: Boolean read FRebuildScaled write FRebuildScaled;
+    property QualitySpeedRatio: Double read FQualitySpeedRatio write FQualitySpeedRatio;
 
     property OutputDPI: Integer read FOutputDPI;
     property OutputWidth: Integer read FOutputWidth;
@@ -133,6 +135,7 @@ begin
   FCorrectAngles := True;
   FRebuildScaled := True;
   FRebuildBlendCount := 32;
+  FQualitySpeedRatio := 1.0;
 
   FFixCISScanners := True;
 end;
@@ -301,25 +304,26 @@ end;
 
 function TScanCorrelator.PrepareAnalyze: TDoubleDynArray;
 var
-  iRadius, pos, cnt: Integer;
+  iRadius, pos, cnt, angleCnt: Integer;
   t, rBeg, px, py, cx, cy, r, ri, sn, cs: Double;
   sinCosLUT: TSinCosDynArray;
   scan: TInputScan;
 begin
   scan := FInputScans[0];
 
-  cnt := Ceil(CAnalyzeAreaWidth * FOutputDPI * scan.PointsPerRevolution);
+  angleCnt := Ceil(scan.PointsPerRevolution * FQualitySpeedRatio);
+  cnt := Ceil(CAnalyzeAreaWidth * scan.DPI * angleCnt);
   SetLength(Result, cnt);
 
   t   := scan.RelativeAngle;
   cx  := scan.Center.X;
   cy  := scan.Center.Y;
 
-  BuildSinCosLUT(scan.PointsPerRevolution, sinCosLUT, t);
+  BuildSinCosLUT(angleCnt, sinCosLUT, t);
 
   pos := 0;
-  rBeg := CAnalyzeAreaBegin * 0.5 * FOutputDPI;
-  ri := 1.0 / scan.PointsPerRevolution;
+  rBeg := CAnalyzeAreaBegin * 0.5 * scan.DPI;
+  ri := 1.0 / angleCnt;
   for iRadius := 0 to High(Result) do
   begin
     cs := sinCosLUT[pos].Cos;
@@ -341,7 +345,7 @@ begin
 
     Inc(pos);
 
-    if pos >= scan.PointsPerRevolution then
+    if pos >= angleCnt then
       pos := 0;
   end;
 end;
@@ -350,7 +354,7 @@ function TScanCorrelator.NelderMeadAnalyze(const arg: TVector; obj: Pointer): TS
 var
   coords: PCorrectCoords absolute obj;
 
-  iScan, iRadius, pos, cnt: Integer;
+  iScan, iRadius, pos, cnt, angleCnt: Integer;
   t, rBeg, px, py, cx, cy, r, ri, sn, cs: Double;
   sinCosLUT: TSinCosDynArray;
   scan: TInputScan;
@@ -358,17 +362,18 @@ begin
   scan := FInputScans[coords^.ScanIdx];
   Result := 0.0;
 
-  cnt := Ceil(CAnalyzeAreaWidth * FOutputDPI * scan.PointsPerRevolution);
+  angleCnt := Ceil(scan.PointsPerRevolution * FQualitySpeedRatio);
+  cnt := Ceil(CAnalyzeAreaWidth * scan.DPI * angleCnt);
 
   t := arg[0];
   cx := arg[1];
   cy := arg[2];
 
-  BuildSinCosLUT(scan.PointsPerRevolution, sinCosLUT, t);
+  BuildSinCosLUT(angleCnt, sinCosLUT, t);
 
   pos := 0;
-  rBeg := CAnalyzeAreaBegin * 0.5 * FOutputDPI;
-  ri := 1.0 / scan.PointsPerRevolution;
+  rBeg := CAnalyzeAreaBegin * 0.5 * scan.DPI;
+  ri := 1.0 / angleCnt;
   for iRadius := 0 to cnt - 1 do
   begin
     cs := sinCosLUT[pos].Cos;
@@ -390,7 +395,7 @@ begin
 
     Inc(pos);
 
-    if pos >= scan.PointsPerRevolution then
+    if pos >= angleCnt then
       pos := 0;
   end;
 
@@ -571,7 +576,7 @@ begin
   if not IsNan(startAngle) and not IsNan(endAngle) then
   begin
     angleInc := FInputScans[0].RadiansPerRevolutionPoint;
-    angleCnt := Ceil(NormalizedAngleDiff(startAngle, endAngle) / angleInc);
+    angleCnt := Ceil(NormalizedAngleDiff(startAngle, endAngle) / angleInc * FQualitySpeedRatio);
   end
   else
   begin
@@ -588,19 +593,19 @@ var
 begin
   Result := True;
   Coords.BaseScanIdx := 0;
+  curScan := FInputScans[Coords.ScanIdx];
 
   CorrectAnglesFromCoords(coords, startAngle, endAngle, angleInc, angleCnt, True);
 
   if IsNan(startAngle) or IsNan(endAngle) then
     Exit(False);
 
-  radiusCnt := Ceil(CCorrectAreaWidth * FOutputDPI);
+  radiusCnt := Ceil(CCorrectAreaWidth * curScan.DPI);
 
   SetLength(coords.PreparedData, radiusCnt * angleCnt);
 
   // devise best baseScan
 
-  curScan := FInputScans[Coords.ScanIdx];
   Coords.BaseScanIdx := -1;
   best := MaxInt;
   for iBaseScan := 0 to High(FInputScans) do
@@ -662,7 +667,7 @@ begin
   // parse image arcs
 
   cnt := 0;
-  rBeg := CCorrectAreaBegin * 0.5 * FOutputDPI;
+  rBeg := CCorrectAreaBegin * 0.5 * curScan.DPI;
   for iRadius := 0 to radiusCnt - 1 do
   begin
     r := rBeg + iRadius;
@@ -704,13 +709,13 @@ begin
   cx := scan.Center.X;
   cy := scan.Center.Y;
 
-  radiusCnt := Ceil(CCorrectAreaWidth * FOutputDPI);
+  radiusCnt := Ceil(CCorrectAreaWidth * scan.DPI);
 
   // parse image arcs
 
   Result := 0;
   cnt := 0;
-  rBeg := CCorrectAreaBegin * 0.5 * FOutputDPI;
+  rBeg := CCorrectAreaBegin * 0.5 * scan.DPI;
   for iRadius := 0 to radiusCnt - 1 do
   begin
     r := rBeg + iRadius;
@@ -843,7 +848,7 @@ var
   end;
 
 var
-  iangle, iscan, ias, iasbase, ix, iRmse, validRmseCnt: Integer;
+  iangle, iscan, ias, iasbase, ix, validRmseCnt: Integer;
   pax: TDoubleDynArray2;
   validRmses: TDoubleDynArray;
 begin
@@ -898,15 +903,17 @@ begin
       Write(FInputScans[iscan].ImageShortName);
       Write(', Angle:', (iangle / CCorrectAngleCount) * 360.0:9:3);
       Write(', RMSE:', rmses[ias]:12:6);
-      WriteLn(', ', FPerAngleX[ias, 0]:12:6, ', ', FPerAngleX[ias, 1]:12:6);
+      if not IsNan(rmses[ias]) then
+        Write(', Const:', FPerAngleX[ias, 0]:9:3, ', Mul:', FPerAngleX[ias, 1]:12:8);
+      WriteLn;
     end;
 
   validRmseCnt := 0;
   SetLength(validRmses, Length(rmses));
-  for iRmse := 0 to High(rmses) do
-    if not IsNan(rmses[iRmse]) then
+  for ias := 0 to High(rmses) do
+    if not IsNan(rmses[ias]) then
     begin
-      validRmses[validRmseCnt] := rmses[iRmse];
+      validRmses[validRmseCnt] := rmses[ias];
       Inc(validRmseCnt);
     end;
   SetLength(validRmses, validRmseCnt);
