@@ -104,7 +104,7 @@ end;
 
 function TScan2Track.DecodeSample(AScan: TInputScan; radius, angleSin, angleCos: Double; iLut, precision: Integer): TPointD;
 const
-  CSigma = 2.5;
+  CSigma = 1;
 var
   iSmp, posMin, posMax, decoderMax, radiusOffset: Integer;
   r, cx, cy, px, py, cxa, sampleMean, sampleStdDev: Double;
@@ -120,7 +120,7 @@ var
   function ConvertToSampleValue(ASampleIdxAcc: Double): Double;
   begin
     Result := ASampleIdxAcc / decoderMax;
-    Result := DivDef((Result - sampleMean) * 2.0, sampleStdDev * CSigma, 1.0) - 1.0;
+    Result := DivDef(Result - sampleMean, sampleStdDev * CSigma, 0.0);
   end;
 
 begin
