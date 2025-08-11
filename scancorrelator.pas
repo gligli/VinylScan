@@ -649,7 +649,7 @@ begin
   cx := baseScan.Center.X;
   cy := baseScan.Center.Y;
 
-  BuildSinCosLUT(angleCnt, coords.SinCosLUT, startAngle + t, endAngle - startAngle + angleInc);
+  BuildSinCosLUT(angleCnt, coords.SinCosLUT, startAngle + t, NormalizedAngleDiff(startAngle, endAngle));
 
   // build weights lookup table
 
@@ -661,6 +661,7 @@ begin
   for iAngle := 0 to angleCnt - 1 do
   begin
     Coords.Weights[iAngle] := 1.0 - 2.0 * abs(NormalizedAngleDiff(saRaw, NormalizeAngle(bt)) / NormalizedAngleDiff(saRaw, eaRaw) - 0.5);
+    Coords.Weights[iAngle] *= 1.0 / High(Word);
     bt += angleInc;
   end;
 
@@ -692,8 +693,7 @@ begin
 
   // prepare iterations
 
-  CorrectAnglesFromCoords(coords, startAngle, endAngle, angleInc, angleCnt, True);
-  BuildSinCosLUT(angleCnt, coords.sinCosLUT, startAngle + curScan.RelativeAngle, endAngle - startAngle + angleInc);
+  BuildSinCosLUT(angleCnt, coords.sinCosLUT, startAngle + curScan.RelativeAngle, NormalizedAngleDiff(startAngle, endAngle));
 end;
 
 function TScanCorrelator.NelderMeadCorrect(const arg: TVector; obj: Pointer): TScalar;
@@ -732,7 +732,7 @@ begin
 
       if scan.InRangePointD(py, px) then
       begin
-        Result += Sqr((coords^.PreparedData[cnt] - scan.GetPointD(scan.LeveledImage, py, px)) * coords^.Weights[iAngle] * (1.0 / High(Word)));
+        Result += Sqr((coords^.PreparedData[cnt] - scan.GetPointD(scan.LeveledImage, py, px)) * coords^.Weights[iAngle]);
       end
       else
       begin
