@@ -253,10 +253,6 @@ begin
       cs := sinCosLut[iLut].Cos;
       sn := sinCosLut[iLut].Sin;
 
-      Inc(iLut);
-      if iLut >= FPointsPerRevolution then
-        iLut := 0;
-
       validSmpAcc.X := 0.0;
       validSmpAcc.Y := 0.0;
       validSmpCnt := 0;
@@ -320,6 +316,9 @@ begin
 			end;
 
       Inc(iSample);
+      Inc(iLut);
+      if iLut >= FPointsPerRevolution then
+        iLut := 0;
 
     until not validSample;
 
