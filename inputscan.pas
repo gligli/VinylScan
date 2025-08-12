@@ -565,9 +565,9 @@ end;
 
 procedure TInputScan.BrickwallLimit;
 const
-  CRadius = 16;
-  CSigma = 2;
+  CSigma = 1;
 var
+  radius: Integer;
   offsets: TIntegerDynArray;
 
   procedure GetL2Extents(ayx: Integer; out amean, astddev: Integer);
@@ -603,12 +603,12 @@ var
     px, x, y, yx: Integer;
     mn, sd: Integer;
   begin
-    if not InRange(AIndex, CRadius, FHeight - 1 - CRadius) then
+    if not InRange(AIndex, radius, FHeight - 1 - radius) then
       Exit;
 
     y := AIndex;
 
-    for x := CRadius to FWidth - 1 - CRadius do
+    for x := radius to FWidth - 1 - radius do
     begin
       yx := y * Width + x;
 
@@ -627,14 +627,16 @@ var
 begin
   if not FSilent then WriteLn('BrickwallLimit');
 
-  SetLength(offsets, Sqr(CRadius * 2 + 1));
+  radius := Ceil(C45RpmRecordingGrooveWidth * FDPI);
+
+  SetLength(offsets, Sqr(radius * 2 + 1));
   pos := 0;
-  for y := -CRadius to CRadius do
-    for x := -CRadius to CRadius do
+  for y := -radius to radius do
+    for x := -radius to radius do
     begin
       r := round(Sqrt(Sqr(y) + Sqr(x)));
 
-      if r <= CRadius then
+      if r <= radius then
       begin
         offsets[pos] := y * Width + x;
         Inc(pos);
@@ -645,7 +647,7 @@ begin
   FLeveledImage := nil;
   SetLength(FLeveledImage, Height * Width);
 
-  ProcThreadPool.DoParallelLocalProc(@DoY, CRadius, FHeight - 1 - CRadius);
+  ProcThreadPool.DoParallelLocalProc(@DoY, radius, FHeight - 1 - radius);
 end;
 
 procedure TInputScan.FindTrack(AUseGradient: Boolean; AForcedSampleRate: Integer);
