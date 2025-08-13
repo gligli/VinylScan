@@ -172,7 +172,7 @@ procedure TScanCorrelator.LoadScans;
 
     if FFixCISScanners then Scan.FixCISScanners;
     if FBrickwallLimitScans then Scan.BrickwallLimit;
-    Scan.FindTrack(True);
+    Scan.FindTrack(True, False);
   end;
 
 var

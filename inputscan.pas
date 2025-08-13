@@ -52,7 +52,6 @@ type
     FWidth, FHeight: Integer;
     FImage: TWordDynArray;
     FLeveledImage: TWordDynArray;
-    FPolarImage: TWordDynArray;
 
     FCorrectRefs: array of TCorrectRef;
     FLock: TSpinlock;
@@ -67,6 +66,7 @@ type
     procedure FindCenterExtents;
     procedure FindConcentricGroove_GridSearch;
     procedure FindConcentricGroove_Gradient;
+    procedure FindCroppedArea;
     procedure FindGrooveStart;
 
     procedure LoadPNG;
@@ -77,17 +77,14 @@ type
 
     procedure InitImage(AWidth, AHeight, ADPI: Integer);
     procedure LoadImage;
+    procedure FixCISScanners;
     procedure BrickwallLimit;
-    procedure FindTrack(AUseGradient: Boolean; AForcedSampleRate: Integer = -1);
+    procedure FindTrack(AUseGradient, AFindCroppedArea: Boolean; AForcedSampleRate: Integer = -1);
     procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle, ASkewX, ASkewY: Double);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
-    procedure FindCroppedArea;
-    procedure FixCISScanners;
-    procedure RenderPolarImage;
 
     function InRangePointD(Y, X: Double): Boolean; inline;
     function GetPointD(const Image: TWordDynArray; Y, X: Double): Double; inline;
-    function GetPolarPointD(const Image: TWordDynArray; R, T: Double): Double; inline;
     function GetMeanSD(AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;
 
     procedure AddCorrectRef(AngleIdx, ScanIdx: Integer);
@@ -119,7 +116,6 @@ type
 
     property Image: TWordDynArray read FImage;
     property LeveledImage: TWordDynArray read FLeveledImage;
-    property PolarImage: TWordDynArray read FPolarImage;
   end;
 
   { TScanImage }
@@ -401,7 +397,10 @@ begin
     if hasCrop and
         (InNormalizedAngle(angle, FCropData.StartAngle, FCropData.EndAngle) or
         InNormalizedAngle(angle, FCropData.StartAngleMirror, FCropData.EndAngleMirror)) then
+    begin
+      v := 0;
       Continue;
+    end;
 
     SinCos(i * FRadiansPerRevolutionPoint, sn, cs);
 
@@ -650,7 +649,7 @@ begin
   ProcThreadPool.DoParallelLocalProc(@DoY, radius, FHeight - 1 - radius);
 end;
 
-procedure TInputScan.FindTrack(AUseGradient: Boolean; AForcedSampleRate: Integer);
+procedure TInputScan.FindTrack(AUseGradient, AFindCroppedArea: Boolean; AForcedSampleRate: Integer);
 begin
   if not FSilent then WriteLn('FindTrack');
 
@@ -665,6 +664,8 @@ begin
   FindConcentricGroove_GridSearch;
   if AUseGradient then
     FindConcentricGroove_Gradient;
+  if AFindCroppedArea then
+    FindCroppedArea;
   FindGrooveStart;
 
   if not FSilent then
@@ -873,6 +874,9 @@ begin
 end;
 
 procedure TInputScan.FindCroppedArea;
+const
+  CAngleCount = 720;
+  CAngleMargin = 3;
 var
   iAngle, iRadius, beginRadius, endRadius: Integer;
   toRad, angle, sn, cs: Double;
@@ -883,7 +887,7 @@ begin
   beginRadius := Ceil(C45RpmLastMusicGroove * 0.5 * FDPI);
   endRadius := Floor(C45RpmFirstMusicGroove * 0.5 * FDPI);
 
-  SetLength(angleCropped, 720);
+  SetLength(angleCropped, CAngleCount);
   SetLength(angleData, endRadius - beginRadius + 1);
 
   toRad := 2.0 * Pi / Length(angleCropped);
@@ -905,7 +909,7 @@ begin
   begin
     if angleCropped[iAngle] and not prevAngleCropped then
     begin
-      angle := NormalizeAngle((iAngle - 1) * toRad);
+      angle := NormalizeAngle((iAngle - CAngleMargin) * toRad);
 
       if isMirror then
         FCropData.StartAngleMirror := angle
@@ -914,7 +918,7 @@ begin
     end
     else if not angleCropped[iAngle] and prevAngleCropped then
     begin
-      angle := NormalizeAngle((iAngle + 1) * toRad);
+      angle := NormalizeAngle((iAngle + CAngleMargin) * toRad);
 
       if isMirror then
         FCropData.EndAngleMirror := angle
@@ -1077,32 +1081,6 @@ begin
   end;
 end;
 
-procedure TInputScan.RenderPolarImage;
-var
-  iRadius, iAngle, w, h, radiusOffset: Integer;
-  px, py: Double;
-begin
-  if not FSilent then WriteLn('RenderPolarImage');
-
-  w := FPointsPerRevolution;
-  h := Ceil((C45RpmOuterSize - C45RpmLabelOuterSize) * 0.5 * FDPI);
-  radiusOffset := Floor(C45RpmLabelOuterSize * 0.5 * FDPI);
-
-  BuildSinCosLUT(w, FSinCosLUT, FGrooveStartAngle, -2.0 * Pi);
-
-  SetLength(FPolarImage, w * h);
-
-  for iRadius := radiusOffset to h + radiusOffset - 1 do
-    for iAngle := 0 to w - 1 do
-    begin
-      px := FSinCosLUT[iAngle].Cos * iRadius + FCenter.X;
-      py := FSinCosLUT[iAngle].Sin * iRadius + FCenter.Y;
-
-      if InRangePointD(py, px) then
-        FPolarImage[(iRadius - radiusOffset) * w + iAngle] := EnsureRange(Round(GetPointD(FLeveledImage, py, px)), 0, High(Word));
-    end;
-end;
-
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
 begin
   Result := InRange(Y, -Low(TSerpCoeffs9), Height + Low(TSerpCoeffs9) - 2) and InRange(X, -Low(TSerpCoeffs9), Height + Low(TSerpCoeffs9) - 2);
@@ -1116,16 +1094,6 @@ begin
   iy := trunc(Y);
 
   Result := herpXY(@Image[iy * FWidth + ix], FWidth, X - ix, Y - iy);
-end;
-
-function TInputScan.GetPolarPointD(const Image: TWordDynArray; R, T: Double): Double;
-var
-  it, ir: Integer;
-begin
-  it := trunc(T);
-  ir := trunc(R);
-
-  Result := herpXY(@Image[ir * FPointsPerRevolution + it], FPointsPerRevolution, T - it, R - ir);
 end;
 
 function TInputScan.GetMeanSD(AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;

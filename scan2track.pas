@@ -31,15 +31,20 @@ type
 
     FUsedSampleValues: array[SmallInt] of Boolean;
 
+    FStartAngle: Double;
+    FDPI: Integer;
+    FRadiuses: TDoubleDynArray;
+
     procedure Init(ASilent: Boolean; ASampleRate: Integer; ADecoderPrecision: Integer);
-    function DecodeSample(AScan: TInputScan; radius, angleSin, angleCos: Double; iLut, precision: Integer): TPointD;
+    procedure FindTrackStart;
+    function DecodeSample(AScan: TInputScan; radius, angleSin, angleCos: Double): TPointD;
 
   public
-    constructor Create(AScanFileNames: TStrings; ADefaultDPI: Integer = 2400; ASilent: Boolean = False; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 8);
+    constructor Create(AScanFileNames: TStrings; ADefaultDPI: Integer = 2400; ASilent: Boolean = False; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 6);
     constructor CreateFromInputScans(AInputScans: TInputScanDynArray; ASilent: Boolean; ASampleRate: Integer; ADecoderPrecision: Integer);
     destructor Destroy; override;
 
-    procedure LoadScans(AForceBrickwall: Boolean);
+    procedure LoadScans;
     procedure EvalTrack;
 
     property OnSample: TSampleEvent read FOnSample write FOnSample;
@@ -102,18 +107,64 @@ begin
   FRadiansPerRevolutionPoint := -Pi * 2.0 / FPointsPerRevolution;
 end;
 
-function TScan2Track.DecodeSample(AScan: TInputScan; radius, angleSin, angleCos: Double; iLut, precision: Integer): TPointD;
+function CompareInputScansStartAngleQuality(Item1, Item2, UserParameter: Pointer): Integer;
+var
+  s1: ^TInputScan absolute Item1;
+  s2: ^TInputScan absolute Item2;
+begin
+  Result := CompareValue(s2^.GrooveStartAngleQuality, s1^.GrooveStartAngleQuality);
+end;
+
+procedure TScan2Track.FindTrackStart;
+var
+  iScan: Integer;
+  startAngleBest: Double;
+  scan: TInputScan;
+begin
+  SetLength(FRadiuses, Length(FInputScans));
+
+  FStartAngle := NaN;
+  startAngleBest := -Infinity;
+  FDPI := -1;
+  for iScan := 0 to High(FInputScans) do
+  begin
+    scan := FInputScans[iScan];
+
+    if FDPI < 0 then
+      FDPI := scan.DPI
+    else
+      Assert(scan.DPI = FDPI);
+
+    FRadiuses[iScan] := scan.SetDownRadius;
+
+    if scan.GrooveStartAngleQuality >= startAngleBest then
+    begin
+      startAngleBest := scan.GrooveStartAngleQuality;
+      FStartAngle := scan.GrooveStartAngle;
+    end;
+  end;
+
+  Assert(not IsNan(FStartAngle));
+
+  if Length(FInputScans) > 1 then
+  begin
+    QuickSort(FInputScans[0], 0, High(FInputScans), SizeOf(TInputScan), @CompareInputScansStartAngleQuality);
+    Writeln('Best start angle: ', FInputScans[0].ImageShortName);
+  end;
+end;
+
+function TScan2Track.DecodeSample(AScan: TInputScan; radius, angleSin, angleCos: Double): TPointD;
 const
   CSigma = 1;
 var
-  iSmp, posMin, posMax, decoderMax, radiusOffset: Integer;
+  iSmp, posMin, posMax, decoderMax: Integer;
   r, cx, cy, px, py, cxa, sampleMean, sampleStdDev: Double;
   smpBuf: array[SmallInt] of Double;
 
   function GetSampleIdx(iSmp: Integer): Double;
   begin
     r := radius + (iSmp + 0.5) * cxa;
-    Result := AScan.GetPolarPointD(AScan.PolarImage, r - radiusOffset, iLut);
+    Result := AScan.GetPointD(AScan.LeveledImage, angleSin * r + cy, angleCos * r + cx);
     smpBuf[iSmp] := Result;
   end;
 
@@ -127,8 +178,7 @@ begin
   Result.X := 0.0;
   Result.Y := 0.0;
 
-  decoderMax := 1 shl (precision - 1);
-  radiusOffset := Floor(C45RpmLabelOuterSize * 0.5 * AScan.DPI);
+  decoderMax := 1 shl FDecoderPrecision;
 
   cxa := C45RpmRecordingGrooveWidth * 0.5 * AScan.DPI / decoderMax;
 
@@ -186,14 +236,13 @@ var
   end;
 
 var
-  rOuter, sn, cs, ox, oy, fbRatio, instantPct, maxPct, angle, startAngle, startAngleBest: Double;
-  iScan, iSample, iLut, cnt, dpi, validSmpCnt: Integer;
+  rOuter, sn, cs, ox, oy, fbRatio, instantPct, maxPct, angle: Double;
+  iScan, iSample, iLut, cnt, validSmpCnt: Integer;
   hasOutFile, validSample: Boolean;
   smp, validSmpAcc, filteredSmp: TPointD;
   fltSampleL, fltSampleR: TFilterIIRHPBessel;
   sinCosLut: TSinCosDynArray;
   fSmps: TPointDDynArray;
-  radiuses: TDoubleDynArray;
   scan: TInputScan;
 begin
   if not FSilent then
@@ -214,42 +263,18 @@ begin
     fltSampleR.Order := 4;
 
     SetLength(fSmps, Length(FInputScans));
-    SetLength(radiuses, Length(FInputScans));
 
-    startAngle := NaN;
-    startAngleBest := -Infinity;
-    dpi := -1;
-    for iScan := 0 to High(FInputScans) do
-    begin
-      scan := FInputScans[iScan];
+    BuildSinCosLUT(FPointsPerRevolution, sinCosLut, FStartAngle, -2.0 * Pi);
 
-      if dpi < 0 then
-        dpi := scan.DPI
-      else
-        Assert(scan.DPI = dpi);
-
-      radiuses[iScan] := scan.SetDownRadius;
-
-      if scan.GrooveStartAngleQuality >= startAngleBest then
-      begin
-        startAngleBest := scan.GrooveStartAngleQuality;
-        startAngle := scan.GrooveStartAngle;
-      end;
-    end;
-
-    Assert(not IsNan(startAngle));
-
-    BuildSinCosLUT(FPointsPerRevolution, sinCosLut, startAngle, -2.0 * Pi);
-
-    fbRatio := CutoffToFeedbackRatio(C45RpmLoopbackLowCutoffFreq, FSampleRate) * C45RpmRecordingGrooveWidth * 0.5 * dpi;
+    fbRatio := CutoffToFeedbackRatio(C45RpmLoopbackLowCutoffFreq, FSampleRate) * C45RpmRecordingGrooveWidth * 0.5 * FDPI;
 
     maxPct := 0.0;
-    rOuter := C45RpmOuterSize * 0.5 * dpi;
+    rOuter := C45RpmOuterSize * 0.5 * FDPI;
     iSample := 0;
     iLut := 0;
 
     repeat
-      angle := NormalizeAngle(iLut * FRadiansPerRevolutionPoint + startAngle);
+      angle := NormalizeAngle(iLut * FRadiansPerRevolutionPoint + FStartAngle);
       cs := sinCosLut[iLut].Cos;
       sn := sinCosLut[iLut].Sin;
 
@@ -269,7 +294,7 @@ begin
         end
         else
         begin
-          fSmps[iScan] := DecodeSample(scan, radiuses[iScan], sn, cs, iLut, FDecoderPrecision);
+          fSmps[iScan] := DecodeSample(scan, FRadiuses[iScan], sn, cs);
           validSmpAcc.X += fSmps[iScan].X;
           validSmpAcc.Y += fSmps[iScan].Y;
           Inc(validSmpCnt);
@@ -282,9 +307,9 @@ begin
       for iScan := 0 to High(FInputScans) do
       begin
         if not IsNan(fSmps[iScan].X) then
-          radiuses[iScan] += GetMono(fSmps[iScan]) * fbRatio
+          FRadiuses[iScan] += GetMono(fSmps[iScan]) * fbRatio
         else
-          radiuses[iScan] += GetMono(smp) * fbRatio;
+          FRadiuses[iScan] += GetMono(smp) * fbRatio;
       end;
 
       FUsedSampleValues[Make16BitSample(smp.X)] := True;
@@ -298,20 +323,20 @@ begin
 
       validSample := True;
       for iScan := 0 to High(FInputScans) do
-        validSample := validSample and InRange(radiuses[iScan], InputScans[iScan].ConcentricGrooveRadius, rOuter);
+        validSample := validSample and InRange(FRadiuses[iScan], InputScans[iScan].ConcentricGrooveRadius, rOuter);
 
       if Assigned(FOnSample) then
       begin
         for iScan := 0 to High(FInputScans) do
         begin
-          ox := cs * radiuses[iScan];
-          oy := sn * radiuses[iScan];
+          ox := cs * FRadiuses[iScan];
+          oy := sn * FRadiuses[iScan];
 
-          instantPct := (radiuses[iScan] - InputScans[iScan].ConcentricGrooveRadius) / (InputScans[iScan].SetDownRadius - InputScans[iScan].ConcentricGrooveRadius);
+          instantPct := (FRadiuses[iScan] - InputScans[iScan].ConcentricGrooveRadius) / (InputScans[iScan].SetDownRadius - InputScans[iScan].ConcentricGrooveRadius);
           instantPct := EnsureRange(1.0 - instantPct, 0.0, 1.0) * 100.0;
           maxPct := Max(maxPct, instantPct);
 
-          validSample := FOnSample(Self, iScan, filteredSmp, ox + InputScans[iScan].Center.X, oy + InputScans[iScan].Center.Y, radiuses[iScan], maxPct, not validSample) and validSample;
+          validSample := FOnSample(Self, iScan, filteredSmp, ox + InputScans[iScan].Center.X, oy + InputScans[iScan].Center.Y, FRadiuses[iScan], maxPct, not validSample) and validSample;
 			  end;
 			end;
 
@@ -343,7 +368,7 @@ begin
   end;
 end;
 
-procedure TScan2Track.LoadScans(AForceBrickwall: Boolean);
+procedure TScan2Track.LoadScans;
 
   procedure DoOne(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
@@ -351,12 +376,7 @@ procedure TScan2Track.LoadScans(AForceBrickwall: Boolean);
   begin
     Scan := FInputScans[AIndex];
 
-    Scan.FindTrack(False, FSampleRate);
-
-    if FScansOwned and (Length(InputScans) > 1) then
-      Scan.FindCroppedArea;
-
-    Scan.RenderPolarImage;
+    Scan.FindTrack(False, FScansOwned, FSampleRate);
   end;
 
 var
@@ -369,6 +389,8 @@ begin
       FInputScans[iScan].LoadImage;
 
   ProcThreadPool.DoParallelLocalProc(@DoOne, 0, High(FInputScans));
+
+  FindTrackStart;
 end;
 
 end.

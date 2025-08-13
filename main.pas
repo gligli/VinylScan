@@ -120,7 +120,7 @@ begin
       s2t.OnSample := @OnSample;
       s2t.OutputWAVFileName := edOutputWAV.Text;
 
-      s2t.LoadScans(True);
+      s2t.LoadScans;
 
       DrawImage(s2t.InputScans[0].LeveledImage, s2t.InputScans[0].Width, s2t.InputScans[0].Height);
       DrawExtents(s2t.InputScans[0]);
@@ -380,6 +380,15 @@ var
   C: TCanvas;
   cx, cy, sx, sy, rfx, rfy, rcx, rcy, rax, ray: Integer;
   cer: TRect;
+
+  procedure CropLine(AAngle: Double);
+  var
+    sn, cs: Double;
+  begin
+    SinCos(AAngle, sn, cs);
+    C.Line(Round(cs * rfx + cx), Round(sn * rfx + cy), Round(cs * rcx + cx), Round(sn * rcx + cy));
+  end;
+
 begin
   C := Image.Picture.Bitmap.Canvas;
 
@@ -415,6 +424,18 @@ begin
   C.EllipseC(cx, cy, rfx, rfy);
   C.EllipseC(cx, cy, rcx, rcy);
   C.EllipseC(cx, cy, rax, ray);
+
+  if (NormalizedAngleDiff(AScan.CropData.StartAngle, AScan.CropData.EndAngle) <> 0) or
+      (NormalizedAngleDiff(AScan.CropData.StartAngleMirror, AScan.CropData.EndAngleMirror) <> 0) then
+  begin
+    CropLine(AScan.CropData.StartAngle);
+    CropLine(AScan.CropData.EndAngle);
+    CropLine(AScan.CropData.StartAngle + NormalizedAngleDiff(AScan.CropData.StartAngle, AScan.CropData.EndAngle) * 0.5);
+
+    CropLine(AScan.CropData.StartAngleMirror);
+    CropLine(AScan.CropData.EndAngleMirror);
+    CropLine(AScan.CropData.StartAngleMirror + NormalizedAngleDiff(AScan.CropData.StartAngleMirror, AScan.CropData.EndAngleMirror) * 0.5);
+  end;
 
   HorzScrollBar.Position := cx - Width div 2;
   VertScrollBar.Position := cy - Height div 2;
