@@ -679,7 +679,7 @@ begin
   end
   else
   begin
-    WriteLn(ImageFileName, ', CenterX:', FCenter.X:9:3, ', CenterY:', FCenter.Y:9:3, ', ConcentricGroove:', FConcentricGrooveRadius:10:3, ', Quality:', FCenterQuality:12:3);
+    WriteLn(ImageShortName, ', CenterX:', FCenter.X:9:3, ', CenterY:', FCenter.Y:9:3, ', ConcentricGroove:', FConcentricGrooveRadius:10:3, ', Quality:', FCenterQuality:12:3);
   end;
 end;
 
@@ -1070,7 +1070,7 @@ begin
   recCnt := (FWidth - 1) div Recurence;
 
   phase := FindPhaseAlongX(recurence, recCnt, loss);
-  WriteLn(ImageShortName, phase:8, loss:12:3);
+  WriteLn(ImageShortName, ', Phase: ', phase:8, ', Loss: ', loss:12:3);
 
   for iRec := 0 to recCnt - 1 do
   begin

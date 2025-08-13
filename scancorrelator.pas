@@ -181,7 +181,10 @@ begin
   WriteLn('LoadScans');
 
   for iScan := 0 to High(FInputScans) do
+  begin
     FInputScans[iScan].LoadImage;
+    WriteLn(FInputScans[iScan].ImageFileName);
+  end;
 
   ProcThreadPool.DoParallelLocalProc(@DoOne, 0, high(FInputScans));
 
