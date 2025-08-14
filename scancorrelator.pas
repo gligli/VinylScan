@@ -236,7 +236,7 @@ var
         px := cx + cs * iRadius;
         py := cy + sn * iRadius;
         if Scan.InRangePointD(py, px) then
-          arr[Result] += Scan.GetPointD(Scan.Image, py, px);
+          arr[Result] += Scan.GetPointD_Linear(Scan.Image, py, px);
 
         Inc(pxAggr);
         if pxAggr >= aggregatedPixelCount then
@@ -340,7 +340,7 @@ begin
 
     if scan.InRangePointD(py, px) then
     begin
-      Result[iRadius] := scan.GetPointD(scan.LeveledImage, py, px);
+      Result[iRadius] := scan.GetPointD_Linear(scan.LeveledImage, py, px);
     end
     else
     begin
@@ -390,7 +390,7 @@ begin
 
     if scan.InRangePointD(py, px) then
     begin
-      Result += Sqr((coords^.PreparedData[iRadius] - scan.GetPointD(scan.LeveledImage, py, px)) * (1.0 / High(Word)));
+      Result += Sqr((coords^.PreparedData[iRadius] - scan.GetPointD_Linear(scan.LeveledImage, py, px)) * (1.0 / High(Word)));
     end
     else
     begin
@@ -686,7 +686,7 @@ begin
       py := sn * r + cy;
 
       if baseScan.InRangePointD(py, px) then
-        coords.PreparedData[cnt] := baseScan.GetPointD(baseScan.LeveledImage, py, px)
+        coords.PreparedData[cnt] := baseScan.GetPointD_Linear(baseScan.LeveledImage, py, px)
       else
         coords.PreparedData[cnt] := 1e6;
 
@@ -740,7 +740,7 @@ begin
 
       if scan.InRangePointD(py, px) then
       begin
-        Result += Sqr((coords^.PreparedData[cnt] - scan.GetPointD(scan.LeveledImage, py, px)) * coords^.Weights[iAngle]);
+        Result += Sqr((coords^.PreparedData[cnt] - scan.GetPointD_Linear(scan.LeveledImage, py, px)) * coords^.Weights[iAngle]);
       end
       else
       begin
@@ -1033,7 +1033,7 @@ var
                not InNormalizedAngle(ct, scan.CropData.StartAngleMirror, scan.CropData.EndAngleMirror) or
                (r < rLbl)) then
           begin
-            sample := scan.GetPointD(scan.Image, py, px);
+            sample := scan.GetPointD_Hermite(scan.Image, py, px);
 
             if cnt < FRebuildBlendCount then
             begin

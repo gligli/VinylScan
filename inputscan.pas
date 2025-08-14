@@ -84,7 +84,8 @@ type
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
 
     function InRangePointD(Y, X: Double): Boolean; inline;
-    function GetPointD(const Image: TWordDynArray; Y, X: Double): Double; inline;
+    function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double; inline;
+    function GetPointD_Hermite(const Image: TWordDynArray; Y, X: Double): Double; inline;
     function GetMeanSD(AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;
 
     procedure AddCorrectRef(AngleIdx, ScanIdx: Integer);
@@ -303,7 +304,7 @@ var
         py := sn * rsx + CenterY;
 
         if InRangePointD(py, px) then
-          Result -= CompressRange((GetPointD(FLeveledImage, py, px) - meanSD^.X) * meanSD^.Y) * sy
+          Result -= CompressRange((GetPointD_Linear(FLeveledImage, py, px) - meanSD^.X) * meanSD^.Y) * sy
         else
           Result += 1e6;
       end;
@@ -409,7 +410,7 @@ begin
 
     if InRangePointD(y, x) then
     begin
-      v := v * 0.99 + GetPointD(FImage, y, x) * 0.01;
+      v := v * 0.99 + GetPointD_Linear(FImage, y, x) * 0.01;
 
       if v > best then
       begin
@@ -842,7 +843,7 @@ begin
     if InRangePointD(py, px) then
     begin
       cropped := InNormalizedAngle(bt, a0a, a0b) or InNormalizedAngle(bt, a1a, a1b);
-      acc[cropped] += GetPointD(FLeveledImage, py, px);
+      acc[cropped] += GetPointD_Linear(FLeveledImage, py, px);
       Inc(cnt[cropped]);
     end;
   end;
@@ -898,7 +899,7 @@ begin
     SinCos(angle, sn, cs);
 
     for iRadius := beginRadius to endRadius do
-      angleData[iRadius - beginRadius] := GetPointD(FImage, sn * iRadius + FCenter.Y, cs * iRadius + FCenter.X);
+      angleData[iRadius - beginRadius] := GetPointD_Linear(FImage, sn * iRadius + FCenter.Y, cs * iRadius + FCenter.X);
 
     angleCropped[iAngle] := IsZero(StdDev(angleData));
   end;
@@ -1004,7 +1005,7 @@ procedure TInputScan.FixCISScanners;
     py := sn * radius + FCenter.Y;
 
     if InRangePointD(py, px) then
-      Result := GetPointD(FImage, py, px)
+      Result := GetPointD_Hermite(FImage, py, px)
   end;
 
   procedure Resample(X1, X2, FixLen: Integer);
@@ -1086,7 +1087,17 @@ begin
   Result := InRange(Y, -Low(TSerpCoeffs9), Height + Low(TSerpCoeffs9) - 2) and InRange(X, -Low(TSerpCoeffs9), Height + Low(TSerpCoeffs9) - 2);
 end;
 
-function TInputScan.GetPointD(const Image: TWordDynArray; Y, X: Double): Double;
+function TInputScan.GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
+var
+  ix, iy: Integer;
+begin
+  ix := trunc(X);
+  iy := trunc(Y);
+
+  Result := lerpXY(@Image[iy * FWidth + ix], FWidth, X - ix, Y - iy);
+end;
+
+function TInputScan.GetPointD_Hermite(const Image: TWordDynArray; Y, X: Double): Double;
 var
   ix, iy: Integer;
 begin
@@ -1117,7 +1128,7 @@ begin
       py := sinCosLUT[iLut].Sin * iRadius + FCenter.Y;
       if InRangePointD(py, px) then
       begin
-        Result.X += GetPointD(FLeveledImage, py, px);
+        Result.X += GetPointD_Linear(FLeveledImage, py, px);
         Inc(cnt);
       end;
     end;
@@ -1132,7 +1143,7 @@ begin
       py := sinCosLUT[iLut].Sin * iRadius + FCenter.Y;
       if InRangePointD(py, px) then
       begin
-        Result.Y += Sqr(GetPointD(FLeveledImage, py, px) - Result.X);
+        Result.Y += Sqr(GetPointD_Linear(FLeveledImage, py, px) - Result.X);
         Inc(cnt);
       end;
     end;
