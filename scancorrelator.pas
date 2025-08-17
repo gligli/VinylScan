@@ -704,8 +704,8 @@ begin
   scan := FInputScans[iScan];
 
   skc := arg[0];
-  skm := arg[1];
-  sks := arg[2];
+  skm := arg[1] * 1e-3;
+  sks := arg[2] * 1e-6;
 
   cx := scan.Center.X;
   cy := scan.Center.Y;
@@ -798,7 +798,7 @@ var
     DivMod(AIndex, CCorrectAngleCount, coords.ScanIdx, coords.AngleIdx);
     Inc(coords.ScanIdx);
 
-    X := [0.0, 1.0, 0.0];
+    X := [0.0, 1.0 * 1e3, 0.0 * 1e6];
 
     if not PrepareCorrect(coords) then
     begin
@@ -816,7 +816,7 @@ var
 
       for iMul := -CMulCorrectHalfCount to CMulCorrectHalfCount do
       begin
-        skm := iMul * CMulCorrectExtents / CMulCorrectHalfCount + 1.0;
+        skm := (iMul * CMulCorrectExtents / CMulCorrectHalfCount + 1.0) * 1e3;
 
         f := GridSearchCorrectMul([skm], @coords);
 
@@ -843,7 +843,7 @@ var
       X := [coords.ConstSkew, coords.MulSkew, coords.SqrSkew];
       Extents := [0.01 * scan.DPI, 0.01, 1e-5];
       //loss := GridReduceMinimize(@NelderMeadCorrect, X, [7, 7, 7], Extents, 0.001, '', @coords);
-      loss := NelderMeadMinimize(@NelderMeadCorrect, X, Extents, 1e-12, @coords);
+      loss := NelderMeadMinimize(@NelderMeadCorrect, X, Extents, 1e-9, @coords);
 
       // free up memory
       SetLength(coords.PreparedData, 0);
@@ -855,8 +855,8 @@ var
     end;
 
     FPerAngleSkew[AIndex, 0].ConstSkew := X[0];
-    FPerAngleSkew[AIndex, 0].MulSkew := X[1];
-    FPerAngleSkew[AIndex, 0].SqrSkew := X[2];
+    FPerAngleSkew[AIndex, 0].MulSkew := X[1] * 1e-3;
+    FPerAngleSkew[AIndex, 0].SqrSkew := X[2] * 1e-6;
 
     Write(InterlockedIncrement(doneCount):4, ' / ', Length(FPerAngleSkew), #13);
   end;
