@@ -98,7 +98,7 @@ const
 
   CLowCutoffFreq = 20.0;
 
-{$if 0}
+{$if 1}
   cRedMul = 1;
   cGreenMul = 1;
   cBlueMul = 1;

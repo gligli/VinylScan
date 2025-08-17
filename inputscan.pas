@@ -51,7 +51,7 @@ type
 
     FWidth, FHeight: Integer;
     FImage: TWordDynArray;
-    FLeveledImage: TWordDynArray;
+    FProcessedImage: TWordDynArray;
 
     FCorrectRefs: array of TCorrectRef;
     FLock: TSpinlock;
@@ -62,6 +62,7 @@ type
 
     procedure GradientConcentricGroove(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
     function NelderMeadCrop(const x: TVector; obj: Pointer): TScalar;
+    function MakeRadiusOffsets(ARadius: Integer): TIntegerDynArray;
 
     procedure FindCenterExtents;
     procedure FindConcentricGroove_GridSearch;
@@ -79,13 +80,14 @@ type
     procedure LoadImage;
     procedure FixCISScanners;
     procedure BrickwallLimit;
+    procedure Blur;
     procedure FindTrack(AUseGradient, AFindCroppedArea: Boolean; AForcedSampleRate: Integer = -1);
     procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle, ASkewX, ASkewY: Double);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
 
     function InRangePointD(Y, X: Double): Boolean; inline;
-    function GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double; inline;
-    function GetPointD_Hermite(const Image: TWordDynArray; Y, X: Double): Double; inline;
+    function GetPointD_Work(const Image: TWordDynArray; Y, X: Double): Double; inline;
+    function GetPointD_Final(const Image: TWordDynArray; Y, X: Double): Double; inline;
     function GetMeanSD(AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;
 
     procedure AddCorrectRef(AngleIdx, ScanIdx: Integer);
@@ -116,7 +118,7 @@ type
     property Objective: Double read FObjective write FObjective;
 
     property Image: TWordDynArray read FImage;
-    property LeveledImage: TWordDynArray read FLeveledImage;
+    property ProcessedImage: TWordDynArray read FProcessedImage;
   end;
 
   { TScanImage }
@@ -215,10 +217,10 @@ var
             px := pxArr[vs, iLut];
             py := pyArr[vs, iLut];
 
-            ff += FLeveledImage[(cy - py) * Width + cx + px];
-            ff += FLeveledImage[(cy - py) * Width + cx - px];
-            ff += FLeveledImage[(cy + py) * Width + cx + px];
-            ff += FLeveledImage[(cy + py) * Width + cx - px];
+            ff += FProcessedImage[(cy - py) * Width + cx + px];
+            ff += FProcessedImage[(cy - py) * Width + cx - px];
+            ff += FProcessedImage[(cy + py) * Width + cx + px];
+            ff += FProcessedImage[(cy + py) * Width + cx - px];
           end;
 
           f += ff * stencilY[vs];
@@ -304,7 +306,7 @@ var
         py := sn * rsx + CenterY;
 
         if InRangePointD(py, px) then
-          Result -= CompressRange((GetPointD_Linear(FLeveledImage, py, px) - meanSD^.X) * meanSD^.Y) * sy
+          Result -= CompressRange((GetPointD_Work(FProcessedImage, py, px) - meanSD^.X) * meanSD^.Y) * sy
         else
           Result += 1e6;
       end;
@@ -410,7 +412,7 @@ begin
 
     if InRangePointD(y, x) then
     begin
-      v := v * 0.99 + GetPointD_Linear(FImage, y, x) * 0.01;
+      v := v * 0.99 + GetPointD_Final(FImage, y, x) * 0.01;
 
       if v > best then
       begin
@@ -454,7 +456,7 @@ begin
   FWidth := AWidth;
   FHeight := AHeight;
   SetLength(FImage, FHeight * FWidth);
-  FLeveledImage := FImage;
+  FProcessedImage := FImage;
   FCenter.X := AWidth * 0.5;
   FCenter.Y := AHeight * 0.5;
 
@@ -506,7 +508,7 @@ begin
       img.Free;
     end;
 
-    FLeveledImage := FImage;
+    FProcessedImage := FImage;
   finally
     png.Free;
     fs.Free;
@@ -556,7 +558,7 @@ begin
       img.Free;
     end;
 
-    FLeveledImage := FImage;
+    FProcessedImage := FImage;
   finally
     tiff.Free;
     fs.Free;
@@ -569,6 +571,7 @@ const
 var
   radius: Integer;
   offsets: TIntegerDynArray;
+  srcImage: TWordDynArray;
 
   procedure GetL2Extents(ayx: Integer; out amean, astddev: Integer);
   var
@@ -580,7 +583,7 @@ var
     mn := 0;
     for i := 0 to High(offsets) do
     begin
-      px := FImage[ayx + offsets[i]];
+      px := srcImage[ayx + offsets[i]];
       mn += px;
     end;
     mn := mn div Length(offsets);
@@ -588,7 +591,7 @@ var
     sdAcc := 0;
     for i := 0 to High(offsets) do
     begin
-      px := FImage[ayx + offsets[i]];
+      px := srcImage[ayx + offsets[i]];
       px -= mn;
       sdAcc += px * px;
     end;
@@ -612,43 +615,90 @@ var
     begin
       yx := y * Width + x;
 
-      px := FImage[yx];
+      px := srcImage[yx];
 
       GetL2Extents(yx, mn, sd);
       px := (px - mn) * (High(Word) + 1) div (sd + 1) + mn;
       px := EnsureRange(px, 0, High(word));
 
-      FLeveledImage[yx] := px;
+      FProcessedImage[yx] := px;
     end;
   end;
 
-var
-  x, y, r, pos: Integer;
 begin
   if not FSilent then WriteLn('BrickwallLimit');
 
   radius := Ceil(C45RpmRecordingGrooveWidth * FDPI);
+  offsets := MakeRadiusOffsets(radius);
 
-  SetLength(offsets, Sqr(radius * 2 + 1));
-  pos := 0;
-  for y := -radius to radius do
-    for x := -radius to radius do
-    begin
-      r := round(Sqrt(Sqr(y) + Sqr(x)));
-
-      if r <= radius then
-      begin
-        offsets[pos] := y * Width + x;
-        Inc(pos);
-      end;
-    end;
-  SetLength(offsets, pos);
-
-  FLeveledImage := nil;
-  SetLength(FLeveledImage, Height * Width);
+  srcImage := FProcessedImage;
+  FProcessedImage := nil;
+  SetLength(FProcessedImage, Height * Width);
 
   ProcThreadPool.DoParallelLocalProc(@DoY, radius, FHeight - 1 - radius);
 end;
+
+procedure TInputScan.Blur;
+var
+  grooveRadius, labelRadius, lblPos, cx, cy: Integer;
+  grooveOffsets, labelOffsets: TIntegerDynArray;
+  srcImage: TWordDynArray;
+
+  function GetMean(const offsets: TIntegerDynArray; ayx: Integer): Integer;
+  var
+    i: Integer;
+    px: Integer;
+  begin
+    Result := 0;
+    for i := 0 to High(offsets) do
+    begin
+      px := srcImage[ayx + offsets[i]];
+      Result += px;
+    end;
+    Result := Result div Length(offsets);
+  end;
+
+  procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  var
+    x, y, yx, sqy: Integer;
+  begin
+    if not InRange(AIndex, grooveRadius, FHeight - 1 - grooveRadius) then
+      Exit;
+
+    y := AIndex;
+    sqy := Sqr(y - cy);
+
+    for x := grooveRadius to FWidth - 1 - grooveRadius do
+    begin
+      yx := y * Width + x;
+
+      if sqy + Sqr(x - cx) <= lblPos then
+        FProcessedImage[yx] := GetMean(labelOffsets, yx)
+      else
+        FProcessedImage[yx] := GetMean(grooveOffsets, yx)
+    end;
+  end;
+
+begin
+  if not FSilent then WriteLn('Blur');
+
+  cx := Round(FCenter.X);
+  cy := Round(FCenter.Y);
+  lblPos := Round(Sqr(C45RpmLabelOuterSize * 0.5 * FDPI));
+
+  labelRadius := Ceil(0.02 * FDPI);
+  grooveRadius := Ceil(C45RpmRecordingGrooveWidth * 0.25 * FDPI);
+
+  labelOffsets := MakeRadiusOffsets(labelRadius);
+  grooveOffsets := MakeRadiusOffsets(grooveRadius);
+
+  srcImage := FProcessedImage;
+  FProcessedImage := nil;
+  SetLength(FProcessedImage, Height * Width);
+
+  ProcThreadPool.DoParallelLocalProc(@DoY, grooveRadius, FHeight - 1 - grooveRadius);
+end;
+
 
 procedure TInputScan.FindTrack(AUseGradient, AFindCroppedArea: Boolean; AForcedSampleRate: Integer);
 begin
@@ -843,7 +893,7 @@ begin
     if InRangePointD(py, px) then
     begin
       cropped := InNormalizedAngle(bt, a0a, a0b) or InNormalizedAngle(bt, a1a, a1b);
-      acc[cropped] += GetPointD_Linear(FLeveledImage, py, px);
+      acc[cropped] += GetPointD_Work(FProcessedImage, py, px);
       Inc(cnt[cropped]);
     end;
   end;
@@ -851,6 +901,26 @@ begin
   Result := DivDef(acc[True], cnt[True], 0.0) - DivDef(acc[False], cnt[False], 0.0);
 
   //WriteLn(ImageShortName, ', begin:', RadToDeg(a0a):9:3, ', end:', RadToDeg(a0b):9:3, result:18:6);
+end;
+
+function TInputScan.MakeRadiusOffsets(ARadius: Integer): TIntegerDynArray;
+var
+  x, y, r, pos: Integer;
+begin
+  SetLength(Result, Sqr(ARadius * 2 + 1));
+  pos := 0;
+  for y := -ARadius to ARadius do
+    for x := -ARadius to ARadius do
+    begin
+      r := round(Sqrt(Sqr(y) + Sqr(x)));
+
+      if r <= ARadius then
+      begin
+        Result[pos] := y * Width + x;
+        Inc(pos);
+      end;
+    end;
+  SetLength(Result, pos);
 end;
 
 procedure TInputScan.Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
@@ -899,7 +969,7 @@ begin
     SinCos(angle, sn, cs);
 
     for iRadius := beginRadius to endRadius do
-      angleData[iRadius - beginRadius] := GetPointD_Linear(FImage, sn * iRadius + FCenter.Y, cs * iRadius + FCenter.X);
+      angleData[iRadius - beginRadius] := GetPointD_Work(FImage, sn * iRadius + FCenter.Y, cs * iRadius + FCenter.X);
 
     angleCropped[iAngle] := IsZero(StdDev(angleData));
   end;
@@ -1005,7 +1075,7 @@ procedure TInputScan.FixCISScanners;
     py := sn * radius + FCenter.Y;
 
     if InRangePointD(py, px) then
-      Result := GetPointD_Hermite(FImage, py, px)
+      Result := GetPointD_Final(FImage, py, px)
   end;
 
   procedure Resample(X1, X2, FixLen: Integer);
@@ -1087,17 +1157,17 @@ begin
   Result := InRange(Y, -Low(TSerpCoeffs9), Height + Low(TSerpCoeffs9) - 2) and InRange(X, -Low(TSerpCoeffs9), Height + Low(TSerpCoeffs9) - 2);
 end;
 
-function TInputScan.GetPointD_Linear(const Image: TWordDynArray; Y, X: Double): Double;
+function TInputScan.GetPointD_Work(const Image: TWordDynArray; Y, X: Double): Double;
 var
   ix, iy: Integer;
 begin
   ix := trunc(X);
   iy := trunc(Y);
 
-  Result := lerpXY(@Image[iy * FWidth + ix], FWidth, X - ix, Y - iy);
+  Result := herpXY(@Image[iy * FWidth + ix], FWidth, X - ix, Y - iy);
 end;
 
-function TInputScan.GetPointD_Hermite(const Image: TWordDynArray; Y, X: Double): Double;
+function TInputScan.GetPointD_Final(const Image: TWordDynArray; Y, X: Double): Double;
 var
   ix, iy: Integer;
 begin
@@ -1128,7 +1198,7 @@ begin
       py := sinCosLUT[iLut].Sin * iRadius + FCenter.Y;
       if InRangePointD(py, px) then
       begin
-        Result.X += GetPointD_Linear(FLeveledImage, py, px);
+        Result.X += GetPointD_Work(FProcessedImage, py, px);
         Inc(cnt);
       end;
     end;
@@ -1143,7 +1213,7 @@ begin
       py := sinCosLUT[iLut].Sin * iRadius + FCenter.Y;
       if InRangePointD(py, px) then
       begin
-        Result.Y += Sqr(GetPointD_Linear(FLeveledImage, py, px) - Result.X);
+        Result.Y += Sqr(GetPointD_Work(FProcessedImage, py, px) - Result.X);
         Inc(cnt);
       end;
     end;

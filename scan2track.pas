@@ -164,7 +164,7 @@ var
   function GetSampleIdx(iSmp: Integer): Double;
   begin
     r := radius + (iSmp + 0.5) * cxa;
-    Result := AScan.GetPointD_Hermite(AScan.LeveledImage, angleSin * r + cy, angleCos * r + cx);
+    Result := AScan.GetPointD_Final(AScan.Image, angleSin * r + cy, angleCos * r + cx);
     smpBuf[iSmp] := Result;
   end;
 

@@ -122,7 +122,7 @@ begin
 
       s2t.LoadScans;
 
-      DrawImage(s2t.InputScans[0].LeveledImage, s2t.InputScans[0].Width, s2t.InputScans[0].Height);
+      DrawImage(s2t.InputScans[0].ProcessedImage, s2t.InputScans[0].Width, s2t.InputScans[0].Height);
       DrawExtents(s2t.InputScans[0]);
 
       s2t.EvalTrack;
@@ -183,7 +183,7 @@ begin
 
     if Length(sc.InputScans) > 0 then
     begin
-      DrawImage(sc.InputScans[0].LeveledImage, sc.InputScans[0].Width, sc.InputScans[0].Height);
+      DrawImage(sc.InputScans[0].ProcessedImage, sc.InputScans[0].Width, sc.InputScans[0].Height);
       DrawExtents(sc.InputScans[0]);
     end;
 
