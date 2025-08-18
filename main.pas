@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, windows, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls, Spin, ComCtrls, Types, scan2track,
-  scancorrelator, utils, math, inputscan, FilterIIRLPBessel, FilterIIRHPBessel;
+  scancorrelator, utils, math, inputscan, profiles, FilterIIRLPBessel, FilterIIRHPBessel;
 
 type
 
@@ -19,6 +19,7 @@ type
     btOutWAV: TButton;
     btScan2Track: TButton;
     btScansCorrelator: TButton;
+    cbProfile: TComboBox;
     cbQSRatio: TComboBox;
     chkMulti: TCheckBox;
     chkFixCIS: TCheckBox;
@@ -31,6 +32,7 @@ type
     edInputPNG: TEdit;
     edOutputPNG: TEdit;
     edOutputWAV: TEdit;
+    ffProfile: TLabel;
     Image: TImage;
     llQSRatio: TLabel;
     llDPI: TLabel;
@@ -52,10 +54,13 @@ type
     procedure btInPNGsClick(Sender: TObject);
     procedure btScan2TrackClick(Sender: TObject);
     procedure btScansCorrelatorClick(Sender: TObject);
+    procedure cbProfileChange(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
   private
+    FProfiles: TProfiles;
+
     FReducRatio: Integer;
     FReducFactor: Double;
     FLastTickCount: QWord;
@@ -115,7 +120,7 @@ begin
       sl.Add(edInputPNG.Text);
     end;
 
-    s2t := TScan2Track.Create(sl, StrToIntDef(cbDPI.Text, 2400), False, StrToIntDef(cbSR.Text, 48000), sePrec.Value);
+    s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, sl, StrToIntDef(cbDPI.Text, 2400), False, StrToIntDef(cbSR.Text, 48000), sePrec.Value);
     try
       s2t.OnSample := @OnSample;
       s2t.OutputWAVFileName := edOutputWAV.Text;
@@ -168,7 +173,7 @@ begin
     Exit;
 
   pnSettings.Enabled := False;
-  sc := TScanCorrelator.Create(mmInputPNGs.Lines, StrToIntDef(cbDPI.Text, 2400));
+  sc := TScanCorrelator.Create(FProfiles.CurrentProfileRef, mmInputPNGs.Lines, StrToIntDef(cbDPI.Text, 2400));
   try
     sc.OutputPNGFileName := edOutputPNG.Text;
     sc.FixCISScanners := chkFixCIS.Checked;
@@ -197,6 +202,12 @@ begin
     sc.Free;
     pnSettings.Enabled := True;
   end;
+end;
+
+procedure TMainForm.cbProfileChange(Sender: TObject);
+begin
+  if InRange(cbProfile.ItemIndex, 0, High(FProfiles.Profiles)) then
+    FProfiles.CurrentProfileRef := FProfiles.Profiles[cbProfile.ItemIndex];
 end;
 
 procedure TMainForm.UnitTests;
@@ -249,8 +260,8 @@ begin
   fn := GetTempFileName;
   sl := TStringList.Create;
   try
-    sc1 := TScanCorrelator.Create(sl, 1);
-    sc100 := TScanCorrelator.Create(sl, 100);
+    sc1 := TScanCorrelator.Create(FProfiles.CurrentProfileRef, sl, 1);
+    sc100 := TScanCorrelator.Create(FProfiles.CurrentProfileRef, sl, 100);
     try
       sc1.OutputPNGFileName := fn;
       sc100.OutputPNGFileName := fn;
@@ -271,7 +282,7 @@ begin
     sl.Add('data\think_mock2.png');
     sl.Add('data\think_mock3.png');
 
-    scm := TScanCorrelator.Create(sl);
+    scm := TScanCorrelator.Create(FProfiles.CurrentProfileRef, sl);
     try
       scm.OutputPNGFileName := fn;
       scm.CorrectAngles := True;
@@ -293,6 +304,7 @@ end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
 var
+  iProfile: Integer;
   sl: TStringList;
   sc: TScanCorrelator;
   s2t: TScan2Track;
@@ -301,9 +313,18 @@ begin
   Image.ControlStyle := Image.ControlStyle + [csOpaque];
   FPoints := TPointValueList.Create;
 
+  FProfiles := TProfiles.Create(ExtractFilePath(ParamStr(0)) + 'profiles');
+
+  for iProfile := 0 to High(FProfiles.Profiles) do
+  begin
+    cbProfile.AddItem(FProfiles.Profiles[iProfile].Name, nil);
+    if FProfiles.Profiles[iProfile] = FProfiles.CurrentProfileRef then
+      cbProfile.ItemIndex := iProfile;
+  end;
+
   sl := TStringList.Create;
-  sc := TScanCorrelator.Create(sl);
-  s2t := TScan2Track.Create(sl);
+  sc := TScanCorrelator.Create(FProfiles.CurrentProfileRef, sl);
+  s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, sl);
   try
     chkFixCIS.Checked := sc.FixCISScanners;
     chkBrickLim.Checked := sc.BrickwallLimitScans;
@@ -325,6 +346,7 @@ end;
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
   FPoints.Free;
+  FProfiles.Free;
 end;
 
 procedure TMainForm.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
@@ -342,16 +364,17 @@ end;
 
 function TMainForm.OnSample(Sender: TScan2Track; ScanIdx: Integer; Sample: TPointD; X, Y: Double; var Radius: Double;
   Percent: Double; Finished: Boolean): Boolean;
-const
-  CSecondsAtATime = 0.25 / C45RpmRevolutionsPerSecond;
 var
+  SecondsAtATime: Double;
   tc: QWord;
 begin
   Result := True;
 
+  SecondsAtATime := 0.25 / Sender.ProfileRef.RevolutionsPerSecond;
+
   FPoints.Add(TPointValue.Create(X, Y, ToRGB(0, High(Byte) - iDiv0(ScanIdx * High(Byte), High(Sender.InputScans)), iDiv0(ScanIdx * High(Byte), High(Sender.InputScans)))));
 
-  if Finished or (FPoints.Count >= Sender.SampleRate * CSecondsAtATime * Length(Sender.InputScans)) then
+  if Finished or (FPoints.Count >= Sender.SampleRate * SecondsAtATime * Length(Sender.InputScans)) then
   begin
     Result := not ((GetForegroundWindow = Handle) and (GetAsyncKeyState(VK_ESCAPE) and $8000 <> 0));
 
@@ -410,8 +433,8 @@ begin
   rfy := Round(AScan.SetDownRadius * FReducFactor);
   rcx := Round(AScan.ConcentricGrooveRadius * FReducFactor);
   rcy := Round(AScan.ConcentricGrooveRadius * FReducFactor);
-  rax := Round(C45RpmAdapterSize * 0.5 * AScan.DPI * FReducFactor);
-  ray := Round(C45RpmAdapterSize * 0.5 * AScan.DPI * FReducFactor);
+  rax := Round(AScan.ProfileRef.AdapterSize * 0.5 * AScan.DPI * FReducFactor);
+  ray := Round(AScan.ProfileRef.AdapterSize * 0.5 * AScan.DPI * FReducFactor);
 
   C.Rectangle(cer);
 

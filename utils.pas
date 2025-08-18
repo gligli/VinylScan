@@ -60,42 +60,7 @@ type
   TCompareFunction = function(Item1, Item2, UserParameter: Pointer): Integer;
 
 const
- {$if 1}
-  C45RpmRevolutionsPerSecond = 45.0 / 60.0;
-
-  C45RpmRecordingGrooveWidth = 0.006;
-  C45RpmLeadOutGrooveThickness = 0.006;
-
-  C45RpmOuterSize = 6.875;
-  C45RpmInnerSize = 1.504;
-  C45RpmLabelOuterSize = 3.5;
-  C45RpmConcentricGroove = 3.875;
-  C45RpmMinConcentricGroove = C45RpmConcentricGroove - 0.078 * 1.5;
-  C45RpmMaxConcentricGroove = C45RpmConcentricGroove + 0.078 * 1.5;
-  C45RpmStylusSetDown = 6.781;
-  C45RpmFirstMusicGroove = 6.625;
-  C45RpmLastMusicGroove = 4.25;
-  C45RpmAdapterSize = 1.496;
-{$else}
-  C45RpmRevolutionsPerSecond = (33 + 1/3) / 60.0;
-
-  C45RpmRecordingGrooveWidth = 0.004;
-  C45RpmLeadOutGrooveThickness = 0.004;
-
-  C45RpmOuterSize = 11.875;
-  C45RpmInnerSize = 1.504;
-  C45RpmLabelOuterSize = 3.5;
-  C45RpmConcentricGroove = 4.187;
-  C45RpmMinConcentricGroove = C45RpmConcentricGroove - 0.078 * 1.5;
-  C45RpmMaxConcentricGroove = C45RpmConcentricGroove + 0.078 * 1.5;
-  C45RpmStylusSetDown = 11.719;
-  C45RpmFirstMusicGroove = 11.5;
-  C45RpmLastMusicGroove = 4.75;
-  C45RpmAdapterSize = 0.286;
-{$endif}
-
-  C45RpmLoopbackLowCutoffFreq = 40.0;
-
+  CLoopbackLowCutoffFreq = 40.0;
   CLowCutoffFreq = 20.0;
 
 {$if 1}

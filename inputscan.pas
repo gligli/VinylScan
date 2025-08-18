@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Graphics, FPReadTiff, FPImage, PNGComn, MTProcs,
-  utils, powell, hackedreadpng;
+  utils, profiles, powell, hackedreadpng;
 
 type
   TInputScan = class;
@@ -28,6 +28,7 @@ type
 
   TInputScan = class
   private
+    FProfileRef: TProfile;
     FImageFileName: String;
     FDPI: Integer;
     FPointsPerRevolution: Integer;
@@ -73,7 +74,7 @@ type
     procedure LoadPNG;
     procedure LoadTIFF;
   public
-    constructor Create(ADefaultDPI: Integer = 2400; ASilent: Boolean = False);
+    constructor Create(AProfileRef: TProfile; ADefaultDPI: Integer = 2400; ASilent: Boolean = False);
     destructor Destroy; override;
 
     procedure InitImage(AWidth, AHeight, ADPI: Integer);
@@ -93,6 +94,7 @@ type
     procedure AddCorrectRef(AngleIdx, ScanIdx: Integer);
     function HasCorrectRef(const AList: TInputScanDynArray; AngleIdx, ScanIdx: Integer): Boolean;
 
+    property ProfileRef: TProfile read FProfileRef;
     property ImageFileName: String read FImageFileName write FImageFileName;
     property ImageShortName: String read GetImageShortName;
 
@@ -153,13 +155,13 @@ implementation
 
 procedure TInputScan.SetRevolutionFromDPI(ADPI: Integer);
 begin
-  FPointsPerRevolution := Ceil(Pi * C45RpmOuterSize * ADPI);
+  FPointsPerRevolution := Ceil(Pi * FProfileRef.OuterSize * ADPI);
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
 end;
 
 procedure TInputScan.SetRevolutionFromSampleRate(ASampleRate: Integer);
 begin
-  FPointsPerRevolution := Ceil(ASampleRate / C45RpmRevolutionsPerSecond);
+  FPointsPerRevolution := Ceil(ASampleRate / FProfileRef.RevolutionsPerSecond);
   FRadiansPerRevolutionPoint := Pi * 2.0 / FPointsPerRevolution;
 end;
 
@@ -247,17 +249,17 @@ begin
   stencilY[ZeroValue] := 4;
   stencilY[PositiveValue] := -1;
 
-  stencilX[NegativeValue] := -C45RpmLeadOutGrooveThickness * FDPI;
+  stencilX[NegativeValue] := -FProfileRef.LeadOutGrooveThickness * FDPI;
   stencilX[ZeroValue] := 0;
-  stencilX[PositiveValue] := C45RpmLeadOutGrooveThickness * FDPI;
+  stencilX[PositiveValue] := FProfileRef.LeadOutGrooveThickness * FDPI;
 
   extents := FCenterExtents;
   extents.Inflate(extents.Right - extents.CenterPoint.X, extents.Bottom - extents.CenterPoint.Y);
 
   X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius];
 
-  mnRadius := Floor(C45RpmMinConcentricGroove * FDPI * 0.5);
-  mxRadius := Ceil(C45RpmMaxConcentricGroove * FDPI * 0.5);
+  mnRadius := Floor(FProfileRef.MinConcentricGroove * FDPI * 0.5);
+  mxRadius := Ceil(FProfileRef.MaxConcentricGroove * FDPI * 0.5);
   SetLength(results, mxRadius - mnRadius + 1);
   ProcThreadPool.DoParallelLocalProc(@DoSkew, mnRadius, mxRadius);
 
@@ -323,9 +325,9 @@ begin
   stencilY[ZeroValue] := 4;
   stencilY[PositiveValue] := -1;
 
-  stencilX[NegativeValue] := -C45RpmLeadOutGrooveThickness * FDPI;
+  stencilX[NegativeValue] := -FProfileRef.LeadOutGrooveThickness * FDPI;
   stencilX[ZeroValue] := 0;
-  stencilX[PositiveValue] := C45RpmLeadOutGrooveThickness * FDPI;
+  stencilX[PositiveValue] := FProfileRef.LeadOutGrooveThickness * FDPI;
 
   CenterX := arg[0];
   CenterY := arg[1];
@@ -364,9 +366,9 @@ var
   meanSD: TPointD;
   X: TDoubleDynArray;
 begin
-  BuildSinCosLUT(Ceil(Pi * C45RpmConcentricGroove * FDPI), FSinCosLUT);
+  BuildSinCosLUT(Ceil(Pi * FProfileRef.ConcentricGroove * FDPI), FSinCosLUT);
 
-  meanSD := GetMeanSD(C45RpmMinConcentricGroove * 0.5 * FDPI, C45RpmMaxConcentricGroove * 0.5 * FDPI, -Pi, Pi);
+  meanSD := GetMeanSD(FProfileRef.MinConcentricGroove * 0.5 * FDPI, FProfileRef.MaxConcentricGroove * 0.5 * FDPI, -Pi, Pi);
 
   X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius];
 
@@ -432,8 +434,9 @@ begin
   FGrooveStartPoint.Y := besty;
 end;
 
-constructor TInputScan.Create(ADefaultDPI: Integer; ASilent: Boolean);
+constructor TInputScan.Create(AProfileRef: TProfile; ADefaultDPI: Integer; ASilent: Boolean);
 begin
+  FProfileRef := AProfileRef;
   FDPI := ADefaultDPI;
   FSilent := ASilent;
   FCenterQuality := -Infinity;
@@ -628,7 +631,7 @@ var
 begin
   if not FSilent then WriteLn('BrickwallLimit');
 
-  radius := Ceil(C45RpmRecordingGrooveWidth * FDPI);
+  radius := Ceil(FProfileRef.RecordingGrooveWidth * FDPI);
   offsets := MakeRadiusOffsets(radius);
 
   srcImage := FProcessedImage;
@@ -684,10 +687,10 @@ begin
 
   cx := Round(FCenter.X);
   cy := Round(FCenter.Y);
-  lblPos := Round(Sqr(C45RpmLabelOuterSize * 0.5 * FDPI));
+  lblPos := Round(Sqr(FProfileRef.LabelOuterSize * 0.5 * FDPI));
 
   labelRadius := Ceil(0.02 * FDPI);
-  grooveRadius := Ceil(C45RpmRecordingGrooveWidth * 0.25 * FDPI);
+  grooveRadius := Ceil(FProfileRef.RecordingGrooveWidth * 0.25 * FDPI);
 
   labelOffsets := MakeRadiusOffsets(labelRadius);
   grooveOffsets := MakeRadiusOffsets(grooveRadius);
@@ -709,8 +712,8 @@ begin
   else
     SetRevolutionFromDPI(FDPI);
 
-  FSetDownRadius := (C45RpmStylusSetDown + 2.0 * C45RpmFirstMusicGroove) / 3.0 * FDPI * 0.5;
-  FConcentricGrooveRadius := C45RpmConcentricGroove * FDPI * 0.5;
+  FSetDownRadius := (FProfileRef.StylusSetDown + 2.0 * FProfileRef.FirstMusicGroove) / 3.0 * FDPI * 0.5;
+  FConcentricGrooveRadius := FProfileRef.ConcentricGroove * FDPI * 0.5;
 
   FindConcentricGroove_GridSearch;
   if AUseGradient then
@@ -726,7 +729,7 @@ begin
     WriteLn('CenterQuality:', FCenterQuality:12:6);
     WriteLn('SetDownRadius:', FSetDownRadius:12:3);
     WriteLn('GrooveStartPoint:', FGrooveStartPoint.X:12:3, ',', FGrooveStartPoint.Y:12:3);
-    Writeln('Inner raw sample rate: ', Round(Pi * C45RpmLastMusicGroove * FDPI * C45RpmRevolutionsPerSecond), ' Hz');
+    Writeln('Inner raw sample rate: ', Round(Pi * FProfileRef.LastMusicGroove * FDPI * FProfileRef.RevolutionsPerSecond), ' Hz');
   end
   else
   begin
@@ -776,7 +779,7 @@ var
 begin
   // init
 
-  radiusLimit := Round(C45RpmOuterSize * 0.5 * FDPI);
+  radiusLimit := Round(FProfileRef.OuterSize * 0.5 * FDPI);
 
   FCenterExtents.Left := radiusLimit;
   FCenterExtents.Top := radiusLimit;
@@ -955,8 +958,8 @@ var
   angleCropped: TBooleanDynArray;
   angleData: TDoubleDynArray;
 begin
-  beginRadius := Ceil(C45RpmLastMusicGroove * 0.5 * FDPI);
-  endRadius := Floor(C45RpmFirstMusicGroove * 0.5 * FDPI);
+  beginRadius := Ceil(FProfileRef.LastMusicGroove * 0.5 * FDPI);
+  endRadius := Floor(FProfileRef.FirstMusicGroove * 0.5 * FDPI);
 
   SetLength(angleCropped, CAngleCount);
   SetLength(angleData, endRadius - beginRadius + 1);

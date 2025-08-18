@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Graphics, GraphType, IntfGraphics, FPCanvas, FPImage, PNGComn, ZStream, MTProcs, TypInfo,
-  utils, inputscan, powell, hackedwritepng;
+  utils, inputscan, profiles, powell, hackedwritepng;
 
 type
   TCorrectSkew = record
@@ -28,6 +28,7 @@ type
 
   TScanCorrelator = class
   private
+    FProfileRef: TProfile;
     FInputScans: TInputScanDynArray;
     FFixCISScanners: Boolean;
     FBrickwallLimitScans: Boolean;
@@ -46,6 +47,18 @@ type
     FOutputImage: TWordDynArray;
     FOutputScans: TInputScanDynArray;
 
+    FAngleInitAreaBegin: Double;
+    FAngleInitAreaEnd: Double;
+
+    FAnalyzeAreaBegin: Double;
+    FAnalyzeAreaEnd: Double;
+    FAnalyzeAreaWidth: Double;
+
+    FCorrectAngleCount: Integer;
+    FCorrectAreaBegin: Double;
+    FCorrectAreaEnd: Double;
+    FCorrectAreaWidth: Double;
+
     procedure CorrectAnglesFromCoords(const coords: TCorrectCoords; out AStartAngle, AEndAngle, angleInc: Double; out
       angleCnt: Integer; AReduceAngles: Boolean);
 
@@ -63,7 +76,7 @@ type
     procedure Correct;
     procedure Rebuild;
   public
-    constructor Create(const AFileNames: TStrings; AOutputDPI: Integer = 2400);
+    constructor Create(AProfileRef: TProfile; const AFileNames: TStrings; AOutputDPI: Integer = 2400);
     destructor Destroy; override;
 
     procedure LoadScans;
@@ -83,6 +96,7 @@ type
     property OutputWidth: Integer read FOutputWidth;
     property OutputHeight: Integer read FOutputHeight;
 
+    property ProfileRef: TProfile read FProfileRef;
     property InputScans: TInputScanDynArray read FInputScans;
     property OutputImage: TWordDynArray read FOutputImage;
     property OutputScans: TInputScanDynArray read FOutputScans;
@@ -106,32 +120,20 @@ implementation
 
 { TScanCorrelator }
 
-const
-  CAngleInitAreaBegin = C45RpmInnerSize;
-  CAngleInitAreaEnd = C45RpmLabelOuterSize;
-
-  CAnalyzeAreaBegin = C45RpmInnerSize;
-  CAnalyzeAreaEnd = C45RpmConcentricGroove;
-  CAnalyzeAreaWidth = (CAnalyzeAreaEnd - CAnalyzeAreaBegin) * 0.5;
-
-  CCorrectAngleCount = 36;
-  CCorrectAreaBegin = C45RpmLabelOuterSize;
-  CCorrectAreaEnd = C45RpmOuterSize;
-  CCorrectAreaWidth = (CCorrectAreaEnd - CCorrectAreaBegin) * 0.5;
-
-constructor TScanCorrelator.Create(const AFileNames: TStrings; AOutputDPI: Integer);
+constructor TScanCorrelator.Create(AProfileRef: TProfile; const AFileNames: TStrings; AOutputDPI: Integer);
 var
   iScan: Integer;
 begin
+  FProfileRef := AProfileRef;
   FOutputDPI := AOutputDPI;
   SetLength(FInputScans, AFileNames.Count);
   SetLength(FOutputScans, Length(FInputScans));
 
   for iScan := 0 to AFileNames.Count - 1 do
   begin
-    FInputScans[iScan] := TInputScan.Create(FOutputDPI, True);
+    FInputScans[iScan] := TInputScan.Create(FProfileRef, FOutputDPI, True);
     FInputScans[iScan].ImageFileName := AFileNames[iScan];
-    FOutputScans[iScan] := TInputScan.Create(FOutputDPI, True);
+    FOutputScans[iScan] := TInputScan.Create(FProfileRef, FOutputDPI, True);
     FOutputScans[iScan].ImageFileName := AFileNames[iScan];
   end;
 
@@ -146,6 +148,16 @@ begin
   FQualitySpeedRatio := 1.0;
 
   FFixCISScanners := True;
+
+  FAngleInitAreaBegin := FProfileRef.InnerSize;
+  FAngleInitAreaEnd := FProfileRef.LabelOuterSize;
+  FAnalyzeAreaBegin := FProfileRef.InnerSize;
+  FAnalyzeAreaEnd := FProfileRef.ConcentricGroove;
+  FAnalyzeAreaWidth := (FAnalyzeAreaEnd - FAnalyzeAreaBegin) * 0.5;
+  FCorrectAngleCount := 36;
+  FCorrectAreaBegin := FProfileRef.LabelOuterSize;
+  FCorrectAreaEnd := FProfileRef.OuterSize;
+  FCorrectAreaWidth := (FCorrectAreaEnd - FCorrectAreaBegin) * 0.5;
 end;
 
 destructor TScanCorrelator.Destroy;
@@ -206,7 +218,7 @@ begin
   end;
 
   WriteLn('DPI:', FOutputDPI:6);
-  Writeln('Inner raw sample rate: ', Round(Pi * C45RpmLastMusicGroove * FOutputDPI * C45RpmRevolutionsPerSecond), ' Hz');
+  Writeln('Inner raw sample rate: ', Round(Pi * FProfileRef.LastMusicGroove * FOutputDPI * FProfileRef.RevolutionsPerSecond), ' Hz');
 
   if Length(FInputScans) > 1 then
   begin
@@ -293,8 +305,8 @@ begin
 
   SetLength(base, FInputScans[0].Width * CAngleCount);
 
-  rBeg := Round(CAngleInitAreaBegin * 0.5 * FInputScans[0].DPI);
-  rEnd := Round(CAngleInitAreaEnd * 0.5 * FInputScans[0].DPI);
+  rBeg := Round(FAngleInitAreaBegin * 0.5 * FInputScans[0].DPI);
+  rEnd := Round(FAngleInitAreaEnd * 0.5 * FInputScans[0].DPI);
 
   pos := DoAngle(FInputScans[0], 0, base);
 
@@ -313,7 +325,7 @@ begin
   scan := FInputScans[0];
 
   angleCnt := Ceil(scan.PointsPerRevolution * FQualitySpeedRatio);
-  cnt := Ceil(CAnalyzeAreaWidth * scan.DPI * angleCnt);
+  cnt := Ceil(FAnalyzeAreaWidth * scan.DPI * angleCnt);
   SetLength(Result, cnt);
 
   t   := scan.RelativeAngle;
@@ -323,7 +335,7 @@ begin
   BuildSinCosLUT(angleCnt, sinCosLUT, t);
 
   pos := 0;
-  rBeg := CAnalyzeAreaBegin * 0.5 * scan.DPI;
+  rBeg := FAnalyzeAreaBegin * 0.5 * scan.DPI;
   ri := 1.0 / angleCnt;
   for iRadius := 0 to High(Result) do
   begin
@@ -364,7 +376,7 @@ begin
   Result := 0.0;
 
   angleCnt := Ceil(scan.PointsPerRevolution * FQualitySpeedRatio);
-  cnt := Ceil(CAnalyzeAreaWidth * scan.DPI * angleCnt);
+  cnt := Ceil(FAnalyzeAreaWidth * scan.DPI * angleCnt);
 
   t := arg[0];
   cx := arg[1];
@@ -373,7 +385,7 @@ begin
   BuildSinCosLUT(angleCnt, sinCosLUT, t);
 
   pos := 0;
-  rBeg := CAnalyzeAreaBegin * 0.5 * scan.DPI;
+  rBeg := FAnalyzeAreaBegin * 0.5 * scan.DPI;
   ri := 1.0 / angleCnt;
   for iRadius := 0 to cnt - 1 do
   begin
@@ -499,8 +511,8 @@ begin
   if Length(FInputScans) <= 0 then
     Exit;
 
-  rBeg := C45RpmLastMusicGroove * 0.5 * FInputScans[0].DPI;
-  rEnd := C45RpmFirstMusicGroove * 0.5 * FInputScans[0].DPI;
+  rBeg := FProfileRef.LastMusicGroove * 0.5 * FInputScans[0].DPI;
+  rEnd := FProfileRef.FirstMusicGroove * 0.5 * FInputScans[0].DPI;
 
   RadiusAngleLut := BuildRadiusAngleLUT(rBeg, rEnd, -Pi, Pi, FInputScans[0].DPI / 300.0);
   SinCosLut := OffsetRadiusAngleLUTAngle(RadiusAngleLut, 0.0);
@@ -518,8 +530,8 @@ var
   angle, angleExtents, startAngle, endAngle, a0a, a1a, a0b, a1b: Double;
   scan: TInputScan;
 begin
-  angle := (coords.AngleIdx / CCorrectAngleCount) * 2.0 * Pi;
-  angleExtents := 2.0 * Pi / CCorrectAngleCount;
+  angle := (coords.AngleIdx / FCorrectAngleCount) * 2.0 * Pi;
+  angleExtents := 2.0 * Pi / FCorrectAngleCount;
   startAngle := NormalizeAngle(angle - angleExtents);
   endAngle := NormalizeAngle(angle + angleExtents);
 
@@ -599,7 +611,7 @@ begin
   if IsNan(startAngle) or IsNan(endAngle) then
     Exit(False);
 
-  radiusCnt := Ceil(CCorrectAreaWidth * curScan.DPI);
+  radiusCnt := Ceil(FCorrectAreaWidth * curScan.DPI);
 
   SetLength(coords.PreparedData, radiusCnt * angleCnt);
 
@@ -665,7 +677,7 @@ begin
   cy := baseScan.Center.Y;
 
   cnt := 0;
-  rBeg := CCorrectAreaBegin * 0.5 * curScan.DPI;
+  rBeg := FCorrectAreaBegin * 0.5 * curScan.DPI;
   for iRadius := 0 to radiusCnt - 1 do
   begin
     r := rBeg + iRadius;
@@ -710,13 +722,13 @@ begin
   cx := scan.Center.X;
   cy := scan.Center.Y;
 
-  radiusCnt := Ceil(CCorrectAreaWidth * scan.DPI);
+  radiusCnt := Ceil(FCorrectAreaWidth * scan.DPI);
 
   // parse image arcs
 
   Result := 0;
   cnt := 0;
-  rBeg := CCorrectAreaBegin * 0.5 * scan.DPI;
+  rBeg := FCorrectAreaBegin * 0.5 * scan.DPI;
   for iRadius := 0 to radiusCnt - 1 do
   begin
     r := rBeg + iRadius;
@@ -795,7 +807,7 @@ var
 
     FillChar(coords, SizeOf(coords), 0);
 
-    DivMod(AIndex, CCorrectAngleCount, coords.ScanIdx, coords.AngleIdx);
+    DivMod(AIndex, FCorrectAngleCount, coords.ScanIdx, coords.AngleIdx);
     Inc(coords.ScanIdx);
 
     X := [0.0, 1.0 * 1e3, 0.0 * 1e6];
@@ -870,7 +882,7 @@ begin
   if Length(FInputScans) <= 1 then
     Exit;
 
-  SetLength(FPerAngleSkew, CCorrectAngleCount * High(FInputScans), 1);
+  SetLength(FPerAngleSkew, FCorrectAngleCount * High(FInputScans), 1);
   SetLength(rmses, Length(FPerAngleSkew));
   SetLength(coordsArray, Length(FPerAngleSkew));
 
@@ -883,14 +895,14 @@ begin
   // cumulate
 
   for iscan := 1 to High(FInputScans) do
-    for iangle := 0 to CCorrectAngleCount - 1 do
+    for iangle := 0 to FCorrectAngleCount - 1 do
     begin
-      ias := (iscan - 1) * CCorrectAngleCount + iangle;
+      ias := (iscan - 1) * FCorrectAngleCount + iangle;
 
       iasbase := ias;
       while True do
       begin
-        iasbase := (coordsArray[iasbase].BaseScanIdx - 1) * CCorrectAngleCount + iangle;
+        iasbase := (coordsArray[iasbase].BaseScanIdx - 1) * FCorrectAngleCount + iangle;
 
         if iasbase < 0 then
           Break;
@@ -903,12 +915,12 @@ begin
   // log
 
   for iscan := 1 to High(FInputScans) do
-    for iangle := 0 to CCorrectAngleCount - 1 do
+    for iangle := 0 to FCorrectAngleCount - 1 do
     begin
-      ias := (iscan - 1) * CCorrectAngleCount + iangle;
+      ias := (iscan - 1) * FCorrectAngleCount + iangle;
 
       Write(FInputScans[iscan].ImageShortName);
-      Write(', Angle:', (iangle / CCorrectAngleCount) * 360.0:9:3);
+      Write(', Angle:', (iangle / FCorrectAngleCount) * 360.0:9:3);
       Write(', RMSE:', rmses[ias]:12:6);
       if not IsNan(rmses[ias]) then
         Write(', Const:', FPerAngleSkew[ias, 0].ConstSkew:9:3, ', Mul:', FPerAngleSkew[ias, 0].MulSkew:12:8, ', Sqr:', FPerAngleSkew[ias, 0].SqrSkew:16:12);
@@ -932,8 +944,8 @@ procedure TScanCorrelator.Rebuild;
 const
   CLabelDepthBits = 4;
   CLabelDepthMaxValue = (1 shl CLabelDepthBits) - 1;
-  CTauToAngleIdx = CCorrectAngleCount / (2.0 * Pi);
 var
+  TauToAngleIdx: Double;
   center, rBeg, rEnd, rLbl: Double;
 
   function InterpolateSkew(tau, radius: Double; scanIdx: Integer): Double;
@@ -948,14 +960,14 @@ var
 
     tau := NormalizedAngleTo02Pi(tau);
 
-    c := tau * CTauToAngleIdx;
+    c := tau * TauToAngleIdx;
     ci := Trunc(c);
     alpha := c - ci;
-    so := (scanIdx - 1) * CCorrectAngleCount;
+    so := (scanIdx - 1) * FCorrectAngleCount;
 
     for iInterp := Low(r) to High(r) do
     begin
-      pp := FPerAngleSkew[(ci + iInterp + CCorrectAngleCount) mod CCorrectAngleCount + so];
+      pp := FPerAngleSkew[(ci + iInterp + FCorrectAngleCount) mod FCorrectAngleCount + so];
 
       rr := radius;
       for iPoly := 0 to High(pp) do
@@ -1042,16 +1054,18 @@ var
 begin
   WriteLn('Rebuild');
 
-  FOutputWidth := Ceil(C45RpmOuterSize * FOutputDPI);
+  TauToAngleIdx := FCorrectAngleCount / (2.0 * Pi);
+
+  FOutputWidth := Ceil(FProfileRef.OuterSize * FOutputDPI);
   FOutputHeight := FOutputWidth;
   SetLength(FOutputImage, sqr(FOutputWidth));
   for iScan := 0 to High(FOutputScans) do
     FOutputScans[iScan].InitImage(FOutputWidth, FOutputHeight, FOutputDPI);
 
   center := FOutputWidth / 2.0;
-  rBeg := C45RpmAdapterSize * 0.5 * FOutputDPI;
-  rEnd := C45RpmOuterSize * 0.5 * FOutputDPI;
-  rLbl := C45RpmLabelOuterSize * 0.5 * FOutputDPI;
+  rBeg := FProfileRef.AdapterSize * 0.5 * FOutputDPI;
+  rEnd := FProfileRef.OuterSize * 0.5 * FOutputDPI;
+  rLbl := FProfileRef.LabelOuterSize * 0.5 * FOutputDPI;
 
   ProcThreadPool.DoParallelLocalProc(@DoY, 0, FOutputHeight - 1);
 end;
