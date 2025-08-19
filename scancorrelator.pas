@@ -229,14 +229,15 @@ end;
 
 procedure TScanCorrelator.AngleInit;
 const
-  CAngleCount = 360;
+  CAngleCount = 720;
+  CAggregatedPixelsInches = 0.2;
 var
-  rBeg, rEnd: Integer;
+  rBeg, rEnd, aggregatedPixelCount: Integer;
   base: TDoubleDynArray;
 
   function DoAngle(Scan: TInputScan; a: Double; var arr: TDoubleDynArray): Integer;
   var
-    iRadius, iAngle: Integer;
+    iRadius, iAngle, pxAggr: Integer;
     sn, cs, cy, cx, px, py: Double;
   begin
     Result := 0;
@@ -249,14 +250,23 @@ var
     begin
       SinCos(a + DegToRad(iAngle * (360 / CAngleCount)), sn, cs);
 
+      pxAggr := 0;
       for iRadius:= rBeg to rEnd do
       begin
         px := cx + cs * iRadius;
         py := cy + sn * iRadius;
         if Scan.InRangePointD(py, px) then
-          arr[Result] := Scan.GetPointD_Work(Scan.ProcessedImage, py, px);
-        Inc(Result);
+          arr[Result] += Scan.GetPointD_Work(Scan.Image, py, px);
+
+        Inc(pxAggr);
+        if pxAggr >= aggregatedPixelCount then
+        begin
+          pxAggr := 0;
+          Inc(Result);
+        end;
       end;
+
+      Inc(Result);
     end;
   end;
 
@@ -277,9 +287,9 @@ var
     bestr := Infinity;
     bestAngle := 0.0;
 
-    for iAngle := 0 to 359 do
+    for iAngle := 0 to CAngleCount - 1 do
     begin
-      a := DegToRad(iAngle);
+      a := DegToRad(iAngle * (360 / CAngleCount));
 
       DoAngle(scan, a, angle);
 
@@ -305,6 +315,7 @@ begin
 
   SetLength(base, FInputScans[0].Width * CAngleCount);
 
+  aggregatedPixelCount := Round(CAggregatedPixelsInches * FInputScans[0].DPI);
   rBeg := Round(FAngleInitAreaBegin * 0.5 * FInputScans[0].DPI);
   rEnd := Round(FAngleInitAreaEnd * 0.5 * FInputScans[0].DPI);
 
