@@ -690,7 +690,7 @@ begin
   lblPos := Round(Sqr(FProfileRef.LabelOuterSize * 0.5 * FDPI));
 
   labelRadius := Ceil(0.02 * FDPI);
-  grooveRadius := Ceil(FProfileRef.RecordingGrooveWidth * 0.25 * FDPI);
+  grooveRadius := Ceil(FDPI / 600.0);
 
   labelOffsets := MakeRadiusOffsets(labelRadius);
   grooveOffsets := MakeRadiusOffsets(grooveRadius);
