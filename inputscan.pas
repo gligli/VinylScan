@@ -643,8 +643,8 @@ end;
 
 procedure TInputScan.Blur;
 var
-  grooveRadius, labelRadius, lblPos, cx, cy: Integer;
-  grooveOffsets, labelOffsets: TIntegerDynArray;
+  labelRadius, lblPos, cx, cy: Integer;
+  labelOffsets: TIntegerDynArray;
   srcImage: TWordDynArray;
 
   function GetMean(const offsets: TIntegerDynArray; ayx: Integer): Integer;
@@ -665,20 +665,20 @@ var
   var
     x, y, yx, sqy: Integer;
   begin
-    if not InRange(AIndex, grooveRadius, FHeight - 1 - grooveRadius) then
+    if not InRange(AIndex, 0, FHeight - 1) then
       Exit;
 
     y := AIndex;
     sqy := Sqr(y - cy);
 
-    for x := grooveRadius to FWidth - 1 - grooveRadius do
+    for x := 0 to FWidth - 1 do
     begin
       yx := y * Width + x;
 
       if sqy + Sqr(x - cx) <= lblPos then
         FProcessedImage[yx] := GetMean(labelOffsets, yx)
       else
-        FProcessedImage[yx] := GetMean(grooveOffsets, yx)
+        FProcessedImage[yx] := srcImage[yx];
     end;
   end;
 
@@ -687,19 +687,16 @@ begin
 
   cx := Round(FCenter.X);
   cy := Round(FCenter.Y);
-  lblPos := Round(Sqr(FProfileRef.LabelOuterSize * 0.5 * FDPI));
+  lblPos := Round(Sqr(FProfileRef.ConcentricGroove * 0.5 * FDPI));
 
   labelRadius := Ceil(0.02 * FDPI);
-  grooveRadius := Ceil(FDPI / 600.0);
-
   labelOffsets := MakeRadiusOffsets(labelRadius);
-  grooveOffsets := MakeRadiusOffsets(grooveRadius);
 
   srcImage := FProcessedImage;
   FProcessedImage := nil;
   SetLength(FProcessedImage, Height * Width);
 
-  ProcThreadPool.DoParallelLocalProc(@DoY, grooveRadius, FHeight - 1 - grooveRadius);
+  ProcThreadPool.DoParallelLocalProc(@DoY, 0, FHeight - 1);
 end;
 
 
@@ -896,7 +893,7 @@ begin
     if InRangePointD(py, px) then
     begin
       cropped := InNormalizedAngle(bt, a0a, a0b) or InNormalizedAngle(bt, a1a, a1b);
-      acc[cropped] += GetPointD_Work(FProcessedImage, py, px);
+      acc[cropped] += GetPointD_Work(FImage, py, px);
       Inc(cnt[cropped]);
     end;
   end;
