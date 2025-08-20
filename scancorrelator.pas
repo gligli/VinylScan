@@ -20,6 +20,7 @@ type
     Weights: TDoubleDynArray;
     ConstSkew, MulSkew, SqrSkew: Double;
     Silent: Boolean;
+    BaseMeanSD, MeanSD: TPointD;
   end;
 
   PCorrectCoords = ^TCorrectCoords;
@@ -155,7 +156,7 @@ begin
   FAnalyzeAreaEnd := FProfileRef.ConcentricGroove;
   FAnalyzeAreaWidth := (FAnalyzeAreaEnd - FAnalyzeAreaBegin) * 0.5;
   FCorrectAngleCount := 36;
-  FCorrectAreaBegin := FProfileRef.ConcentricGroove;
+  FCorrectAreaBegin := FProfileRef.LabelOuterSize;
   FCorrectAreaEnd := FProfileRef.StylusSetDown;
   FCorrectAreaWidth := (FCorrectAreaEnd - FCorrectAreaBegin) * 0.5;
 end;
@@ -665,6 +666,7 @@ begin
 
   t := baseScan.RelativeAngle;
   BuildSinCosLUT(angleCnt, coords.SinCosLUT, startAngle + t, NormalizedAngleDiff(startAngle, endAngle));
+  Coords.BaseMeanSD := baseScan.GetMeanSD(FCorrectAreaBegin * 0.5 * baseScan.DPI, FCorrectAreaEnd * 0.5 * baseScan.DPI, NormalizeAngle(startAngle + t),  NormalizeAngle(endAngle + t));
 
   // build weights lookup table
 
@@ -676,7 +678,6 @@ begin
   for iAngle := 0 to angleCnt - 1 do
   begin
     Coords.Weights[iAngle] := 1.0 - 2.0 * abs(NormalizedAngleDiff(saRaw, NormalizeAngle(bt)) / NormalizedAngleDiff(saRaw, eaRaw) - 0.5);
-    Coords.Weights[iAngle] *= 1.0 / High(Word);
     bt += angleInc;
   end;
 
@@ -700,7 +701,7 @@ begin
       py := sn * r + cy;
 
       if baseScan.InRangePointD(py, px) then
-        coords.PreparedData[cnt] := baseScan.GetPointD_Work(baseScan.ProcessedImage, py, px)
+        coords.PreparedData[cnt] := CompressRange((baseScan.GetPointD_Work(baseScan.ProcessedImage, py, px) - Coords.BaseMeanSD.X) * Coords.BaseMeanSD.Y)
       else
         coords.PreparedData[cnt] := 1e6;
 
@@ -711,14 +712,16 @@ begin
 
   // prepare iterations
 
-  BuildSinCosLUT(angleCnt, coords.sinCosLUT, startAngle + curScan.RelativeAngle, NormalizedAngleDiff(startAngle, endAngle));
+  t := curScan.RelativeAngle;
+  BuildSinCosLUT(angleCnt, coords.sinCosLUT, startAngle + t, NormalizedAngleDiff(startAngle, endAngle));
+  Coords.MeanSD := curScan.GetMeanSD(FCorrectAreaBegin * 0.5 * curScan.DPI, FCorrectAreaEnd * 0.5 * curScan.DPI, NormalizeAngle(startAngle + t),  NormalizeAngle(endAngle + t));
 end;
 
 function TScanCorrelator.NelderMeadCorrect(const arg: TVector; obj: Pointer): TScalar;
 var
   coords: PCorrectCoords absolute obj;
   cnt, iRadius, iScan, iAngle, radiusCnt: Integer;
-  r, rBeg, rLbl, rOuter, sn, cs, px, py, cx, cy, rsk, skc, skm, sks: Double;
+  r, rBeg, rInner, rOuter, sn, cs, px, py, cx, cy, rsk, skc, skm, sks: Double;
   scan: TInputScan;
 begin
   iScan := coords^.ScanIdx;
@@ -738,7 +741,7 @@ begin
   Result := 0;
   cnt := 0;
   rBeg := FCorrectAreaBegin * 0.5 * scan.DPI;
-  rLbl := FProfileRef.LabelOuterSize * 0.5 * scan.DPI;
+  rInner := FProfileRef.InnerSize * 0.5 * scan.DPI;
   rOuter := FProfileRef.OuterSize * 0.5 * scan.DPI;
   for iRadius := 0 to radiusCnt - 1 do
   begin
@@ -746,7 +749,7 @@ begin
 
     rsk := sqr(r) * sks + r * skm + skc;
 
-    if not InRange(rsk, rLbl, rOuter) then
+    if not InRange(rsk, rInner, rOuter) then
     begin
       Result += Sqr(1e6) * Length(coords^.SinCosLUT);
       Inc(cnt, Length(coords^.SinCosLUT));
@@ -761,7 +764,7 @@ begin
       px := cs * rsk + cx;
       py := sn * rsk + cy;
 
-      Result += Sqr((coords^.PreparedData[cnt] - scan.GetPointD_Work(scan.ProcessedImage, py, px)) * coords^.Weights[iAngle]);
+      Result += Sqr((coords^.PreparedData[cnt] - CompressRange((scan.GetPointD_Work(scan.ProcessedImage, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y)) * coords^.Weights[iAngle]);
 
       Inc(cnt);
     end;
@@ -864,7 +867,7 @@ var
       end;
 
       X := [coords.ConstSkew, coords.MulSkew, coords.SqrSkew];
-      Extents := [0.01 * scan.DPI, 0.01 * 1e3, 1e-5 * 1e6];
+      Extents := [0.01, 0.01, 0.01];
       loss := NelderMeadMinimize(@NelderMeadCorrect, X, Extents, 1e-9, @coords);
 
       // free up memory
