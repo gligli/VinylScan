@@ -379,16 +379,50 @@ function TScanCorrelator.NelderMeadAnalyze(const arg: TVector; obj: Pointer): TS
 var
   coords: PCorrectCoords absolute obj;
 
-  iScan, iRadius, pos, cnt, angleCnt: Integer;
-  t, rBeg, rEnd, px, py, cx, cy, r, ri, sn, cs: Double;
+  radiusCnt, angleCnt: Integer;
   sinCosLUT: TSinCosDynArray;
   scan: TInputScan;
+  rBeg, rEnd, cx, cy, ri: Double;
+  results: TDoubleDynArray;
+
+  procedure DoSpiral(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  var
+    iAngle, pos: Integer;
+    px, py, r, sn, cs, acc: Double;
+  begin
+    if not InRange(AIndex, 0, radiusCnt - 1) then
+      Exit;
+
+    pos := AIndex * angleCnt;
+    acc := 0.0;
+
+    for iAngle := 0 to angleCnt - 1 do
+    begin
+      cs := sinCosLUT[iAngle].Cos;
+      sn := sinCosLUT[iAngle].Sin;
+
+      r := rBeg + pos * ri;
+
+      px := cs * r + cx;
+      py := sn * r + cy;
+
+      acc += Sqr((coords^.PreparedData[pos] - scan.GetPointD_Work(scan.ProcessedImage, py, px)) * (1.0 / High(Word)));
+
+      Inc(pos);
+    end;
+
+    results[AIndex] := acc;
+  end;
+
+var
+  iScan: Integer;
+  t: Double;
 begin
   scan := FInputScans[coords^.ScanIdx];
   Result := 0.0;
 
   angleCnt := Ceil(scan.PointsPerRevolution * FQualitySpeedRatio);
-  cnt := Ceil(FAnalyzeAreaWidth * scan.DPI * angleCnt);
+  radiusCnt := Ceil(FAnalyzeAreaWidth * scan.DPI);
 
   t := arg[0];
   cx := arg[1];
@@ -403,26 +437,10 @@ begin
 
   BuildSinCosLUT(angleCnt, sinCosLUT, t);
 
-  pos := 0;
-  for iRadius := 0 to cnt - 1 do
-  begin
-    cs := sinCosLUT[pos].Cos;
-    sn := sinCosLUT[pos].Sin;
+  SetLength(results, radiusCnt);
+  ProcThreadPool.DoParallelLocalProc(@DoSpiral, 0, radiusCnt - 1, nil, ProcThreadPool.MaxThreadCount div High(FInputScans));
 
-    r := rBeg + iRadius * ri;
-
-    px := cs * r + cx;
-    py := sn * r + cy;
-
-    Result += Sqr((coords^.PreparedData[iRadius] - scan.GetPointD_Work(scan.ProcessedImage, py, px)) * (1.0 / High(Word)));
-
-    Inc(pos);
-
-    if pos >= angleCnt then
-      pos := 0;
-  end;
-
-  Result /= cnt;
+  Result := Mean(results) / angleCnt;
   Result := Sqrt(Result);
 
   scan.Objective := Min(scan.Objective, Result);
