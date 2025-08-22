@@ -38,7 +38,6 @@ type
 
     FCenterExtents: TRect;
     FCenter: TPointD;
-    FSkew: TPointD;
     FConcentricGrooveRadius: Double;
     FSetDownRadius: Double;
     FGrooveStartAngle: Double;
@@ -83,7 +82,7 @@ type
     procedure BrickwallLimit;
     procedure Blur;
     procedure FindTrack(AUseGradient, AFindCroppedArea: Boolean; AForcedSampleRate: Integer = -1);
-    procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle, ASkewX, ASkewY: Double);
+    procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle: Double);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
 
     function InRangePointD(Y, X: Double): Boolean; inline;
@@ -112,7 +111,6 @@ type
 
     property CenterExtents: TRect read FCenterExtents;
     property Center: TPointD read FCenter;
-    property Skew: TPointD read FSkew;
     property RelativeAngle: Double read FRelativeAngle;
     property CropData: TCropData read FCropData;
 
@@ -442,8 +440,6 @@ begin
   FCenterQuality := -Infinity;
   FGrooveStartAngleQuality := -Infinity;
   FObjective := Infinity;
-  FSkew.X := 1.0;
-  FSkew.Y := 1.0;
 
   SetRevolutionFromDPI(FDPI);
 end;
@@ -692,7 +688,7 @@ begin
   labelRadius := Ceil(0.02 * FDPI);
   labelOffsets := MakeRadiusOffsets(labelRadius);
 
-  srcImage := FProcessedImage;
+  srcImage := FImage;
   FProcessedImage := nil;
   SetLength(FProcessedImage, Height * Width);
 
@@ -734,13 +730,11 @@ begin
   end;
 end;
 
-procedure TInputScan.CorrectByModel(ACenterX, ACenterY, ARelativeAngle, ASkewX, ASkewY: Double);
+procedure TInputScan.CorrectByModel(ACenterX, ACenterY, ARelativeAngle: Double);
 begin
   if not IsNan(ACenterX) then FCenter.X := ACenterX;
   if not IsNan(ACenterY) then FCenter.Y := ACenterY;
   if not IsNan(ARelativeAngle) then FRelativeAngle := ARelativeAngle;
-  if not IsNan(ASkewX) then FSkew.X := ASkewX;
-  if not IsNan(ASkewY) then FSkew.Y := ASkewY;
 end;
 
 procedure TInputScan.FindCenterExtents;
