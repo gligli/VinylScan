@@ -684,7 +684,7 @@ begin
 
   t := baseScan.RelativeAngle;
   BuildSinCosLUT(angleCnt, coords.SinCosLUT, startAngle + t, NormalizedAngleDiff(startAngle, endAngle));
-  Coords.BaseMeanSD := baseScan.GetMeanSD(FCorrectAreaBegin * 0.5 * baseScan.DPI, FCorrectAreaEnd * 0.5 * baseScan.DPI, NormalizeAngle(startAngle + t),  NormalizeAngle(endAngle + t));
+  Coords.BaseMeanSD := baseScan.GetMeanSD(baseScan.Image, FCorrectAreaBegin * 0.5 * baseScan.DPI, FCorrectAreaEnd * 0.5 * baseScan.DPI, NormalizeAngle(startAngle + t),  NormalizeAngle(endAngle + t));
 
   // build weights lookup table
 
@@ -719,7 +719,7 @@ begin
       py := sn * r + cy;
 
       if baseScan.InRangePointD(py, px) then
-        coords.PreparedData[cnt] := CompressRange((baseScan.GetPointD_Work(baseScan.ProcessedImage, py, px) - Coords.BaseMeanSD.X) * Coords.BaseMeanSD.Y)
+        coords.PreparedData[cnt] := CompressRange((baseScan.GetPointD_Work(baseScan.Image, py, px) - Coords.BaseMeanSD.X) * Coords.BaseMeanSD.Y)
       else
         coords.PreparedData[cnt] := 1e6;
 
@@ -732,7 +732,7 @@ begin
 
   t := curScan.RelativeAngle;
   BuildSinCosLUT(angleCnt, coords.sinCosLUT, startAngle + t, NormalizedAngleDiff(startAngle, endAngle));
-  Coords.MeanSD := curScan.GetMeanSD(FCorrectAreaBegin * 0.5 * curScan.DPI, FCorrectAreaEnd * 0.5 * curScan.DPI, NormalizeAngle(startAngle + t),  NormalizeAngle(endAngle + t));
+  Coords.MeanSD := curScan.GetMeanSD(curScan.Image, FCorrectAreaBegin * 0.5 * curScan.DPI, FCorrectAreaEnd * 0.5 * curScan.DPI, NormalizeAngle(startAngle + t),  NormalizeAngle(endAngle + t));
 end;
 
 function TScanCorrelator.NelderMeadCorrect(const arg: TVector; obj: Pointer): TScalar;
@@ -782,7 +782,7 @@ begin
       px := cs * rsk + cx;
       py := sn * rsk + cy;
 
-      Result += Sqr((coords^.PreparedData[cnt] - CompressRange((scan.GetPointD_Work(scan.ProcessedImage, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y)) * coords^.Weights[iAngle]);
+      Result += Sqr((coords^.PreparedData[cnt] - CompressRange((scan.GetPointD_Work(scan.Image, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y)) * coords^.Weights[iAngle]);
 
       Inc(cnt);
     end;

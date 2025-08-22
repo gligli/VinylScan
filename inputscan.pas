@@ -89,7 +89,7 @@ type
     function InRangePointD(Y, X: Double): Boolean; inline;
     function GetPointD_Work(const Image: TWordDynArray; Y, X: Double): Double; inline;
     function GetPointD_Final(const Image: TWordDynArray; Y, X: Double): Double; inline;
-    function GetMeanSD(AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;
+    function GetMeanSD(const Image: TWordDynArray; AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;
 
     procedure AddCorrectRef(AngleIdx, ScanIdx: Integer);
     function HasCorrectRef(const AList: TInputScanDynArray; AngleIdx, ScanIdx: Integer): Boolean;
@@ -368,7 +368,7 @@ var
 begin
   BuildSinCosLUT(Ceil(Pi * FProfileRef.ConcentricGroove * FDPI), FSinCosLUT);
 
-  meanSD := GetMeanSD(FProfileRef.MinConcentricGroove * 0.5 * FDPI, FProfileRef.MaxConcentricGroove * 0.5 * FDPI, -Pi, Pi);
+  meanSD := GetMeanSD(FProcessedImage, FProfileRef.MinConcentricGroove * 0.5 * FDPI, FProfileRef.MaxConcentricGroove * 0.5 * FDPI, -Pi, Pi);
 
   X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius];
 
@@ -1177,7 +1177,8 @@ begin
   Result := herpXY(@Image[iy * FWidth + ix], FWidth, X - ix, Y - iy);
 end;
 
-function TInputScan.GetMeanSD(AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;
+function TInputScan.GetMeanSD(const Image: TWordDynArray; AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double
+  ): TPointD;
 var
   iRadius, iLut, cnt: Integer;
   diff, px, py: Double;
@@ -1198,7 +1199,7 @@ begin
       py := sinCosLUT[iLut].Sin * iRadius + FCenter.Y;
       if InRangePointD(py, px) then
       begin
-        Result.X += GetPointD_Work(FProcessedImage, py, px);
+        Result.X += GetPointD_Work(Image, py, px);
         Inc(cnt);
       end;
     end;
@@ -1213,7 +1214,7 @@ begin
       py := sinCosLUT[iLut].Sin * iRadius + FCenter.Y;
       if InRangePointD(py, px) then
       begin
-        Result.Y += Sqr(GetPointD_Work(FProcessedImage, py, px) - Result.X);
+        Result.Y += Sqr(GetPointD_Work(Image, py, px) - Result.X);
         Inc(cnt);
       end;
     end;
