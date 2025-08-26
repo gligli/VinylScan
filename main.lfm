@@ -189,8 +189,8 @@ object MainForm: TMainForm
       Left = 8
       Height = 20
       Top = 294
-      Width = 93
-      Caption = 'Correct angles'
+      Width = 82
+      Caption = 'Correct pass'
       TabOrder = 8
     end
     object chkBrickLim: TCheckBox
@@ -201,12 +201,12 @@ object MainForm: TMainForm
       Caption = 'Brickwall limit scan images'
       TabOrder = 6
     end
-    object chkOptimize: TCheckBox
+    object chkAnalyze: TCheckBox
       Left = 8
       Height = 20
       Top = 275
-      Width = 114
-      Caption = 'Analyze minimizes'
+      Width = 85
+      Caption = 'Analyze pass'
       TabOrder = 7
     end
     object chkDefaultDPI: TCheckBox

@@ -40,8 +40,8 @@ type
     FInputScans: TInputScanDynArray;
     FFixCISScanners: Boolean;
     FBrickwallLimitScans: Boolean;
-    FAnalyzeMinimize: Boolean;
-    FCorrectAngles: Boolean;
+    FAnalyzePass: Boolean;
+    FCorrectPass: Boolean;
     FRebuildScaled: Boolean;
     FRebuildBlendCount: Integer;
     FQualitySpeedRatio: Double;
@@ -95,8 +95,8 @@ type
     property OutputPNGFileName: String read FOutputPNGFileName write FOutputPNGFileName;
     property FixCISScanners: Boolean read FFixCISScanners write FFixCISScanners;
     property BrickwallLimitScans: Boolean read FBrickwallLimitScans write FBrickwallLimitScans;
-    property AnalyzeMinimize: Boolean read FAnalyzeMinimize write FAnalyzeMinimize;
-    property CorrectAngles: Boolean read FCorrectAngles write FCorrectAngles;
+    property AnalyzePass: Boolean read FAnalyzePass write FAnalyzePass;
+    property CorrectPass: Boolean read FCorrectPass write FCorrectPass;
     property RebuildBlendCount: Integer read FRebuildBlendCount write FRebuildBlendCount;
     property RebuildScaled: Boolean read FRebuildScaled write FRebuildScaled;
     property QualitySpeedRatio: Double read FQualitySpeedRatio write FQualitySpeedRatio;
@@ -150,8 +150,8 @@ begin
 
   FFixCISScanners := False;
   FBrickwallLimitScans := False;
-  FAnalyzeMinimize := True;
-  FCorrectAngles := True;
+  FAnalyzePass := True;
+  FCorrectPass := True;
   FRebuildScaled := True;
   FRebuildBlendCount := 32;
   FQualitySpeedRatio := 1.0;
@@ -315,7 +315,7 @@ var
   end;
 
 var
-  pos: Integer;
+  iScan, pos: Integer;
 begin
   WriteLn('AngleInit');
 
@@ -333,6 +333,9 @@ begin
   SetLength(base, pos);
 
   ProcThreadPool.DoParallelLocalProc(@DoScan, 1, High(FInputScans));
+
+  for iScan := 0 to High(FInputScans) do
+    WriteLn(FInputScans[iScan].ImageShortName, ', Angle: ', RadToDeg(FInputScans[iScan].RelativeAngle):9:3, ', CenterX: ', FInputScans[iScan].Center.X:9:3, ', CenterY: ', FInputScans[iScan].Center.Y:9:3);
 end;
 
 function TScanCorrelator.PrepareAnalyze: TDoubleDynArray;
@@ -514,19 +517,13 @@ begin
 
   preparedData := PrepareAnalyze;
 
+  ProcThreadPool.DoParallelLocalProc(@DoEval, 1, High(FInputScans));
+  WriteLn;
+
   for i := 0 to High(FInputScans) do
-    WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ' (before)');
+    WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', RMSE: ', FInputScans[i].Objective:12:9);
 
-  if FAnalyzeMinimize then
-  begin
-    ProcThreadPool.DoParallelLocalProc(@DoEval, 1, High(FInputScans));
-    WriteLn;
-
-    for i := 0 to High(FInputScans) do
-      WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', RMSE: ', FInputScans[i].Objective:12:9, ' (after)');
-
-    QuickSort(FInputScans[0], 1, High(FInputScans), SizeOf(TInputScan), @CompareInputScansObjective);
-  end;
+  QuickSort(FInputScans[0], 1, High(FInputScans), SizeOf(TInputScan), @CompareInputScansObjective);
 end;
 
 procedure TScanCorrelator.Crop;
@@ -1217,9 +1214,9 @@ end;
 procedure TScanCorrelator.Process;
 begin
   AngleInit;
-  Analyze;
+  if FAnalyzePass then Analyze;
   Crop;
-  if FCorrectAngles then Correct;
+  if FCorrectPass then Correct;
   Rebuild;
 end;
 

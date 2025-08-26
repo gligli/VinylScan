@@ -28,7 +28,7 @@ type
     cbDPI: TComboBox;
     cbSR: TComboBox;
     chkBrickLim: TCheckBox;
-    chkOptimize: TCheckBox;
+    chkAnalyze: TCheckBox;
     edInputPNG: TEdit;
     edOutputPNG: TEdit;
     edOutputWAV: TEdit;
@@ -178,8 +178,8 @@ begin
     sc.OutputPNGFileName := edOutputPNG.Text;
     sc.FixCISScanners := chkFixCIS.Checked;
     sc.BrickwallLimitScans := chkBrickLim.Checked;
-    sc.AnalyzeMinimize := chkOptimize.Checked;
-    sc.CorrectAngles := chkCorrect.Checked;
+    sc.AnalyzePass := chkAnalyze.Checked;
+    sc.CorrectPass := chkCorrect.Checked;
     sc.RebuildBlendCount := seBlend.Value;
     sc.RebuildScaled := not chkDefaultDPI.Checked;
     sc.QualitySpeedRatio := StrToFloatDef(cbQSRatio.Text, 1.0, InvariantFormatSettings);
@@ -285,7 +285,7 @@ begin
     scm := TScanCorrelator.Create(FProfiles.CurrentProfileRef, sl);
     try
       scm.OutputPNGFileName := fn;
-      scm.CorrectAngles := True;
+      scm.CorrectPass := True;
       scm.RebuildBlendCount := MaxInt;
 
       scm.LoadScans;
@@ -328,8 +328,8 @@ begin
   try
     chkFixCIS.Checked := sc.FixCISScanners;
     chkBrickLim.Checked := sc.BrickwallLimitScans;
-    chkOptimize.Checked := sc.AnalyzeMinimize;
-    chkCorrect.Checked := sc.CorrectAngles;
+    chkAnalyze.Checked := sc.AnalyzePass;
+    chkCorrect.Checked := sc.CorrectPass;
     seBlend.Value := sc.RebuildBlendCount;
     chkDefaultDPI.Checked := not sc.RebuildScaled;
     cbQSRatio.Text := FormatFloat('0.0', sc.QualitySpeedRatio, InvariantFormatSettings);
