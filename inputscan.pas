@@ -1158,7 +1158,7 @@ begin
   ix := trunc(X);
   iy := trunc(Y);
 
-  Result := herpXY(@Image[iy * FWidth + ix], FWidth, X - ix, Y - iy);
+  Result := lerpXY(@Image[iy * FWidth + ix], FWidth, X - ix, Y - iy);
 end;
 
 function TInputScan.GetPointD_Final(const Image: TWordDynArray; Y, X: Double): Double;
