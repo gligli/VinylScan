@@ -28,6 +28,7 @@ type
     FLastMusicGroove: Double;
     FAdapterSize: Double;
     FMono: Boolean;
+    FCorrectAngleCount: Integer;
 
   public
     constructor Create(AFN: String);
@@ -48,6 +49,7 @@ type
     property LastMusicGroove: Double        read FLastMusicGroove;
     property AdapterSize: Double            read FAdapterSize;
     property Mono: Boolean                  read FMono;
+    property CorrectAngleCount: Integer     read FCorrectAngleCount;
   end;
 
   TProfileArray = array of TProfile;
@@ -104,7 +106,8 @@ begin
     FLastMusicGroove        := GetValue('LastMusicGroove');
     FAdapterSize            := GetValue('AdapterSize');
 
-    FMono                   :=  ini.ReadBool(CSection, 'Mono', True);
+    FMono                   := ini.ReadBool(CSection, 'Mono', True);
+    FCorrectAngleCount      := ini.ReadInteger(CSection, 'CorrectAngleCount', 36);
   finally
     ini.Free;
   end;

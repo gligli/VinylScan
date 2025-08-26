@@ -62,7 +62,6 @@ type
     FAnalyzeAreaEnd: Double;
     FAnalyzeAreaWidth: Double;
 
-    FCorrectAngleCount: Integer;
     FCorrectAreaBegin: Double;
     FCorrectAreaEnd: Double;
     FCorrectAreaWidth: Double;
@@ -163,7 +162,6 @@ begin
   FAnalyzeAreaBegin := FProfileRef.InnerSize;
   FAnalyzeAreaEnd := FProfileRef.LabelOuterSize;
   FAnalyzeAreaWidth := (FAnalyzeAreaEnd - FAnalyzeAreaBegin) * 0.5;
-  FCorrectAngleCount := 36;
   FCorrectAreaBegin := FProfileRef.MinConcentricGroove;
   FCorrectAreaEnd := FProfileRef.StylusSetDown;
   FCorrectAreaWidth := (FCorrectAreaEnd - FCorrectAreaBegin) * 0.5;
@@ -567,8 +565,8 @@ var
   angle, angleExtents, startAngle, endAngle, a0a, a1a, a0b, a1b: Double;
   scan: TInputScan;
 begin
-  angle := (coords.AngleIdx / FCorrectAngleCount) * 2.0 * Pi;
-  angleExtents := 2.0 * Pi / FCorrectAngleCount;
+  angle := (coords.AngleIdx / FProfileRef.CorrectAngleCount) * 2.0 * Pi;
+  angleExtents := 2.0 * Pi / FProfileRef.CorrectAngleCount;
   startAngle := NormalizeAngle(angle - angleExtents);
   endAngle := NormalizeAngle(angle + angleExtents);
 
@@ -941,7 +939,7 @@ begin
   if Length(FInputScans) <= 1 then
     Exit;
 
-  SetLength(FPerAngleSkew, FCorrectAngleCount * High(FInputScans), 1);
+  SetLength(FPerAngleSkew, FProfileRef.CorrectAngleCount * High(FInputScans), 1);
   SetLength(coordsArray, Length(FPerAngleSkew));
   SetLength(rmses, Length(FPerAngleSkew));
 
@@ -952,7 +950,7 @@ begin
   begin
     coords := @coordsArray[ias];
 
-    DivMod(ias, FCorrectAngleCount, coords^.ScanIdx, coords^.AngleIdx);
+    DivMod(ias, FProfileRef.CorrectAngleCount, coords^.ScanIdx, coords^.AngleIdx);
     Inc(coords^.ScanIdx);
 
     if InitCorrect(coords^, True) then
@@ -967,7 +965,7 @@ begin
 
     if coords^.BaseScanIdx > 0 then
     begin
-      iasbase := (coords^.BaseScanIdx - 1) * FCorrectAngleCount + coords^.AngleIdx;
+      iasbase := (coords^.BaseScanIdx - 1) * FProfileRef.CorrectAngleCount + coords^.AngleIdx;
       baseCoords := @coordsArray[iasbase];
 
       if IsNan(baseCoords^.StartAngle) or IsNan(baseCoords^.EndAngle) then
@@ -988,14 +986,14 @@ begin
   // cumulate
 
   for iscan := 1 to High(FInputScans) do
-    for iangle := 0 to FCorrectAngleCount - 1 do
+    for iangle := 0 to FProfileRef.CorrectAngleCount - 1 do
     begin
-      ias := (iscan - 1) * FCorrectAngleCount + iangle;
+      ias := (iscan - 1) * FProfileRef.CorrectAngleCount + iangle;
 
       iasbase := ias;
       while True do
       begin
-        iasbase := (coordsArray[iasbase].BaseScanIdx - 1) * FCorrectAngleCount + iangle;
+        iasbase := (coordsArray[iasbase].BaseScanIdx - 1) * FProfileRef.CorrectAngleCount + iangle;
 
         if iasbase < 0 then
           Break;
@@ -1008,12 +1006,12 @@ begin
   // log
 
   for iscan := 1 to High(FInputScans) do
-    for iangle := 0 to FCorrectAngleCount - 1 do
+    for iangle := 0 to FProfileRef.CorrectAngleCount - 1 do
     begin
-      ias := (iscan - 1) * FCorrectAngleCount + iangle;
+      ias := (iscan - 1) * FProfileRef.CorrectAngleCount + iangle;
 
       Write(FInputScans[iscan].ImageShortName);
-      Write(', Angle:', (iangle / FCorrectAngleCount) * 360.0:9:3);
+      Write(', Angle:', (iangle / FProfileRef.CorrectAngleCount) * 360.0:9:3);
       Write(', RMSE:', rmses[ias]:12:6);
       if not IsNan(rmses[ias]) then
         Write(', Const:', FPerAngleSkew[ias, 0].ConstSkew:9:3, ', Mul:', FPerAngleSkew[ias, 0].MulSkew:12:8);
@@ -1058,11 +1056,11 @@ var
     c := tau * TauToAngleIdx;
     ci := Trunc(c);
     alpha := c - ci;
-    so := (scanIdx - 1) * FCorrectAngleCount;
+    so := (scanIdx - 1) * FProfileRef.CorrectAngleCount;
 
     for iInterp := Low(r) to High(r) do
     begin
-      pp := FPerAngleSkew[(ci + iInterp + FCorrectAngleCount) mod FCorrectAngleCount + so];
+      pp := FPerAngleSkew[(ci + iInterp + FProfileRef.CorrectAngleCount) mod FProfileRef.CorrectAngleCount + so];
 
       rr := radius;
       for iPoly := 0 to High(pp) do
@@ -1149,7 +1147,7 @@ var
 begin
   WriteLn('Rebuild');
 
-  TauToAngleIdx := FCorrectAngleCount / (2.0 * Pi);
+  TauToAngleIdx := FProfileRef.CorrectAngleCount / (2.0 * Pi);
 
   FOutputWidth := Ceil(FProfileRef.OuterSize * FOutputDPI);
   FOutputHeight := FOutputWidth;
