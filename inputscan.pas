@@ -89,6 +89,7 @@ type
     function GetPointD_Work(const Image: TWordDynArray; Y, X: Double): Double; inline;
     function GetPointD_Final(const Image: TWordDynArray; Y, X: Double): Double; inline;
     function GetMeanSD(const Image: TWordDynArray; AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;
+    procedure GetGradientsD(const Image: TWordDynArray; Y, X: Double; out GY: Double; out GX: Double);
 
     procedure AddCorrectRef(AngleIdx, ScanIdx: Integer);
     function HasCorrectRef(const AList: TInputScanDynArray; AngleIdx, ScanIdx: Integer): Boolean;
@@ -281,44 +282,16 @@ procedure TInputScan.GradientConcentricGroove(const arg: TDoubleDynArray; var fu
   obj: Pointer);
 var
   meanSD: ^TPointD absolute obj;
+  iLut: Integer;
+  px, py, cx, cy, r, cs, sn, imgInt, gInt, gimgx, gimgy, gcx, gcy, gr, rsx, sy: Double;
   stencilX: array[TValueSign] of Double;
   stencilY: array[TValueSign] of Integer;
-
-  function DoFunc(CenterX, CenterY, Radius: Double): Double;
-  var
-    iLut: Integer;
-    px, py, cs, sn, rsx, sy: Double;
-    vs: TValueSign;
-  begin
-    Result := 0.0;
-
-    for iLut := 0 to High(FSinCosLUT) do
-    begin
-      cs := FSinCosLUT[iLut].Cos;
-      sn := FSinCosLUT[iLut].Sin;
-
-      for vs := Low(TValueSign) to High(TValueSign) do
-      begin
-        rsx := Radius + stencilX[vs];
-        sy := stencilY[vs];
-
-        px := cs * rsx + CenterX;
-        py := sn * rsx + CenterY;
-
-        if InRangePointD(py, px) then
-          Result -= CompressRange((GetPointD_Work(FProcessedImage, py, px) - meanSD^.X) * meanSD^.Y) * sy
-        else
-          Result += 1e6;
-      end;
-    end;
-  end;
-
-const
-  CH = 1e-8;
-var
-  iFD: Integer;
-  CenterX, CenterY, Radius, fdx, fdy, gskc, gskm, gsks: Double;
+  vs: TValueSign;
 begin
+  cx := arg[0];
+  cy := arg[1];
+  r := arg[2];
+
   stencilY[NegativeValue] := -1;
   stencilY[ZeroValue] := 4;
   stencilY[PositiveValue] := -1;
@@ -327,34 +300,52 @@ begin
   stencilX[ZeroValue] := 0;
   stencilX[PositiveValue] := FProfileRef.LeadOutGrooveThickness * FDPI;
 
-  CenterX := arg[0];
-  CenterY := arg[1];
-  Radius := arg[2];
+  func := 0.0;
+  if Assigned(grad) then
+    FillQWord(grad[0], Length(grad), 0);
 
-  func := DoFunc(CenterX, CenterY, Radius);
+  gcx := 0.0;
+  gcy := 0.0;
+  gr := 0.0;
+
+  for iLut := 0 to High(FSinCosLUT) do
+  begin
+    cs := FSinCosLUT[iLut].Cos;
+    sn := FSinCosLUT[iLut].Sin;
+
+    for vs := Low(TValueSign) to High(TValueSign) do
+    begin
+      rsx := r + stencilX[vs];
+      sy := stencilY[vs];
+
+      px := cs * rsx + cx;
+      py := sn * rsx + cy;
+
+      if InRangePointD(py, px) then
+      begin
+        imgInt := CompressRange((GetPointD_Work(FProcessedImage, py, px) - meanSD^.X) * meanSD^.Y);
+
+        func -= imgInt * sy;
+
+        if Assigned(grad) then
+        begin
+          GetGradientsD(FProcessedImage, py, px, gimgy, gimgx);
+
+          gInt := meanSD^.Y * sy * (1.0 - Sqr(imgInt));
+
+          gcx -= gimgx * gInt;
+          gcy -= gimgy * gInt;
+          gr -= (gimgx * cs + gimgy * sn) * gInt;
+        end;
+      end;
+    end;
+  end;
 
   if Assigned(grad) then
   begin
-    gskc := 0.0;
-    gskm := 0.0;
-    gsks := 0.0;
-
-    for iFD := Low(CFiniteDifferencesYFactor) to High(CFiniteDifferencesYFactor) do
-    begin
-      if iFD = 0 then
-        Continue;
-
-      fdx := iFD * CH;
-      fdy := CFiniteDifferencesYFactor[iFD] / CH;
-
-      gskc += DoFunc(CenterX + fdx, CenterY, Radius) * fdy;
-      gskm += DoFunc(CenterX, CenterY + fdx, Radius) * fdy;
-      gsks += DoFunc(CenterX, CenterY, Radius + fdx) * fdy;
-    end;
-
-    grad[0] := gskc;
-    grad[1] := gskm;
-    grad[2] := gsks;
+    grad[0] := gcx;
+    grad[1] := gcy;
+    grad[2] := gr;
   end;
 end;
 
@@ -1217,6 +1208,32 @@ begin
   Result.Y := DivDef(1.0, Result.Y, 1.0);
 
   //WriteLn(Result.X:16:6, Result.Y:16:6);
+end;
+
+procedure TInputScan.GetGradientsD(const Image: TWordDynArray; Y, X: Double; out GY: Double; out GX: Double);
+const
+  CH = 0.25;
+var
+  iFD: Integer;
+  lgx, lgy, fdx, fdy: Double;
+begin
+  lgx := 0.0;
+  lgy := 0.0;
+
+  for iFD := Low(CFiniteDifferencesYFactor) to High(CFiniteDifferencesYFactor) do
+  begin
+    if iFD = 0 then
+      Continue;
+
+    fdx := iFD * CH;
+    fdy := CFiniteDifferencesYFactor[iFD] / CH;
+
+    lgx += GetPointD_Work(Image, y, x + fdx) * fdy;
+    lgy += GetPointD_Work(Image, y + fdx, x) * fdy;
+  end;
+
+  GX := lgx;
+  GY := lgy;
 end;
 
 procedure TInputScan.AddCorrectRef(AngleIdx, ScanIdx: Integer);
