@@ -21,7 +21,7 @@ type
     StartAngle, EndAngle, AngleInc: Double;
     RadiusCnt, AngleCnt: Integer;
 
-    ConstSkew, MulSkew: Double;
+    GSSkew: TCorrectSkew;
     MeanSD: TPointD;
     MeanSDArr: TPointDDynArray;
 
@@ -834,7 +834,7 @@ begin
   scan := FInputScans[iScan];
 
   skew.ConstSkew := arg[0];
-  skew.MulSkew := arg[1];
+  skew.MulSkew := arg[1] * 1e-3;
 
   cx := scan.Center.X;
   cy := scan.Center.Y;
@@ -885,14 +885,14 @@ function TScanCorrelator.GridSearchCorrectConst(const arg: TVector; obj: Pointer
 var
   coords: PCorrectCoords absolute obj;
 begin
-  Result := NelderMeadCorrect([arg[0], coords^.MulSkew], obj);
+  Result := NelderMeadCorrect([arg[0], coords^.GSSkew.MulSkew], obj);
 end;
 
 function TScanCorrelator.GridSearchCorrectMul(const arg: TVector; obj: Pointer): TScalar;
 var
   coords: PCorrectCoords absolute obj;
 begin
-  Result := NelderMeadCorrect([coords^.ConstSkew, arg[0]], obj);
+  Result := NelderMeadCorrect([coords^.GSSkew.ConstSkew, arg[0]], obj);
 end;
 
 procedure TScanCorrelator.Correct;
@@ -928,19 +928,19 @@ var
       PrepareCorrect(coords^);
 
       loss := Infinity;
-      coords^.ConstSkew := X[0];
-      coords^.MulSkew := X[1];
+      coords^.GSSkew.ConstSkew := X[0];
+      coords^.GSSkew.MulSkew := X[1];
 
       for iMul := -CMulCorrectHalfCount to CMulCorrectHalfCount do
       begin
-        skm := iMul * CMulCorrectExtents / CMulCorrectHalfCount;
+        skm := iMul * CMulCorrectExtents / CMulCorrectHalfCount * 1e3;
 
         f := GridSearchCorrectMul([skm], coords);
 
         if f < loss then
         begin
           loss := f;
-          coords^.MulSkew := skm;
+          coords^.GSSkew.MulSkew := skm;
         end;
       end;
 
@@ -953,12 +953,12 @@ var
         if f < loss then
         begin
           loss := f;
-          coords^.ConstSkew := skc;
+          coords^.GSSkew.ConstSkew := skc;
         end;
       end;
 
-      X := [coords^.ConstSkew, coords^.MulSkew];
-      loss := NelderMeadMinimize(@NelderMeadCorrect, X, [0.01, 0.0001], 1e-9, coords);
+      X := [coords^.GSSkew.ConstSkew, coords^.GSSkew.MulSkew];
+      loss := NelderMeadMinimize(@NelderMeadCorrect, X, [0.01, 0.01], 1e-6, coords);
 
       // free up memory
       SetLength(coords^.PreparedData, 0);
@@ -970,7 +970,7 @@ var
 
     rmses[AIndex] := loss;
     FPerAngleSkew[AIndex, 0].ConstSkew := X[0];
-    FPerAngleSkew[AIndex, 0].MulSkew := X[1];
+    FPerAngleSkew[AIndex, 0].MulSkew := X[1] * 1e-3;
   end;
 
 var
