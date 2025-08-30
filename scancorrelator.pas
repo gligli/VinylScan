@@ -338,7 +338,7 @@ end;
 
 function TScanCorrelator.PrepareAnalyze: TDoubleDynArray;
 var
-  iRadius, pos, cnt, angleCnt: Integer;
+  iRadiusAngle, pos, cnt, angleCnt, radiusCnt: Integer;
   t, rBeg, px, py, cx, cy, r, ri, sn, cs: Double;
   sinCosLUT: TSinCosDynArray;
   baseScan: TInputScan;
@@ -347,7 +347,8 @@ begin
   baseScan := FInputScans[0];
 
   angleCnt := Ceil(baseScan.PointsPerRevolution * FQualitySpeedRatio);
-  cnt := Ceil(FAnalyzeAreaWidth * baseScan.DPI * angleCnt);
+  radiusCnt := Ceil(FAnalyzeAreaWidth * baseScan.DPI);
+  cnt := radiusCnt * angleCnt;
   SetLength(Result, cnt);
 
   t   := baseScan.RelativeAngle;
@@ -360,23 +361,23 @@ begin
   pos := 0;
   rBeg := FAnalyzeAreaBegin * 0.5 * baseScan.DPI;
   ri := 1.0 / angleCnt;
-  for iRadius := 0 to High(Result) do
+  for iRadiusAngle := 0 to High(Result) do
   begin
     cs := sinCosLUT[pos].Cos;
     sn := sinCosLUT[pos].Sin;
 
-    r := rBeg + iRadius * ri;
+    r := rBeg + iRadiusAngle * ri;
 
     px := cs * r + cx;
     py := sn * r + cy;
 
     if baseScan.InRangePointD(py, px) then
     begin
-      Result[iRadius] := CompressRange((baseScan.GetPointD_Work(baseScan.ProcessedImage, py, px) - baseMeanSD.X) * baseMeanSD.Y);
+      Result[iRadiusAngle] := CompressRange((baseScan.GetPointD_Work(baseScan.ProcessedImage, py, px) - baseMeanSD.X) * baseMeanSD.Y);
     end
     else
     begin
-      Result[iRadius] := 1e-6;
+      Result[iRadiusAngle] := 1e-6;
     end;
 
     Inc(pos);
@@ -401,7 +402,7 @@ var
   procedure DoSpiral(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     iAngle, pos: Integer;
-    px, py, r, sn, cs, funcAcc, gtAcc, gcxAcc, gcyAcc, imgInt, mseInt, gInt, gimgx, gimgy, gr, gt, gcx, gcy: Double;
+    px, py, r, sn, cs, funcAcc, gtAcc, gcxAcc, gcyAcc, imgInt, mseInt, gInt, gimgx, gimgy, gr: Double;
   begin
     if not InRange(AIndex, 0, radiusCnt - 1) then
       Exit;
@@ -433,13 +434,9 @@ var
         gInt := -2.0 * coords^.MeanSD.Y * (1.0 - Sqr(imgInt)) * mseInt;
         gr := r;
 
-        gt := (gimgx * -sn + gimgy * cs) * gr;
-        gcx := gimgx;
-        gcy := gimgy;
-
-        gtAcc += gt * gInt;
-        gcxAcc += gcx * gInt;
-        gcyAcc += gcy * gInt;
+        gtAcc += (gimgx * -sn + gimgy * cs) * gr * gInt;
+        gcxAcc += gimgx * gInt;
+        gcyAcc += gimgy * gInt;
       end;
 
       Inc(pos);
