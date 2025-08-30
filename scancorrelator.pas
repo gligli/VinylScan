@@ -13,6 +13,16 @@ type
     ConstSkew, MulSkew: Double;
   end;
 
+  { TAnalyzeCoords }
+
+  TAnalyzeCoords = record
+    ScanIdx: Integer;
+    MeanSD: TPointD;
+    PreparedData: TDoubleDynArray;
+  end;
+
+  PAnalyzeCoords = ^TAnalyzeCoords;
+
   { TCorrectCoords }
 
   TCorrectCoords = record
@@ -22,7 +32,6 @@ type
     RadiusCnt, AngleCnt: Integer;
 
     GSSkew: TCorrectSkew;
-    MeanSD: TPointD;
     MeanSDArr: TPointDDynArray;
 
     SinCosLUT: TSinCosDynArray;
@@ -389,7 +398,7 @@ end;
 
 procedure TScanCorrelator.GradientAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
 var
-  coords: PCorrectCoords absolute obj;
+  coords: PAnalyzeCoords absolute obj;
 
   radiusCnt, angleCnt: Integer;
   sinCosLUT: TSinCosDynArray;
@@ -523,7 +532,7 @@ var
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
-    coords: TCorrectCoords;
+    coords: TAnalyzeCoords;
     func: Double;
     X: TVector;
     scan: TInputScan;
@@ -535,7 +544,6 @@ var
 
     scan := FInputScans[AIndex];
 
-    coords.AngleIdx := -1;
     coords.ScanIdx := AIndex;
     coords.PreparedData := preparedData;
     coords.MeanSD := scan.GetMeanSD(scan.ProcessedImage, FAnalyzeAreaBegin * 0.5 * scan.DPI, FAnalyzeAreaEnd * 0.5 * scan.DPI, -Pi, Pi);
