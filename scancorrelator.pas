@@ -8,6 +8,10 @@ uses
   Classes, SysUtils, Types, Math, Graphics, GraphType, IntfGraphics, FPCanvas, FPImage, PNGComn, ZStream, MTProcs, TypInfo,
   utils, inputscan, profiles, powell, hackedwritepng;
 
+const
+  CAnalyzeSigma = 2.0;
+  CCorrectSigma = 0.25;
+
 type
   TCorrectSkew = record
     ConstSkew, MulSkew: Double;
@@ -78,6 +82,8 @@ type
     procedure CorrectAnglesFromCoords(const coords: TCorrectCoords; out AStartAngle, AEndAngle, angleInc: Double; out
       angleCnt: Integer; AReduceAngles: Boolean);
     function SkewRadius(ARadius: Double; const ASkew: TCorrectSkew): Double;
+    function MulSkewToArg(x: Double): Double;
+    function ArgToMulSkew(x: Double): Double;
 
     function PrepareAnalyze: TDoubleDynArray;
     procedure GradientAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
@@ -171,7 +177,7 @@ begin
   FAnalyzeAreaBegin := FProfileRef.InnerSize;
   FAnalyzeAreaEnd := FProfileRef.LabelOuterSize;
   FAnalyzeAreaWidth := (FAnalyzeAreaEnd - FAnalyzeAreaBegin) * 0.5;
-  FCorrectAreaBegin := FProfileRef.MinConcentricGroove;
+  FCorrectAreaBegin := FProfileRef.ConcentricGroove;
   FCorrectAreaEnd := FProfileRef.StylusSetDown;
   FCorrectAreaWidth := (FCorrectAreaEnd - FCorrectAreaBegin) * 0.5;
 end;
@@ -365,7 +371,7 @@ begin
   cy  := baseScan.Center.Y;
 
   BuildSinCosLUT(angleCnt, sinCosLUT, t);
-  baseMeanSD := baseScan.GetMeanSD(baseScan.ProcessedImage, FAnalyzeAreaBegin * 0.5 * baseScan.DPI, FAnalyzeAreaEnd * 0.5 * baseScan.DPI, -Pi, Pi);
+  baseMeanSD := baseScan.GetMeanSD(baseScan.ProcessedImage, FAnalyzeAreaBegin * 0.5 * baseScan.DPI, FAnalyzeAreaEnd * 0.5 * baseScan.DPI, -Pi, Pi, CAnalyzeSigma);
 
   pos := 0;
   rBeg := FAnalyzeAreaBegin * 0.5 * baseScan.DPI;
@@ -403,15 +409,15 @@ var
   radiusCnt, angleCnt: Integer;
   sinCosLUT: TSinCosDynArray;
   scan: TInputScan;
-  rBeg, rEnd, cx, cy, ri: Double;
+  rBeg, rEnd, cx, cy, skx, sky, ri: Double;
   results: array of record
-    func, gt, gcx, gcy: Double;
+    func, gt, gcx, gcy, gskx, gsky: Double;
   end;
 
   procedure DoSpiral(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     iAngle, pos: Integer;
-    px, py, r, sn, cs, funcAcc, gtAcc, gcxAcc, gcyAcc, imgInt, mseInt, gInt, gimgx, gimgy, gr: Double;
+    px, py, r, sn, cs, funcAcc, gtAcc, gcxAcc, gcyAcc, gskxAcc, gskyAcc, imgInt, mseInt, gInt, gimgx, gimgy, gr: Double;
   begin
     if not InRange(AIndex, 0, radiusCnt - 1) then
       Exit;
@@ -421,6 +427,8 @@ var
     gtAcc := 0.0;
     gcxAcc := 0.0;
     gcyAcc := 0.0;
+    gskxAcc := 0.0;
+    gskyAcc := 0.0;
 
     for iAngle := 0 to angleCnt - 1 do
     begin
@@ -429,8 +437,8 @@ var
 
       r := rBeg + pos * ri;
 
-      px := cs * r + cx;
-      py := sn * r + cy;
+      px := cs * r * skx + cx;
+      py := sn * r * sky + cy;
 
       imgInt := CompressRange((scan.GetPointD_Work(scan.ProcessedImage, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y);
       mseInt := coords^.PreparedData[pos] - imgInt;
@@ -446,6 +454,8 @@ var
         gtAcc += (gimgx * -sn + gimgy * cs) * gr * gInt;
         gcxAcc += gimgx * gInt;
         gcyAcc += gimgy * gInt;
+        gskxAcc += gimgx * cs * gr * gInt;
+        gskyAcc += gimgy * sn * gr * gInt;
       end;
 
       Inc(pos);
@@ -455,6 +465,8 @@ var
     results[AIndex].gt := gtAcc;
     results[AIndex].gcx := gcxAcc;
     results[AIndex].gcy := gcyAcc;
+    results[AIndex].gskx := gskxAcc;
+    results[AIndex].gsky := gskyAcc;
   end;
 
 var
@@ -472,12 +484,14 @@ begin
   t := arg[0];
   cx := arg[1];
   cy := arg[2];
+  skx := arg[3];
+  sky := arg[4];
 
   rBeg := FAnalyzeAreaBegin * 0.5 * scan.DPI;
   rEnd := FAnalyzeAreaEnd * 0.5 * scan.DPI;
   ri := 1.0 / angleCnt;
 
-  if not scan.InRangePointD(cy - rEnd, cx - rEnd) or not scan.InRangePointD(cy + rEnd, cx + rEnd) then
+  if not scan.InRangePointD(cy - rEnd * sky, cx - rEnd * skx) or not scan.InRangePointD(cy + rEnd * sky, cx + rEnd * skx) then
     Exit;
 
   BuildSinCosLUT(angleCnt, sinCosLUT, t);
@@ -495,6 +509,8 @@ begin
       grad[0] += results[iRes].gt;
       grad[1] += results[iRes].gcx;
       grad[2] += results[iRes].gcy;
+      grad[3] += results[iRes].gskx;
+      grad[4] += results[iRes].gsky;
     end;
   end;
   func /= cnt;
@@ -503,6 +519,8 @@ begin
     grad[0] /= cnt;
     grad[1] /= cnt;
     grad[2] /= cnt;
+    grad[3] /= cnt;
+    grad[4] /= cnt;
   end;
 
   scan.Objective := Min(scan.Objective, Sqrt(func));
@@ -529,6 +547,7 @@ end;
 procedure TScanCorrelator.Analyze;
 var
   preparedData: TDoubleDynArray;
+  skewData: TPointDDynArray;
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
@@ -546,13 +565,15 @@ var
 
     coords.ScanIdx := AIndex;
     coords.PreparedData := preparedData;
-    coords.MeanSD := scan.GetMeanSD(scan.ProcessedImage, FAnalyzeAreaBegin * 0.5 * scan.DPI, FAnalyzeAreaEnd * 0.5 * scan.DPI, -Pi, Pi);
+    coords.MeanSD := scan.GetMeanSD(scan.ProcessedImage, FAnalyzeAreaBegin * 0.5 * scan.DPI, FAnalyzeAreaEnd * 0.5 * scan.DPI, -Pi, Pi, CAnalyzeSigma);
 
-    X := [scan.RelativeAngle, scan.Center.X, scan.Center.Y];
+    X := [scan.RelativeAngle, scan.Center.X, scan.Center.Y, skewData[AIndex].X, skewData[AIndex].Y];
     func := BFGSMinimize(@GradientAnalyze, X, 1e-9, @coords);
 
     scan.Objective := Sqrt(func);
     scan.CorrectByModel(X[1], X[2], X[0]);
+    skewData[AIndex].X := X[3];
+    skewData[AIndex].Y := X[4];
   end;
 
 var
@@ -565,11 +586,18 @@ begin
 
   preparedData := PrepareAnalyze;
 
+  SetLength(skewData, Length(FInputScans));
+  for i := 0 to High(FInputScans) do
+  begin
+    skewData[i].X := 1.0;
+    skewData[i].Y := 1.0;
+  end;
+
   ProcThreadPool.DoParallelLocalProc(@DoEval, 1, High(FInputScans));
   WriteLn;
 
   for i := 0 to High(FInputScans) do
-    WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', RMSE: ', FInputScans[i].Objective:12:9);
+    WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', SkewX: ', skewData[i].X:9:6, ', SkewY: ', skewData[i].Y:9:6, ', RMSE: ', FInputScans[i].Objective:12:9);
 
   QuickSort(FInputScans[0], 1, High(FInputScans), SizeOf(TInputScan), @CompareInputScansObjective);
 end;
@@ -686,6 +714,16 @@ begin
   Result := ARadius + ASkew.MulSkew * ARadius + ASkew.ConstSkew;
 end;
 
+function TScanCorrelator.MulSkewToArg(x: Double): Double;
+begin
+  Result := x * 1e5;
+end;
+
+function TScanCorrelator.ArgToMulSkew(x: Double): Double;
+begin
+  Result := x / 1e5;
+end;
+
 function TScanCorrelator.InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
 var
   iAngle, iBaseScan, v, best: Integer;
@@ -762,7 +800,7 @@ begin
   for iRadius := 0 to coords.RadiusCnt - 1 do
   begin
     r := rBeg + iRadius;
-    baseMeanSD[iRadius] := baseScan.GetMeanSD(baseScan.Image, r - rExt, r + rExt, NormalizeAngle(coords.StartAngle + t),  NormalizeAngle(coords.EndAngle + t));
+    baseMeanSD[iRadius] := baseScan.GetMeanSD(baseScan.Image, r - rExt, r + rExt, NormalizeAngle(coords.StartAngle + t),  NormalizeAngle(coords.EndAngle + t), CCorrectSigma);
   end;
 
   // build weights lookup table
@@ -822,7 +860,7 @@ begin
   for iRadius := 0 to coords.RadiusCnt - 1 do
   begin
     r := rBeg + iRadius;
-    coords.MeanSDArr[iRadius] := curScan.GetMeanSD(curScan.Image, r - rExt, r + rExt, NormalizeAngle(coords.StartAngle + t),  NormalizeAngle(coords.EndAngle + t));
+    coords.MeanSDArr[iRadius] := curScan.GetMeanSD(curScan.Image, r - rExt, r + rExt, NormalizeAngle(coords.StartAngle + t),  NormalizeAngle(coords.EndAngle + t), CCorrectSigma);
   end;
 end;
 
@@ -830,7 +868,7 @@ function TScanCorrelator.NelderMeadCorrect(const arg: TVector; obj: Pointer): TS
 var
   coords: PCorrectCoords absolute obj;
   cnt, iRadius, iScan, iAngle: Integer;
-  r, rBeg, rInner, rOuter, sn, cs, px, py, cx, cy, rsk: Double;
+  r, rBeg, sn, cs, px, py, cx, cy, rsk: Double;
   skew: TCorrectSkew;
   scan: TInputScan;
   mnsd: TPointD;
@@ -839,30 +877,28 @@ begin
   scan := FInputScans[iScan];
 
   skew.ConstSkew := arg[0];
-  skew.MulSkew := arg[1] * 1e-3;
+  skew.MulSkew := ArgToMulSkew(arg[1]);
 
   cx := scan.Center.X;
   cy := scan.Center.Y;
 
   // parse image arcs
 
-  Result := 0;
-  cnt := 0;
   rBeg := FCorrectAreaBegin * 0.5 * scan.DPI;
-  rInner := FProfileRef.InnerSize * 0.5 * scan.DPI;
-  rOuter := FProfileRef.OuterSize * 0.5 * scan.DPI;
+
+  if not InRange(SkewRadius(rBeg, skew), FProfileRef.MinConcentricGroove * 0.5 * scan.DPI, FProfileRef.MaxConcentricGroove * 0.5 * scan.DPI) then
+    Exit(1e6);
+
+  if not InRange(SkewRadius(rBeg + coords^.RadiusCnt, skew), FProfileRef.FirstMusicGroove * 0.5 * scan.DPI, FProfileRef.OuterSize * 0.5 * scan.DPI) then
+    Exit(1e6);
+
+  Result := 0.0;
+  cnt := 0;
   for iRadius := 0 to coords^.RadiusCnt - 1 do
   begin
     r := rBeg + iRadius;
 
     rsk := SkewRadius(r, skew);
-
-    if not InRange(rsk, rInner, rOuter) then
-    begin
-      Result += Sqr(1e6) * coords^.AngleCnt;
-      Inc(cnt, coords^.AngleCnt);
-      Continue;
-    end;
 
     mnsd := coords^.MeanSDArr[iRadius];
 
@@ -938,7 +974,7 @@ var
 
       for iMul := -CMulCorrectHalfCount to CMulCorrectHalfCount do
       begin
-        skm := iMul * CMulCorrectExtents / CMulCorrectHalfCount * 1e3;
+        skm := MulSkewToArg(iMul * CMulCorrectExtents / CMulCorrectHalfCount);
 
         f := GridSearchCorrectMul([skm], coords);
 
@@ -975,7 +1011,7 @@ var
 
     rmses[AIndex] := loss;
     FPerAngleSkew[AIndex, 0].ConstSkew := X[0];
-    FPerAngleSkew[AIndex, 0].MulSkew := X[1] * 1e-3;
+    FPerAngleSkew[AIndex, 0].MulSkew := ArgToMulSkew(X[1]);
   end;
 
 var

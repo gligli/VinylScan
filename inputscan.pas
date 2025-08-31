@@ -88,7 +88,7 @@ type
     function InRangePointD(Y, X: Double): Boolean; inline;
     function GetPointD_Work(const Image: TWordDynArray; Y, X: Double): Double; inline;
     function GetPointD_Final(const Image: TWordDynArray; Y, X: Double): Double; inline;
-    function GetMeanSD(const Image: TWordDynArray; AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double): TPointD;
+    function GetMeanSD(const Image: TWordDynArray; AStartRadius, AEndRadius, AStartAngle, AEndAngle, ASigma: Double): TPointD;
     procedure GetGradientsD(const Image: TWordDynArray; Y, X: Double; out GY: Double; out GX: Double);
 
     procedure AddCorrectRef(AngleIdx, ScanIdx: Integer);
@@ -357,7 +357,7 @@ var
 begin
   BuildSinCosLUT(Ceil(Pi * FProfileRef.ConcentricGroove * FDPI), FSinCosLUT);
 
-  meanSD := GetMeanSD(FProcessedImage, FProfileRef.MinConcentricGroove * 0.5 * FDPI, FProfileRef.MaxConcentricGroove * 0.5 * FDPI, -Pi, Pi);
+  meanSD := GetMeanSD(FProcessedImage, FProfileRef.MinConcentricGroove * 0.5 * FDPI, FProfileRef.MaxConcentricGroove * 0.5 * FDPI, -Pi, Pi, 1.0);
 
   X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius];
 
@@ -1162,8 +1162,8 @@ begin
   Result := herpXY(@Image[iy * FWidth + ix], FWidth, X - ix, Y - iy);
 end;
 
-function TInputScan.GetMeanSD(const Image: TWordDynArray; AStartRadius, AEndRadius, AStartAngle, AEndAngle: Double
-  ): TPointD;
+function TInputScan.GetMeanSD(const Image: TWordDynArray; AStartRadius, AEndRadius, AStartAngle, AEndAngle,
+  ASigma: Double): TPointD;
 var
   iRadius, iLut, cnt: Integer;
   diff, px, py: Double;
@@ -1204,7 +1204,7 @@ begin
       end;
     end;
   Result.Y /= cnt;
-  Result.Y := Sqrt(Result.Y);
+  Result.Y := Sqrt(Result.Y) * ASigma;
   Result.Y := DivDef(1.0, Result.Y, 1.0);
 
   //WriteLn(Result.X:16:6, Result.Y:16:6);
