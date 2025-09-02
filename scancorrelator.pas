@@ -35,7 +35,6 @@ type
     StartAngle, EndAngle, AngleInc: Double;
     RadiusCnt, AngleCnt: Integer;
 
-    GSSkew: TCorrectSkew;
     MeanSDArr: TPointDDynArray;
 
     SinCosLUT: TSinCosDynArray;
@@ -82,16 +81,14 @@ type
     procedure CorrectAnglesFromCoords(const coords: TCorrectCoords; out AStartAngle, AEndAngle, angleInc: Double; out
       angleCnt: Integer; AReduceAngles: Boolean);
     function SkewRadius(ARadius: Double; const ASkew: TCorrectSkew): Double;
-    function MulSkewToArg(x: Double): Double;
-    function ArgToMulSkew(x: Double): Double;
+    function ArgToSkew(arg: TVector): TCorrectSkew;
+    function SkewToArg(const skew: TCorrectSkew): TVector;
 
     function PrepareAnalyze: TDoubleDynArray;
     procedure GradientAnalyze(const arg: TVector; var func: Double; grad: TVector; obj: Pointer);
     function InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
     procedure PrepareCorrect(var coords: TCorrectCoords);
     function NelderMeadCorrect(const arg: TVector; obj: Pointer): TScalar;
-    function GridSearchCorrectConst(const arg: TVector; obj: Pointer): TScalar;
-    function GridSearchCorrectMul(const arg: TVector; obj: Pointer): TScalar;
 
     procedure AngleInit;
     procedure Analyze;
@@ -714,14 +711,15 @@ begin
   Result := ARadius + ASkew.MulSkew * ARadius + ASkew.ConstSkew;
 end;
 
-function TScanCorrelator.MulSkewToArg(x: Double): Double;
+function TScanCorrelator.ArgToSkew(arg: TVector): TCorrectSkew;
 begin
-  Result := x * 1e5;
+  Result.ConstSkew := arg[0];
+  Result.MulSkew := arg[1] * 1e-6;
 end;
 
-function TScanCorrelator.ArgToMulSkew(x: Double): Double;
+function TScanCorrelator.SkewToArg(const skew: TCorrectSkew): TVector;
 begin
-  Result := x / 1e5;
+  Result := [skew.ConstSkew, skew.MulSkew * 1e6];
 end;
 
 function TScanCorrelator.InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
@@ -876,8 +874,7 @@ begin
   iScan := coords^.ScanIdx;
   scan := FInputScans[iScan];
 
-  skew.ConstSkew := arg[0];
-  skew.MulSkew := ArgToMulSkew(arg[1]);
+  skew := ArgToSkew(arg);
 
   cx := scan.Center.X;
   cy := scan.Center.Y;
@@ -889,7 +886,7 @@ begin
   if not InRange(SkewRadius(rBeg, skew), FProfileRef.MinConcentricGroove * 0.5 * scan.DPI, FProfileRef.MaxConcentricGroove * 0.5 * scan.DPI) then
     Exit(1e6);
 
-  if not InRange(SkewRadius(rBeg + coords^.RadiusCnt, skew), FProfileRef.FirstMusicGroove * 0.5 * scan.DPI, FProfileRef.OuterSize * 0.5 * scan.DPI) then
+  if not InRange(SkewRadius(rBeg + (coords^.RadiusCnt - 1), skew), FProfileRef.FirstMusicGroove * 0.5 * scan.DPI, FProfileRef.OuterSize * 0.5 * scan.DPI) then
     Exit(1e6);
 
   Result := 0.0;
@@ -922,20 +919,6 @@ begin
   Result := Sqrt(Result);
 end;
 
-function TScanCorrelator.GridSearchCorrectConst(const arg: TVector; obj: Pointer): TScalar;
-var
-  coords: PCorrectCoords absolute obj;
-begin
-  Result := NelderMeadCorrect([arg[0], coords^.GSSkew.MulSkew], obj);
-end;
-
-function TScanCorrelator.GridSearchCorrectMul(const arg: TVector; obj: Pointer): TScalar;
-var
-  coords: PCorrectCoords absolute obj;
-begin
-  Result := NelderMeadCorrect([coords^.GSSkew.ConstSkew, arg[0]], obj);
-end;
-
 procedure TScanCorrelator.Correct;
 const
   CConstCorrectExtents = 0.05; // inches
@@ -952,8 +935,9 @@ var
     coords: PCorrectCoords;
     iMul, iConst: Integer;
     X: TVector;
-    f, skm, skc, loss: Double;
+    f, loss: Double;
     scan: TInputScan;
+    skew, tmpSk: TCorrectSkew;
   begin
     if not InRange(AIndex, 0, High(FPerAngleSkew)) then
       Exit;
@@ -969,36 +953,37 @@ var
       PrepareCorrect(coords^);
 
       loss := Infinity;
-      coords^.GSSkew.ConstSkew := X[0];
-      coords^.GSSkew.MulSkew := X[1];
+      skew := ArgToSkew(X);
 
       for iMul := -CMulCorrectHalfCount to CMulCorrectHalfCount do
       begin
-        skm := MulSkewToArg(iMul * CMulCorrectExtents / CMulCorrectHalfCount);
+        tmpSk := skew;
+        tmpSk.MulSkew := iMul * CMulCorrectExtents / CMulCorrectHalfCount;
 
-        f := GridSearchCorrectMul([skm], coords);
+        f := NelderMeadCorrect(SkewToArg(tmpSk), coords);
 
         if f < loss then
         begin
           loss := f;
-          coords^.GSSkew.MulSkew := skm;
+          skew.MulSkew :=  tmpSk.MulSkew;
         end;
       end;
 
       for iConst := -CConstCorrectHalfCount to CConstCorrectHalfCount do
       begin
-        skc := iConst * CConstCorrectExtents / CConstCorrectHalfCount * scan.DPI;
+        tmpSk := skew;
+        tmpSk.ConstSkew := iConst * CConstCorrectExtents / CConstCorrectHalfCount * scan.DPI;
 
-        f := GridSearchCorrectConst([skc], coords);
+        f := NelderMeadCorrect(SkewToArg(tmpSk), coords);
 
         if f < loss then
         begin
           loss := f;
-          coords^.GSSkew.ConstSkew := skc;
+          skew.ConstSkew := tmpSk.ConstSkew;
         end;
       end;
 
-      X := [coords^.GSSkew.ConstSkew, coords^.GSSkew.MulSkew];
+      X := SkewToArg(skew);
       loss := NelderMeadMinimize(@NelderMeadCorrect, X, [0.01, 0.01], 1e-6, coords);
 
       // free up memory
@@ -1010,8 +995,7 @@ var
     end;
 
     rmses[AIndex] := loss;
-    FPerAngleSkew[AIndex, 0].ConstSkew := X[0];
-    FPerAngleSkew[AIndex, 0].MulSkew := ArgToMulSkew(X[1]);
+    FPerAngleSkew[AIndex, 0] := ArgToSkew(X);
   end;
 
 var
