@@ -63,15 +63,9 @@ const
   CLoopbackLowCutoffFreq = 40.0;
   CLowCutoffFreq = 20.0;
 
-{$if 1}
-  cRedMul = 1;
-  cGreenMul = 1;
-  cBlueMul = 1;
-{$else}
   cRedMul = 299;
   cGreenMul = 587;
   cBlueMul = 114;
-{$endif}
 
   cLumaDiv = cRedMul + cGreenMul + cBlueMul;
 
