@@ -283,7 +283,7 @@ procedure TInputScan.GradientConcentricGroove(const arg: TDoubleDynArray; var fu
 var
   meanSD: ^TPointD absolute obj;
   iLut: Integer;
-  px, py, cx, cy, r, cs, sn, imgInt, gInt, gimgx, gimgy, gcx, gcy, gr, rsx, sy: Double;
+  px, py, cx, cy, r, sky, cs, sn, imgInt, gInt, gimgx, gimgy, gcx, gcy, gr, gsky, rsx, sy: Double;
   stencilX: array[TValueSign] of Double;
   stencilY: array[TValueSign] of Integer;
   vs: TValueSign;
@@ -291,6 +291,11 @@ begin
   cx := arg[0];
   cy := arg[1];
   r := arg[2];
+  sky := arg[3];
+
+  func := 1e6;
+  if not InRange(sky, 0.98, 1.02) then
+    Exit;
 
   stencilY[NegativeValue] := -1;
   stencilY[ZeroValue] := 4;
@@ -307,6 +312,7 @@ begin
   gcx := 0.0;
   gcy := 0.0;
   gr := 0.0;
+  gsky := 0.0;
 
   for iLut := 0 to High(FSinCosLUT) do
   begin
@@ -319,7 +325,7 @@ begin
       sy := stencilY[vs];
 
       px := cs * rsx + cx;
-      py := sn * rsx + cy;
+      py := sn * rsx * sky + cy;
 
       if InRangePointD(py, px) then
       begin
@@ -335,7 +341,8 @@ begin
 
           gcx -= gimgx * gInt;
           gcy -= gimgy * gInt;
-          gr -= (gimgx * cs + gimgy * sn) * gInt;
+          gr -= (gimgx * cs + gimgy * sn * sky) * gInt;
+          gsky -= gimgy * sn * r * gInt;
         end;
       end;
     end;
@@ -346,6 +353,7 @@ begin
     grad[0] := gcx;
     grad[1] := gcy;
     grad[2] := gr;
+    grad[3] := gsky / Length(FSinCosLUT);
   end;
 end;
 
@@ -359,13 +367,14 @@ begin
 
   meanSD := GetMeanSD(FProcessedImage, FProfileRef.MinConcentricGroove * 0.5 * FDPI, FProfileRef.MaxConcentricGroove * 0.5 * FDPI, -Pi, Pi, 1.0);
 
-  X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius];
+  X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius, 1.0];
 
   ff := BFGSMinimize(@GradientConcentricGroove, X, 1e-6, @meanSD);
 
   FCenter.X := X[0];
   FCenter.Y := X[1];
   FConcentricGrooveRadius := X[2];
+  //WriteLn(ImageShortName, X[3]:12:9);
   FCenterQuality := -ff;
 end;
 

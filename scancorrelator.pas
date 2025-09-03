@@ -565,7 +565,7 @@ var
     coords.MeanSD := scan.GetMeanSD(scan.ProcessedImage, FAnalyzeAreaBegin * 0.5 * scan.DPI, FAnalyzeAreaEnd * 0.5 * scan.DPI, -Pi, Pi, CAnalyzeSigma);
 
     X := [scan.RelativeAngle, scan.Center.X, scan.Center.Y, skewData[AIndex].X, skewData[AIndex].Y];
-    func := BFGSMinimize(@GradientAnalyze, X, 1e-9, @coords);
+    func := BFGSMinimize(@GradientAnalyze, X, 1e-6, @coords);
 
     scan.Objective := Sqrt(func);
     scan.CorrectByModel(X[1], X[2], X[0]);
@@ -724,8 +724,8 @@ end;
 
 function TScanCorrelator.InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
 var
-  iAngle, iBaseScan, v, best: Integer;
-  t, bt: Double;
+  iAngle, iBaseScan: Integer;
+  t, bt, middleAngle, middleAngleMirror, angleExtents, angleExtentsMirror, v, best: Double;
   curScan, baseScan: TInputScan;
 begin
   Result := True;
@@ -740,13 +740,18 @@ begin
 
   // devise best baseScan
 
-  best := MaxInt;
+  best := Infinity;
   for iBaseScan := 0 to High(FInputScans) do
   begin
     baseScan := FInputScans[iBaseScan];
 
     if (Coords.ScanIdx = iBaseScan) or curScan.HasCorrectRef(FInputScans, Coords.AngleIdx, iBaseScan) then
       Continue;
+
+    angleExtents := NormalizedAngleDiff(baseScan.CropData.StartAngle, baseScan.CropData.EndAngle);
+    angleExtentsMirror := NormalizedAngleDiff(baseScan.CropData.StartAngleMirror, baseScan.CropData.EndAngleMirror);
+    middleAngle := NormalizeAngle(angleExtents * 0.5 + baseScan.CropData.StartAngle);
+    middleAngleMirror := NormalizeAngle(angleExtentsMirror * 0.5 + baseScan.CropData.StartAngleMirror);
 
     v := 0;
     for iAngle := -1800 to 1799 do
@@ -755,10 +760,13 @@ begin
 
       if InNormalizedAngle(bt, coords.StartAngle, coords.EndAngle) then
       begin
-         t := NormalizeAngle(bt + baseScan.RelativeAngle);
+        t := NormalizeAngle(bt + baseScan.RelativeAngle);
 
-         v += Ord(InNormalizedAngle(t, baseScan.CropData.StartAngle, baseScan.CropData.EndAngle)) +
-              Ord(InNormalizedAngle(t, baseScan.CropData.StartAngleMirror, baseScan.CropData.EndAngleMirror));
+        if InNormalizedAngle(t, baseScan.CropData.StartAngle, baseScan.CropData.EndAngle) then
+          v += Exp(-Sqr(NormalizedAngleDiff(t, middleAngle) / angleExtents));
+
+        if InNormalizedAngle(t, baseScan.CropData.StartAngleMirror, baseScan.CropData.EndAngleMirror) then
+          v += Exp(-Sqr(NormalizedAngleDiff(t, middleAngleMirror) / angleExtentsMirror));
       end;
     end;
 
