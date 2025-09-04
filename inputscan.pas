@@ -294,7 +294,7 @@ begin
   sky := arg[3];
 
   func := 1e6;
-  if not InRange(sky, 0.98, 1.02) then
+  if not InRange(sky, CScannerTolLo, CScannerTolHi) then
     Exit;
 
   stencilY[NegativeValue] := -1;

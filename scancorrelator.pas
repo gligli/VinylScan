@@ -14,7 +14,7 @@ const
 
 type
   TCorrectSkew = record
-    ConstSkew, MulSkew: Double;
+    ConstSkew, MulSkew, SqrSkew, CubeSkew: Double;
   end;
 
   { TAnalyzeCoords }
@@ -708,25 +708,30 @@ end;
 
 function TScanCorrelator.SkewRadius(ARadius: Double; const ASkew: TCorrectSkew): Double;
 begin
-  Result := ARadius + ASkew.MulSkew * ARadius + ASkew.ConstSkew;
+  Result := ARadius + ASkew.CubeSkew * Sqr(ARadius) * ARadius + ASkew.SqrSkew * Sqr(ARadius) + ASkew.MulSkew * ARadius + ASkew.ConstSkew;
 end;
 
 function TScanCorrelator.ArgToSkew(arg: TVector): TCorrectSkew;
 begin
   Result.ConstSkew := arg[0];
-  Result.MulSkew := arg[1] * 1e-6;
+  Result.MulSkew := arg[1] * 1e-3;
+  Result.SqrSkew := arg[2] * 1e-6;
+  Result.CubeSkew := arg[3] * 1e-9;
 end;
 
 function TScanCorrelator.SkewToArg(const skew: TCorrectSkew): TVector;
 begin
-  Result := [skew.ConstSkew, skew.MulSkew * 1e6];
+  Result := [skew.ConstSkew, skew.MulSkew * 1e3, skew.SqrSkew * 1e6, skew.CubeSkew * 1e9];
 end;
 
 function TScanCorrelator.InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
 var
-  iAngle, iBaseScan: Integer;
-  t, bt, middleAngle, middleAngleMirror, angleExtents, angleExtentsMirror, v, best: Double;
+  iLut, iAngle, iBaseScan: Integer;
+  t, bt, r, v, best: Double;
   curScan, baseScan: TInputScan;
+  raLUT: TRadiusAngleDynArray;
+  sinCosLUT: TSinCosDynArray;
+  curData, baseData: TDoubleDynArray;
 begin
   Result := True;
   Coords.BaseScanIdx := -1;
@@ -740,6 +745,17 @@ begin
 
   // devise best baseScan
 
+  raLut := BuildRadiusAngleLUT(FCorrectAreaBegin * 0.5 * FInputScans[0].DPI, FCorrectAreaEnd * 0.5 * FInputScans[0].DPI, coords.StartAngle, coords.EndAngle, FInputScans[0].DPI / 150.0);
+
+  sinCosLUT := OffsetRadiusAngleLUTAngle(raLUT, curScan.RelativeAngle);
+  SetLength(curData, Length(raLUT));
+  for iLut := 0 to High(raLUT) do
+  begin
+    r := raLUT[iLut].Radius;
+    curData[iLut] := curScan.GetPointD_Work(curScan.Image, r * sinCosLUT[iLut].Sin + curScan.Center.Y, r * sinCosLUT[iLut].Cos + curScan.Center.X);
+  end;
+  SetLength(baseData, Length(raLUT));
+
   best := Infinity;
   for iBaseScan := 0 to High(FInputScans) do
   begin
@@ -748,25 +764,25 @@ begin
     if (Coords.ScanIdx = iBaseScan) or curScan.HasCorrectRef(FInputScans, Coords.AngleIdx, iBaseScan) then
       Continue;
 
-    angleExtents := NormalizedAngleDiff(baseScan.CropData.StartAngle, baseScan.CropData.EndAngle);
-    angleExtentsMirror := NormalizedAngleDiff(baseScan.CropData.StartAngleMirror, baseScan.CropData.EndAngleMirror);
-    middleAngle := NormalizeAngle(angleExtents * 0.5 + baseScan.CropData.StartAngle);
-    middleAngleMirror := NormalizeAngle(angleExtentsMirror * 0.5 + baseScan.CropData.StartAngleMirror);
+    sinCosLUT := OffsetRadiusAngleLUTAngle(raLUT, baseScan.RelativeAngle);
+    for iLut := 0 to High(raLUT) do
+    begin
+      r := raLUT[iLut].Radius;
+      baseData[iLut] := baseScan.GetPointD_Work(baseScan.Image, r * sinCosLUT[iLut].Sin + baseScan.Center.Y, r * sinCosLUT[iLut].Cos + baseScan.Center.X);
+    end;
 
-    v := 0;
+    v := -SpearmanRankCorrelation(curData, baseData);
+
     for iAngle := -1800 to 1799 do
     begin
       bt := DegToRad(iAngle / 10.0);
 
       if InNormalizedAngle(bt, coords.StartAngle, coords.EndAngle) then
       begin
-        t := NormalizeAngle(bt + baseScan.RelativeAngle);
+         t := NormalizeAngle(bt + baseScan.RelativeAngle);
 
-        if InNormalizedAngle(t, baseScan.CropData.StartAngle, baseScan.CropData.EndAngle) then
-          v += Exp(-Sqr(NormalizedAngleDiff(t, middleAngle) / angleExtents));
-
-        if InNormalizedAngle(t, baseScan.CropData.StartAngleMirror, baseScan.CropData.EndAngleMirror) then
-          v += Exp(-Sqr(NormalizedAngleDiff(t, middleAngleMirror) / angleExtentsMirror));
+         v += Ord(InNormalizedAngle(t, baseScan.CropData.StartAngle, baseScan.CropData.EndAngle)) +
+              Ord(InNormalizedAngle(t, baseScan.CropData.StartAngleMirror, baseScan.CropData.EndAngleMirror));
       end;
     end;
 
@@ -777,7 +793,7 @@ begin
     end;
   end;
 
-  //WriteLn(Coords.ScanIdx:4, Coords.AngleIdx:4, Coords.BaseScanIdx:4, best:8);
+  //WriteLn(Coords.ScanIdx:4, Coords.AngleIdx:4, Coords.BaseScanIdx:4, best:12:6);
 
   baseScan := FInputScans[Coords.BaseScanIdx];
   baseScan.AddCorrectRef(Coords.AngleIdx, Coords.ScanIdx);
@@ -874,7 +890,7 @@ function TScanCorrelator.NelderMeadCorrect(const arg: TVector; obj: Pointer): TS
 var
   coords: PCorrectCoords absolute obj;
   cnt, iRadius, iScan, iAngle: Integer;
-  r, rBeg, sn, cs, px, py, cx, cy, rsk: Double;
+  r, rBeg, rEnd, sn, cs, px, py, cx, cy, rsk: Double;
   skew: TCorrectSkew;
   scan: TInputScan;
   mnsd: TPointD;
@@ -890,11 +906,11 @@ begin
   // parse image arcs
 
   rBeg := FCorrectAreaBegin * 0.5 * scan.DPI;
-
-  if not InRange(SkewRadius(rBeg, skew), FProfileRef.MinConcentricGroove * 0.5 * scan.DPI, FProfileRef.MaxConcentricGroove * 0.5 * scan.DPI) then
+  if not InRange(SkewRadius(rBeg, skew), rBeg * CScannerTolLo, rBeg * CScannerTolHi) then
     Exit(1e6);
 
-  if not InRange(SkewRadius(rBeg + (coords^.RadiusCnt - 1), skew), FProfileRef.FirstMusicGroove * 0.5 * scan.DPI, FProfileRef.OuterSize * 0.5 * scan.DPI) then
+  rEnd := FCorrectAreaEnd * 0.5 * scan.DPI;
+  if not InRange(SkewRadius(rEnd, skew), rEnd * CScannerTolLo, rEnd * CScannerTolHi) then
     Exit(1e6);
 
   Result := 0.0;
@@ -954,7 +970,7 @@ var
     scan := FInputScans[coords^.ScanIdx];
 
     loss := NaN;
-    X := [0.0, 0.0];
+    X := [0.0, 0.0, 0.0, 0.0];
 
     if not IsNan(coords^.StartAngle) and not IsNan(coords^.EndAngle) then
     begin
@@ -992,7 +1008,7 @@ var
       end;
 
       X := SkewToArg(skew);
-      loss := NelderMeadMinimize(@NelderMeadCorrect, X, [0.01, 0.01], 1e-6, coords);
+      loss := NelderMeadMinimize(@NelderMeadCorrect, X, [0.01, 0.01, 0.01, 0.01], 1e-6, coords);
 
       // free up memory
       SetLength(coords^.PreparedData, 0);
@@ -1092,7 +1108,7 @@ begin
       Write(', Angle:', (iangle / FProfileRef.CorrectAngleCount) * 360.0:9:3);
       Write(', RMSE:', rmses[ias]:12:6);
       if not IsNan(rmses[ias]) then
-        Write(', Const:', FPerAngleSkew[ias, 0].ConstSkew:9:3, ', Mul:', FPerAngleSkew[ias, 0].MulSkew:12:8);
+        Write(', Const:', FPerAngleSkew[ias, 0].ConstSkew:9:3, ', Mul:', FPerAngleSkew[ias, 0].MulSkew:12:8, ', Sqr:', FPerAngleSkew[ias, 0].SqrSkew:16:12, ', Cube:', FPerAngleSkew[ias, 0].CubeSkew:16:12);
       WriteLn;
     end;
 

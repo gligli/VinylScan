@@ -60,6 +60,9 @@ type
   TCompareFunction = function(Item1, Item2, UserParameter: Pointer): Integer;
 
 const
+  CScannerTolLo = 0.985;
+  CScannerTolHi = 1.015;
+
   CLoopbackLowCutoffFreq = 40.0;
   CLowCutoffFreq = 20.0;
 
