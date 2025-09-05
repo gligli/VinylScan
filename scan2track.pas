@@ -218,7 +218,7 @@ begin
     Exit;
 
   if not IsNan(prevRadius) then
-    decoderMax := Min(decoderMax, Floor((prevRadius - radius) * 0.5 / cxa));
+    decoderMax := Min(decoderMax, Floor((prevRadius - radius) * 0.5 * CTrack2TrackToTrackWidthRatio / cxa));
 
   posMin := -decoderMax;
   posMax := decoderMax - 1;

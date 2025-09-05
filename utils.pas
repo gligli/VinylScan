@@ -60,6 +60,8 @@ type
   TCompareFunction = function(Item1, Item2, UserParameter: Pointer): Integer;
 
 const
+  CTrack2TrackToTrackWidthRatio = 0.8;
+
   CScannerTolLo = 0.985;
   CScannerTolHi = 1.015;
 
