@@ -116,7 +116,7 @@ begin
   FPointsPerRevolution := Round(FSampleRate / FProfileRef.RevolutionsPerSecond);
   FRadiansPerRevolutionPoint := -Pi * 2.0 / FPointsPerRevolution;
 
-  SetLength(FPrevSamples, FSampleRate shl (FDecoderPrecision + 1));
+  SetLength(FPrevSamples, Round(FSampleRate / CLowCutoffFreq) shl (FDecoderPrecision + 1));
 end;
 
 function CompareInputScansStartAngleQuality(Item1, Item2, UserParameter: Pointer): Integer;
