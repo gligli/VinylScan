@@ -14,7 +14,7 @@ const
 
 type
   TCorrectSkew = record
-    ConstSkew, MulSkew, SqrSkew, CubeSkew: Double;
+    ConstSkew, MulSkew: Double;
   end;
 
   { TAnalyzeCoords }
@@ -249,7 +249,7 @@ end;
 procedure TScanCorrelator.AngleInit;
 const
   CAngleCount = 720;
-  CAggregatedPixelsInches = 0.2;
+  CAggregatedPixelsInches = 0.1;
 var
   rBeg, rEnd, aggregatedPixelCount: Integer;
   base: TDoubleDynArray;
@@ -528,27 +528,40 @@ var
   end;
 
 var
-  i: Integer;
+  iScan: Integer;
+  scan: TInputScan;
 begin
   WriteLn('Analyze');
 
   if Length(FInputScans) <= 1 then
     Exit;
 
+  // init
+
   preparedData := PrepareAnalyze;
 
   SetLength(skewData, Length(FInputScans));
-  for i := 0 to High(FInputScans) do
+  for iScan := 0 to High(FInputScans) do
   begin
-    skewData[i].X := 1.0;
-    skewData[i].Y := 1.0;
+    skewData[iScan].X := 1.0;
+    skewData[iScan].Y := 1.0;
   end;
+
+  // compute
 
   ProcThreadPool.DoParallelLocalProc(@DoEval, 1, High(FInputScans));
   WriteLn;
 
-  for i := 0 to High(FInputScans) do
-    WriteLn(FInputScans[i].ImageShortName, ', Angle: ', RadToDeg(FInputScans[i].RelativeAngle):9:3, ', CenterX: ', FInputScans[i].Center.X:9:3, ', CenterY: ', FInputScans[i].Center.Y:9:3, ', SkewX: ', skewData[i].X:9:6, ', SkewY: ', skewData[i].Y:9:6, ', RMSE: ', FInputScans[i].Objective:12:9);
+  // log
+
+  for iScan := 0 to High(FInputScans) do
+  begin
+    scan := FInputScans[iScan];
+
+    WriteLn(scan.ImageShortName, ', Angle: ', RadToDeg(scan.RelativeAngle):9:3, ', CenterX: ', scan.Center.X:9:3, ', CenterY: ', scan.Center.Y:9:3, ', SkewX: ', skewData[iScan].X:9:6, ', SkewY: ', skewData[iScan].Y:9:6, ', RMSE: ', scan.Objective:12:9);
+  end;
+
+  // sort scans by RMSE (best to worst) for next algos
 
   QuickSort(FInputScans[0], 1, High(FInputScans), SizeOf(TInputScan), @CompareInputScansObjective);
 end;
@@ -662,20 +675,18 @@ end;
 
 function TScanCorrelator.SkewRadius(ARadius: Double; const ASkew: TCorrectSkew): Double;
 begin
-  Result := ARadius + ASkew.CubeSkew * Sqr(ARadius) * ARadius + ASkew.SqrSkew * Sqr(ARadius) + ASkew.MulSkew * ARadius + ASkew.ConstSkew;
+  Result := ARadius + ASkew.MulSkew * ARadius + ASkew.ConstSkew;
 end;
 
 function TScanCorrelator.ArgToSkew(arg: TVector): TCorrectSkew;
 begin
   Result.ConstSkew := arg[0];
-  Result.MulSkew := arg[1] * 1e-3;
-  Result.SqrSkew := arg[2] * 1e-6;
-  Result.CubeSkew := arg[3] * 1e-9;
+  Result.MulSkew := arg[1] * 1e-6;
 end;
 
 function TScanCorrelator.SkewToArg(const skew: TCorrectSkew): TVector;
 begin
-  Result := [skew.ConstSkew, skew.MulSkew * 1e3, skew.SqrSkew * 1e6, skew.CubeSkew * 1e9];
+  Result := [skew.ConstSkew, skew.MulSkew * 1e6];
 end;
 
 function TScanCorrelator.InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
@@ -924,7 +935,7 @@ var
     scan := FInputScans[coords^.ScanIdx];
 
     loss := NaN;
-    X := [0.0, 0.0, 0.0, 0.0];
+    X := [0.0, 0.0];
 
     if not IsNan(coords^.StartAngle) and not IsNan(coords^.EndAngle) then
     begin
@@ -962,7 +973,7 @@ var
       end;
 
       X := SkewToArg(skew);
-      loss := NelderMeadMinimize(@NelderMeadCorrect, X, [0.01, 0.01, 0.01, 0.01], 1e-6, coords);
+      loss := NelderMeadMinimize(@NelderMeadCorrect, X, [0.01, 0.01], 1e-6, coords);
 
       // free up memory
       SetLength(coords^.PreparedData, 0);
@@ -1062,7 +1073,7 @@ begin
       Write(', Angle:', (iangle / FProfileRef.CorrectAngleCount) * 360.0:9:3);
       Write(', RMSE:', rmses[ias]:12:6);
       if not IsNan(rmses[ias]) then
-        Write(', Const:', FPerAngleSkew[ias, 0].ConstSkew:9:3, ', Mul:', FPerAngleSkew[ias, 0].MulSkew:12:8, ', Sqr:', FPerAngleSkew[ias, 0].SqrSkew:16:12, ', Cube:', FPerAngleSkew[ias, 0].CubeSkew:16:12);
+        Write(', Const:', FPerAngleSkew[ias, 0].ConstSkew:9:3, ', Mul:', FPerAngleSkew[ias, 0].MulSkew:12:8);
       WriteLn;
     end;
 
