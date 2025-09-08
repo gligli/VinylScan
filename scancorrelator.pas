@@ -976,6 +976,7 @@ var
       loss := NelderMeadMinimize(@NelderMeadCorrect, X, [0.01, 0.01], 1e-6, coords);
 
       // free up memory
+      SetLength(coords^.MeanSDArr, 0);
       SetLength(coords^.PreparedData, 0);
       SetLength(coords^.SinCosLUT, 0);
       SetLength(coords^.Weights, 0);
