@@ -188,7 +188,7 @@ begin
 
     if Length(sc.InputScans) > 0 then
     begin
-      DrawImage(sc.InputScans[0].ProcessedImage, sc.InputScans[0].Width, sc.InputScans[0].Height);
+      DrawImage(sc.InputScans[0].Image, sc.InputScans[0].Width, sc.InputScans[0].Height);
       DrawExtents(sc.InputScans[0]);
     end;
 

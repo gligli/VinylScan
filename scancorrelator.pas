@@ -174,7 +174,7 @@ begin
   FAnalyzeAreaBegin := FProfileRef.InnerSize;
   FAnalyzeAreaEnd := FProfileRef.LabelOuterSize;
   FAnalyzeAreaWidth := (FAnalyzeAreaEnd - FAnalyzeAreaBegin) * 0.5;
-  FCorrectAreaBegin := FProfileRef.ConcentricGroove;
+  FCorrectAreaBegin := FProfileRef.MinConcentricGroove;
   FCorrectAreaEnd := FProfileRef.StylusSetDown;
   FCorrectAreaWidth := (FCorrectAreaEnd - FCorrectAreaBegin) * 0.5;
 end;
@@ -691,12 +691,9 @@ end;
 
 function TScanCorrelator.InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
 var
-  iLut, iAngle, iBaseScan: Integer;
-  t, bt, r, v, best: Double;
+  iAngle, iBaseScan: Integer;
+  t, bt, v, best, middleAngle, middleAngleMirror, angleExtents, angleExtentsMirror: Double;
   curScan, baseScan: TInputScan;
-  raLUT: TRadiusAngleDynArray;
-  sinCosLUT: TSinCosDynArray;
-  curData, baseData: TDoubleDynArray;
 begin
   Result := True;
   Coords.BaseScanIdx := -1;
@@ -710,17 +707,6 @@ begin
 
   // devise best baseScan
 
-  raLut := BuildRadiusAngleLUT(FCorrectAreaBegin * 0.5 * FInputScans[0].DPI, FCorrectAreaEnd * 0.5 * FInputScans[0].DPI, coords.StartAngle, coords.EndAngle, FInputScans[0].DPI / 150.0);
-
-  sinCosLUT := OffsetRadiusAngleLUTAngle(raLUT, curScan.RelativeAngle);
-  SetLength(curData, Length(raLUT));
-  for iLut := 0 to High(raLUT) do
-  begin
-    r := raLUT[iLut].Radius;
-    curData[iLut] := curScan.GetPointD_Work(curScan.Image, r * sinCosLUT[iLut].Sin + curScan.Center.Y, r * sinCosLUT[iLut].Cos + curScan.Center.X);
-  end;
-  SetLength(baseData, Length(raLUT));
-
   best := Infinity;
   for iBaseScan := 0 to High(FInputScans) do
   begin
@@ -729,15 +715,12 @@ begin
     if (Coords.ScanIdx = iBaseScan) or curScan.HasCorrectRef(FInputScans, Coords.AngleIdx, iBaseScan) then
       Continue;
 
-    sinCosLUT := OffsetRadiusAngleLUTAngle(raLUT, baseScan.RelativeAngle);
-    for iLut := 0 to High(raLUT) do
-    begin
-      r := raLUT[iLut].Radius;
-      baseData[iLut] := baseScan.GetPointD_Work(baseScan.Image, r * sinCosLUT[iLut].Sin + baseScan.Center.Y, r * sinCosLUT[iLut].Cos + baseScan.Center.X);
-    end;
+    angleExtents := NormalizedAngleDiff(baseScan.CropData.StartAngle, baseScan.CropData.EndAngle);
+    angleExtentsMirror := NormalizedAngleDiff(baseScan.CropData.StartAngleMirror, baseScan.CropData.EndAngleMirror);
+    middleAngle := NormalizeAngle(angleExtents * 0.5 + baseScan.CropData.StartAngle);
+    middleAngleMirror := NormalizeAngle(angleExtentsMirror * 0.5 + baseScan.CropData.StartAngleMirror);
 
-    v := -SpearmanRankCorrelation(curData, baseData);
-
+    v := 0;
     for iAngle := -1800 to 1799 do
     begin
       bt := DegToRad(iAngle / 10.0);
@@ -746,8 +729,11 @@ begin
       begin
          t := NormalizeAngle(bt + baseScan.RelativeAngle);
 
-         v += Ord(InNormalizedAngle(t, baseScan.CropData.StartAngle, baseScan.CropData.EndAngle)) +
-              Ord(InNormalizedAngle(t, baseScan.CropData.StartAngleMirror, baseScan.CropData.EndAngleMirror));
+        if InNormalizedAngle(t, baseScan.CropData.StartAngle, baseScan.CropData.EndAngle) then
+          v += Exp(-Sqr(NormalizedAngleDiff(t, middleAngle) / angleExtents));
+
+        if InNormalizedAngle(t, baseScan.CropData.StartAngleMirror, baseScan.CropData.EndAngleMirror) then
+          v += Exp(-Sqr(NormalizedAngleDiff(t, middleAngleMirror) / angleExtentsMirror));
       end;
     end;
 
@@ -767,7 +753,7 @@ end;
 procedure TScanCorrelator.PrepareCorrect(var coords: TCorrectCoords);
 var
   iRadius, iAngle, cnt, dummyAC: Integer;
-  t, bt, rBeg, rExt, r, sn, cs, px, py, cx, cy, saRaw, eaRaw, dummyAI: Double;
+  t, bt, rBeg, rEnd, r, sn, cs, px, py, cx, cy, saRaw, eaRaw, dummyAI: Double;
   curScan, baseScan: TInputScan;
   baseMeanSD: TPointDDynArray;
   mnsd: TPointD;
@@ -776,18 +762,17 @@ begin
   curScan := FInputScans[Coords.ScanIdx];
 
   rBeg := FCorrectAreaBegin * 0.5 * baseScan.DPI;
-  rExt := Ceil(FProfileRef.RecordingGrooveWidth * baseScan.DPI);
+  rEnd := FCorrectAreaEnd * 0.5 * baseScan.DPI;
 
   // build sin / cos lookup table
 
-  t := baseScan.RelativeAngle;
-  BuildSinCosLUT(coords.AngleCnt, coords.SinCosLUT, coords.StartAngle + t, NormalizedAngleDiff(coords.StartAngle, coords.EndAngle));
+  BuildSinCosLUT(coords.AngleCnt, coords.SinCosLUT, coords.StartAngle + baseScan.RelativeAngle, NormalizedAngleDiff(coords.StartAngle, coords.EndAngle));
 
-  SetLength(baseMeanSD, coords.RadiusCnt);
-  for iRadius := 0 to coords.RadiusCnt - 1 do
+  SetLength(baseMeanSD, coords.AngleCnt);
+  for iAngle := 0 to coords.AngleCnt - 1 do
   begin
-    r := rBeg + iRadius;
-    baseMeanSD[iRadius] := baseScan.GetMeanSD(baseScan.Image, r - rExt, r + rExt, NormalizeAngle(coords.StartAngle + t),  NormalizeAngle(coords.EndAngle + t), CCorrectSigma);
+    t := ArcTan2(coords.SinCosLUT[iAngle].Sin, coords.SinCosLUT[iAngle].Cos);
+    baseMeanSD[iAngle] := baseScan.GetMeanSD(baseScan.Image, rBeg, rEnd, NormalizeAngle(t - baseScan.RadiansPerRevolutionPoint), NormalizeAngle(t + baseScan.RadiansPerRevolutionPoint), CCorrectSigma);
   end;
 
   // build weights lookup table
@@ -815,8 +800,6 @@ begin
   begin
     r := rBeg + iRadius;
 
-    mnsd := baseMeanSD[iRadius];
-
     for iAngle := 0 to coords.AngleCnt - 1 do
     begin
       cs := coords.SinCosLUT[iAngle].Cos;
@@ -824,6 +807,8 @@ begin
 
       px := cs * r + cx;
       py := sn * r + cy;
+
+      mnsd := baseMeanSD[iAngle];
 
       if baseScan.InRangePointD(py, px) then
         coords.PreparedData[cnt] := CompressRange((baseScan.GetPointD_Work(baseScan.Image, py, px) - mnsd.X) * mnsd.Y)
@@ -838,16 +823,15 @@ begin
   // prepare iterations
 
   rBeg := FCorrectAreaBegin * 0.5 * curScan.DPI;
-  rExt := Ceil(FProfileRef.RecordingGrooveWidth * curScan.DPI);
+  rEnd := FCorrectAreaEnd * 0.5 * curScan.DPI;
 
-  t := curScan.RelativeAngle;
-  BuildSinCosLUT(coords.AngleCnt, coords.sinCosLUT, coords.StartAngle + t, NormalizedAngleDiff(coords.StartAngle, coords.EndAngle));
+  BuildSinCosLUT(coords.AngleCnt, coords.sinCosLUT, coords.StartAngle + curScan.RelativeAngle, NormalizedAngleDiff(coords.StartAngle, coords.EndAngle));
 
-  SetLength(coords.MeanSDArr, coords.RadiusCnt);
-  for iRadius := 0 to coords.RadiusCnt - 1 do
+  SetLength(coords.MeanSDArr, coords.AngleCnt);
+  for iAngle := 0 to coords.AngleCnt - 1 do
   begin
-    r := rBeg + iRadius;
-    coords.MeanSDArr[iRadius] := curScan.GetMeanSD(curScan.Image, r - rExt, r + rExt, NormalizeAngle(coords.StartAngle + t),  NormalizeAngle(coords.EndAngle + t), CCorrectSigma);
+    t := ArcTan2(coords.SinCosLUT[iAngle].Sin, coords.SinCosLUT[iAngle].Cos);
+    coords.MeanSDArr[iAngle] := curScan.GetMeanSD(curScan.Image, rBeg, rEnd, NormalizeAngle(t - curScan.RadiansPerRevolutionPoint), NormalizeAngle(t + curScan.RadiansPerRevolutionPoint), CCorrectSigma);
   end;
 end;
 
@@ -886,8 +870,6 @@ begin
 
     rsk := SkewRadius(r, skew);
 
-    mnsd := coords^.MeanSDArr[iRadius];
-
     for iAngle := 0 to coords^.AngleCnt - 1 do
     begin
       cs := coords^.SinCosLUT[iAngle].Cos;
@@ -895,6 +877,8 @@ begin
 
       px := cs * rsk + cx;
       py := sn * rsk + cy;
+
+      mnsd := coords^.MeanSDArr[iAngle];
 
       Result += Sqr((coords^.PreparedData[cnt] - CompressRange((scan.GetPointD_Work(scan.Image, py, px) - mnsd.X) * mnsd.Y)) * coords^.Weights[iAngle]);
 
@@ -989,7 +973,7 @@ var
   end;
 
 var
-  iangle, iscan, ias, iasbase, validRmseCnt: Integer;
+  iangle, iscan, ias, iasbase, prevAngleCnt, validRmseCnt: Integer;
   coords, baseCoords: PCorrectCoords;
   validRmses: TDoubleDynArray;
   res: Boolean;
@@ -1019,23 +1003,28 @@ begin
 
   // scan / angles that are depended on should be computed
 
-  for ias := 0 to High(FPerAngleSkew) do
-  begin
-    coords := @coordsArray[ias];
+  repeat
+    prevAngleCnt := validAngleCnt;
 
-    if coords^.BaseScanIdx > 0 then
+    for ias := 0 to High(FPerAngleSkew) do
     begin
-      iasbase := (coords^.BaseScanIdx - 1) * FProfileRef.CorrectAngleCount + coords^.AngleIdx;
-      baseCoords := @coordsArray[iasbase];
+      coords := @coordsArray[ias];
 
-      if IsNan(baseCoords^.StartAngle) or IsNan(baseCoords^.EndAngle) then
+      if coords^.BaseScanIdx > 0 then
       begin
-        res := InitCorrect(baseCoords^, False);
-        Assert(res);
-        Inc(validAngleCnt);
+        iasbase := (coords^.BaseScanIdx - 1) * FProfileRef.CorrectAngleCount + coords^.AngleIdx;
+        baseCoords := @coordsArray[iasbase];
+
+        if IsNan(baseCoords^.StartAngle) or IsNan(baseCoords^.EndAngle) then
+        begin
+          res := InitCorrect(baseCoords^, False);
+          Assert(res);
+          Inc(validAngleCnt);
+        end;
       end;
     end;
-  end;
+
+  until validAngleCnt = prevAngleCnt;
 
   // compute
 
