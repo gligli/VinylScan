@@ -291,7 +291,7 @@ begin
   cx := arg[0];
   cy := arg[1];
   r := arg[2];
-  sky := arg[3];
+  sky := arg[3] * 1e-4;
 
   func := 1e6;
   if not InRange(sky, CScannerTolLo, CScannerTolHi) then
@@ -353,7 +353,7 @@ begin
     grad[0] := gcx;
     grad[1] := gcy;
     grad[2] := gr;
-    grad[3] := gsky / Length(FSinCosLUT);
+    grad[3] := gsky;
   end;
 end;
 
@@ -367,7 +367,7 @@ begin
 
   meanSD := GetMeanSD(FProcessedImage, FProfileRef.MinConcentricGroove * 0.5 * FDPI, FProfileRef.MaxConcentricGroove * 0.5 * FDPI, -Pi, Pi, 1.0);
 
-  X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius, 1.0];
+  X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius, 1.0 * 1e4];
 
   ff := BFGSMinimize(@GradientConcentricGroove, X, 1e-6, @meanSD);
 
