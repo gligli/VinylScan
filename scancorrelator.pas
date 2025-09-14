@@ -10,7 +10,6 @@ uses
 
 const
   CAnalyzeSigma = 2.0;
-  CCorrectSigma = 0.25;
 
 type
   TCorrectSkew = record
@@ -35,10 +34,10 @@ type
     StartAngle, EndAngle, AngleInc: Double;
     RadiusCnt, AngleCnt: Integer;
 
-    MeanSDArr: TPointDDynArray;
-
     SinCosLUT: TSinCosDynArray;
-    PreparedData: TDoubleDynArray;
+    Data: TDoubleDynArray;
+    Ranks: TSpearmanRankDynArray;
+    PreparedRanks: array of TSpearmanRankDynArray;
     Weights: TDoubleDynArray;
   end;
 
@@ -252,7 +251,7 @@ const
   CAggregatedPixelsInches = 0.1;
 var
   rBeg, rEnd, aggregatedPixelCount: Integer;
-  base: TDoubleDynArray;
+  baseRanks: TSpearmanRankDynArray;
 
   function DoAngle(Scan: TInputScan; a: Double; var arr: TDoubleDynArray): Integer;
   var
@@ -285,7 +284,8 @@ var
         end;
       end;
 
-      Inc(Result);
+      if pxAggr > 0 then
+        Inc(Result);
     end;
   end;
 
@@ -294,6 +294,7 @@ var
     iAngle: Integer;
     a, r, bestr, bestAngle: Double;
     angle: TDoubleDynArray;
+    angleRanks: TSpearmanRankDynArray;
     scan: TInputScan;
   begin
     if not InRange(AIndex, 1, High(FInputScans)) then
@@ -301,7 +302,8 @@ var
 
     scan := FInputScans[AIndex];
 
-    SetLength(angle, Length(base));
+    SetLength(angle, Length(baseRanks));
+    SetLength(angleRanks, Length(baseRanks));
 
     bestr := Infinity;
     bestAngle := 0.0;
@@ -312,7 +314,8 @@ var
 
       DoAngle(scan, a, angle);
 
-      r := -SpearmanRankCorrelation(base, angle);
+      SpearmanPrepareRanks(angle, angleRanks);
+      r := -SpearmanRankCorrelation(baseRanks, angleRanks);
 
       if r <= bestr then
       begin
@@ -326,6 +329,7 @@ var
 
 var
   iScan, pos: Integer;
+  base: TDoubleDynArray;
 begin
   WriteLn('AngleInit');
 
@@ -341,6 +345,9 @@ begin
   pos := DoAngle(FInputScans[0], 0, base);
 
   SetLength(base, pos);
+  SetLength(baseRanks, pos);
+
+  SpearmanPrepareRanks(base, baseRanks);
 
   ProcThreadPool.DoParallelLocalProc(@DoScan, 1, High(FInputScans));
 
@@ -681,12 +688,12 @@ end;
 function TScanCorrelator.ArgToSkew(arg: TVector): TCorrectSkew;
 begin
   Result.ConstSkew := arg[0];
-  Result.MulSkew := arg[1] * 1e-6;
+  Result.MulSkew := arg[1] * 1e-3;
 end;
 
 function TScanCorrelator.SkewToArg(const skew: TCorrectSkew): TVector;
 begin
-  Result := [skew.ConstSkew, skew.MulSkew * 1e6];
+  Result := [skew.ConstSkew, skew.MulSkew * 1e3];
 end;
 
 function TScanCorrelator.InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
@@ -752,28 +759,16 @@ end;
 
 procedure TScanCorrelator.PrepareCorrect(var coords: TCorrectCoords);
 var
-  iRadius, iAngle, cnt, dummyAC: Integer;
-  t, bt, rBeg, rEnd, r, sn, cs, px, py, cx, cy, saRaw, eaRaw, dummyAI: Double;
+  iRadius, iAngle, dummyAC: Integer;
+  bt, rBeg, r, sn, cs, px, py, cx, cy, saRaw, eaRaw, dummyAI, w: Double;
   curScan, baseScan: TInputScan;
-  baseMeanSD: TPointDDynArray;
-  mnsd: TPointD;
 begin
   baseScan := FInputScans[Coords.BaseScanIdx];
   curScan := FInputScans[Coords.ScanIdx];
 
-  rBeg := FCorrectAreaBegin * 0.5 * baseScan.DPI;
-  rEnd := FCorrectAreaEnd * 0.5 * baseScan.DPI;
-
   // build sin / cos lookup table
 
   BuildSinCosLUT(coords.AngleCnt, coords.SinCosLUT, coords.StartAngle + baseScan.RelativeAngle, NormalizedAngleDiff(coords.StartAngle, coords.EndAngle));
-
-  SetLength(baseMeanSD, coords.AngleCnt);
-  for iAngle := 0 to coords.AngleCnt - 1 do
-  begin
-    t := ArcTan2(coords.SinCosLUT[iAngle].Sin, coords.SinCosLUT[iAngle].Cos);
-    baseMeanSD[iAngle] := baseScan.GetMeanSD(baseScan.Image, rBeg, rEnd, NormalizeAngle(t - baseScan.RadiansPerRevolutionPoint), NormalizeAngle(t + baseScan.RadiansPerRevolutionPoint), CCorrectSigma);
-  end;
 
   // build weights lookup table
 
@@ -790,59 +785,51 @@ begin
 
   // parse image arcs
 
-  SetLength(coords.PreparedData, coords.RadiusCnt * coords.AngleCnt);
+  SetLength(coords.Data, coords.RadiusCnt);
+  SetLength(coords.PreparedRanks, coords.AngleCnt, coords.RadiusCnt);
 
   cx := baseScan.Center.X;
   cy := baseScan.Center.Y;
 
-  cnt := 0;
-  for iRadius := 0 to coords.RadiusCnt - 1 do
-  begin
-    r := rBeg + iRadius;
+  rBeg := FCorrectAreaBegin * 0.5 * baseScan.DPI;
 
-    for iAngle := 0 to coords.AngleCnt - 1 do
+  for iAngle := 0 to coords.AngleCnt - 1 do
+  begin
+    cs := coords.SinCosLUT[iAngle].Cos;
+    sn := coords.SinCosLUT[iAngle].Sin;
+
+    w := Coords.Weights[iAngle];
+
+    for iRadius := 0 to coords.RadiusCnt - 1 do
     begin
-      cs := coords.SinCosLUT[iAngle].Cos;
-      sn := coords.SinCosLUT[iAngle].Sin;
+      r := rBeg + iRadius;
 
       px := cs * r + cx;
       py := sn * r + cy;
 
-      mnsd := baseMeanSD[iAngle];
-
       if baseScan.InRangePointD(py, px) then
-        coords.PreparedData[cnt] := CompressRange((baseScan.GetPointD_Work(baseScan.Image, py, px) - mnsd.X) * mnsd.Y)
+        coords.Data[iRadius] := baseScan.GetPointD_Work(baseScan.Image, py, px)
       else
-        coords.PreparedData[cnt] := 1e6;
-
-      Inc(cnt);
+        coords.Data[iRadius] := 1e6;
     end;
+
+    SpearmanPrepareRanks(coords.Data, coords.PreparedRanks[iAngle]);
   end;
-  Assert(cnt = coords.RadiusCnt * coords.AngleCnt);
 
   // prepare iterations
 
-  rBeg := FCorrectAreaBegin * 0.5 * curScan.DPI;
-  rEnd := FCorrectAreaEnd * 0.5 * curScan.DPI;
+  SetLength(coords.Ranks, Length(coords.Data));
 
   BuildSinCosLUT(coords.AngleCnt, coords.sinCosLUT, coords.StartAngle + curScan.RelativeAngle, NormalizedAngleDiff(coords.StartAngle, coords.EndAngle));
-
-  SetLength(coords.MeanSDArr, coords.AngleCnt);
-  for iAngle := 0 to coords.AngleCnt - 1 do
-  begin
-    t := ArcTan2(coords.SinCosLUT[iAngle].Sin, coords.SinCosLUT[iAngle].Cos);
-    coords.MeanSDArr[iAngle] := curScan.GetMeanSD(curScan.Image, rBeg, rEnd, NormalizeAngle(t - curScan.RadiansPerRevolutionPoint), NormalizeAngle(t + curScan.RadiansPerRevolutionPoint), CCorrectSigma);
-  end;
 end;
 
 function TScanCorrelator.NelderMeadCorrect(const arg: TVector; obj: Pointer): TScalar;
 var
   coords: PCorrectCoords absolute obj;
-  cnt, iRadius, iScan, iAngle: Integer;
-  r, rBeg, rEnd, sn, cs, px, py, cx, cy, rsk: Double;
+  iRadius, iScan, iAngle: Integer;
+  r, rBeg, rEnd, sn, cs, px, py, cx, cy, rsk, w, wAcc: Double;
   skew: TCorrectSkew;
   scan: TInputScan;
-  mnsd: TPointD;
 begin
   iScan := coords^.ScanIdx;
   scan := FInputScans[iScan];
@@ -863,33 +850,33 @@ begin
     Exit(1e6);
 
   Result := 0.0;
-  cnt := 0;
-  for iRadius := 0 to coords^.RadiusCnt - 1 do
+  wAcc := 0.0;
+
+  for iAngle := 0 to coords^.AngleCnt - 1 do
   begin
-    r := rBeg + iRadius;
+    cs := coords^.SinCosLUT[iAngle].Cos;
+    sn := coords^.SinCosLUT[iAngle].Sin;
 
-    rsk := SkewRadius(r, skew);
-
-    for iAngle := 0 to coords^.AngleCnt - 1 do
+    for iRadius := 0 to coords^.RadiusCnt - 1 do
     begin
-      cs := coords^.SinCosLUT[iAngle].Cos;
-      sn := coords^.SinCosLUT[iAngle].Sin;
+      r := rBeg + iRadius;
+
+      rsk := SkewRadius(r, skew);
 
       px := cs * rsk + cx;
       py := sn * rsk + cy;
 
-      mnsd := coords^.MeanSDArr[iAngle];
-
-      Result += Sqr((coords^.PreparedData[cnt] - CompressRange((scan.GetPointD_Work(scan.Image, py, px) - mnsd.X) * mnsd.Y)) * coords^.Weights[iAngle]);
-
-      Inc(cnt);
+      coords^.Data[iRadius] := scan.GetPointD_Work(scan.Image, py, px);
     end;
+
+    w := coords^.Weights[iAngle];
+    wAcc += w;
+
+    SpearmanPrepareRanks(coords^.Data, coords^.Ranks);
+    Result -= SpearmanRankCorrelation(coords^.PreparedRanks[iAngle], coords^.Ranks) * w;
   end;
 
-  Assert(cnt = coords^.RadiusCnt * coords^.AngleCnt);
-
-  Result /= cnt;
-  Result := Sqrt(Result);
+  Result /= wAcc;
 end;
 
 procedure TScanCorrelator.Correct;
@@ -930,8 +917,8 @@ var
 
       for iMul := -CMulCorrectHalfCount to CMulCorrectHalfCount do
       begin
-        tmpSk := skew;
-        tmpSk.MulSkew := iMul * CMulCorrectExtents / CMulCorrectHalfCount;
+      tmpSk := skew;
+      tmpSk.MulSkew := iMul * CMulCorrectExtents / CMulCorrectHalfCount;
 
         f := NelderMeadCorrect(SkewToArg(tmpSk), coords);
 
@@ -944,8 +931,8 @@ var
 
       for iConst := -CConstCorrectHalfCount to CConstCorrectHalfCount do
       begin
-        tmpSk := skew;
-        tmpSk.ConstSkew := iConst * CConstCorrectExtents / CConstCorrectHalfCount * scan.DPI;
+      tmpSk := skew;
+      tmpSk.ConstSkew := iConst * CConstCorrectExtents / CConstCorrectHalfCount * scan.DPI;
 
         f := NelderMeadCorrect(SkewToArg(tmpSk), coords);
 
@@ -960,10 +947,11 @@ var
       loss := NelderMeadMinimize(@NelderMeadCorrect, X, [0.01, 0.01], 1e-6, coords);
 
       // free up memory
-      SetLength(coords^.MeanSDArr, 0);
-      SetLength(coords^.PreparedData, 0);
-      SetLength(coords^.SinCosLUT, 0);
+      SetLength(coords^.Data, 0);
+      SetLength(coords^.PreparedRanks, 0);
+      SetLength(coords^.Ranks, 0);
       SetLength(coords^.Weights, 0);
+      SetLength(coords^.SinCosLUT, 0);
 
       Write(InterlockedIncrement(doneCount):4, ' / ', validAngleCnt, #13);
     end;
