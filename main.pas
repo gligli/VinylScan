@@ -219,6 +219,10 @@ const
     0,10000,0,10000
   );
 
+  CRankSampleA: array[0..9] of Double = (1,10,3,8,6,42,123,21,69,38);
+  CRankSampleB: array[0..9] of Double = (1.5,10.5,3.5,8.5,6.5,42.5,123.5,21.5,69.5,38.5);
+
+  CSampleRank: array[0..9] of Double = (1,5,2,4,3,8,10,6,9,7);
 var
   i: Integer;
   fn: String;
@@ -228,11 +232,23 @@ var
   fltHP: TFilterIIRHPBessel;
   smps: TSmallIntDynArray;
   h1,h2: Double;
+  ra, rb: TSpearmanRankDynArray;
 begin
   h1 := herpXY(@CHerpSample[5], 4, 0.5, 0.1);
   h2 := herpXY_asm(@CHerpSample[5], 4, 0.5, 0.1);
 
   Assert(h1 = h2);
+
+  SetLength(ra, Length(CRankSampleA));
+  SetLength(rb, Length(CRankSampleB));
+  SpearmanPrepareRanks(CRankSampleA, ra);
+  SpearmanPrepareRanks(CRankSampleB, rb);
+  Assert(SpearmanRankCorrelation(ra, rb) = 1.0);
+  for i := 0 to High(CSampleRank) do
+  begin
+    Assert(ra[i].Rank = CSampleRank[i]);
+    Assert(rb[i].Rank = CSampleRank[i]);
+  end;
 
   SetLength(smps, 48000 * 2);
   fltLP := TFilterIIRLPBessel.Create(nil);

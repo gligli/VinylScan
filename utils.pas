@@ -30,12 +30,16 @@ type
     L, T, R, B: Double;
   end;
 
-  TSinCos = record
+  TSinCos = packed record
     Sin, Cos: Double;
   end;
 
-  TRadiusAngle = record
+  TRadiusAngle = packed record
     Radius, Angle: Double;
+  end;
+
+  TSpearmanRank = packed record
+    Position, Rank: Integer;
   end;
 
   TPointDDynArray = array of TPointD;
@@ -48,6 +52,7 @@ type
   TDoubleDynArray3 = array of TDoubleDynArray2;
   TSinCosDynArray = array of TSinCos;
   TRadiusAngleDynArray = array of TRadiusAngle;
+  TSpearmanRankDynArray = array of TSpearmanRank;
 
   TPointValueList = specialize TFPGList<TPointValue>;
 
@@ -132,7 +137,8 @@ function MAE(const a: TWordDynArray; const b: TWordDynArray): Double;
 function MSE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double; overload;
 function MSE(const a: TWordDynArray; const b: TWordDynArray): Double; overload;
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
-function SpearmanRankCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
+procedure SpearmanPrepareRanks(const a: TDoubleDynArray; var ranks: TSpearmanRankDynArray);
+function SpearmanRankCorrelation(const a: TSpearmanRankDynArray; const b: TSpearmanRankDynArray): Double;
 
 function Make8BitSample(smp: Double): ShortInt;
 function Make16BitSample(smp: Double): SmallInt;
@@ -1263,61 +1269,44 @@ begin
     Result := num / den;
 end;
 
-type
-  TSpearmanRank = record
-    Value: Double;
-    Position, Rank: Integer;
-  end;
-
-function ValueCompare(Item1, Item2, UserParameter: Pointer): Integer;
+function SpearmanCompare(Item1, Item2, UserParameter: Pointer): Integer;
 var
   r1: ^TSpearmanRank absolute Item1;
   r2: ^TSpearmanRank absolute Item2;
+  values: PDouble absolute UserParameter;
+  p1, p2: Integer;
 begin
-  Result := CompareValue(r1^.Value, r2^.Value);
+  p1 := r1^.Position;
+  p2 := r2^.Position;
+
+  Result := CompareValue(values[p1], values[p2]);
   if Result = 0 then
-    Result := CompareValue(r1^.Position, r2^.Position);
+    Result := CompareValue(p1, p2);
 end;
 
-function PositionCompare(Item1, Item2, UserParameter: Pointer): Integer;
+procedure SpearmanPrepareRanks(const a: TDoubleDynArray; var ranks: TSpearmanRankDynArray);
 var
-  r1: ^TSpearmanRank absolute Item1;
-  r2: ^TSpearmanRank absolute Item2;
+  i: Integer;
 begin
-  Result := CompareValue(r1^.Position, r2^.Position);
+  Assert(Length(a) = Length(ranks));
+
+  for i := 0 to High(ranks) do
+    ranks[i].Position := i;
+
+  QuickSort(ranks[0], 0, High(ranks), SizeOf(TSpearmanRank), @SpearmanCompare, @a[0]);
+
+  for i := 0 to High(ranks) do
+    ranks[ranks[i].Position].Rank := i + 1;
 end;
 
-function SpearmanRankCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
+function SpearmanRankCorrelation(const a: TSpearmanRankDynArray; const b: TSpearmanRankDynArray): Double;
 var
   i, sz: Integer;
   mn, num, da, db, den, dena, denb: Double;
-  ranks: array of TSpearmanRank;
 begin
   Assert(Length(a) = Length(b));
 
   sz := Length(a);
-
-  SetLength(ranks, sz * 2);
-
-  for i := 0 to High(a) do
-  begin
-    ranks[i].Value := a[i];
-    ranks[i].Position := i;
-    ranks[i + sz].Value := b[i];
-    ranks[i + sz].Position := i;
-  end;
-
-  QuickSort(ranks[0], 0, High(a), SizeOf(TSpearmanRank), @ValueCompare);
-  QuickSort(ranks[sz], 0, High(a), SizeOf(TSpearmanRank), @ValueCompare);
-
-  for i := 0 to High(a) do
-  begin
-    ranks[i].Rank := i + 1;
-    ranks[i + sz].Rank := i + 1;
-  end;
-
-  QuickSort(ranks[0], 0, High(a), SizeOf(TSpearmanRank), @PositionCompare);
-  QuickSort(ranks[sz], 0, High(a), SizeOf(TSpearmanRank), @PositionCompare);
 
   mn := sz * 0.5;
 
@@ -1326,8 +1315,8 @@ begin
   denb := 0.0;
   for i := 0 to High(a) do
   begin
-    da := ranks[i].Rank - mn;
-    db := ranks[i + sz].Rank - mn;
+    da := a[i].Rank - mn;
+    db := b[i].Rank - mn;
 
     num += da * db;
     dena += sqr(da);
@@ -1546,7 +1535,7 @@ end;
 procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFunction:TCompareFunction;AUserParameter:Pointer=nil);
 var I, J, P: Integer;
     PData,P1,P2: PByte;
-    Tmp: array[0..4095] of Byte;
+    Tmp: array[0..31] of Byte;
 begin
   if ALastItem <= AFirstItem then
     Exit;
