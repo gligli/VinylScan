@@ -658,7 +658,7 @@ begin
 
     // entirely cropped angle? -> not to be computed
 
-    if croppedCnt >= 2 then
+    if (croppedCnt >= 2) or (NormalizedAngleDiff(startAngle, endAngle) <= 0.0) then
     begin
       startAngle := NaN;
       endAngle := NaN;
@@ -699,8 +699,9 @@ end;
 function TScanCorrelator.InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
 var
   iAngle, iBaseScan: Integer;
-  t, bt, v, best, middleAngle, middleAngleMirror, angleExtents, angleExtentsMirror: Double;
+  t, bt, v, best: Double;
   curScan, baseScan: TInputScan;
+  tmpCoords: TCorrectCoords;
 begin
   Result := True;
   Coords.BaseScanIdx := -1;
@@ -714,6 +715,10 @@ begin
 
   // devise best baseScan
 
+  tmpCoords := coords;
+  tmpCoords.BaseScanIdx := coords.ScanIdx;
+  PrepareCorrect(tmpCoords);
+
   best := Infinity;
   for iBaseScan := 0 to High(FInputScans) do
   begin
@@ -722,12 +727,10 @@ begin
     if (Coords.ScanIdx = iBaseScan) or curScan.HasCorrectRef(FInputScans, Coords.AngleIdx, iBaseScan) then
       Continue;
 
-    angleExtents := NormalizedAngleDiff(baseScan.CropData.StartAngle, baseScan.CropData.EndAngle);
-    angleExtentsMirror := NormalizedAngleDiff(baseScan.CropData.StartAngleMirror, baseScan.CropData.EndAngleMirror);
-    middleAngle := NormalizeAngle(angleExtents * 0.5 + baseScan.CropData.StartAngle);
-    middleAngleMirror := NormalizeAngle(angleExtentsMirror * 0.5 + baseScan.CropData.StartAngleMirror);
+    tmpCoords.ScanIdx := iBaseScan;
+    BuildSinCosLUT(tmpCoords.AngleCnt, tmpCoords.sinCosLUT, tmpCoords.StartAngle + baseScan.RelativeAngle, NormalizedAngleDiff(tmpCoords.StartAngle, tmpCoords.EndAngle));
+    v := NelderMeadCorrect([0.0, 0.0], @tmpCoords);
 
-    v := 0;
     for iAngle := -1800 to 1799 do
     begin
       bt := DegToRad(iAngle / 10.0);
@@ -736,11 +739,8 @@ begin
       begin
          t := NormalizeAngle(bt + baseScan.RelativeAngle);
 
-        if InNormalizedAngle(t, baseScan.CropData.StartAngle, baseScan.CropData.EndAngle) then
-          v += Exp(-Sqr(NormalizedAngleDiff(t, middleAngle) / angleExtents));
-
-        if InNormalizedAngle(t, baseScan.CropData.StartAngleMirror, baseScan.CropData.EndAngleMirror) then
-          v += Exp(-Sqr(NormalizedAngleDiff(t, middleAngleMirror) / angleExtentsMirror));
+         v += Ord(InNormalizedAngle(t, baseScan.CropData.StartAngle, baseScan.CropData.EndAngle)) +
+              Ord(InNormalizedAngle(t, baseScan.CropData.StartAngleMirror, baseScan.CropData.EndAngleMirror));
       end;
     end;
 
@@ -760,7 +760,7 @@ end;
 procedure TScanCorrelator.PrepareCorrect(var coords: TCorrectCoords);
 var
   iRadius, iAngle, dummyAC: Integer;
-  bt, rBeg, r, sn, cs, px, py, cx, cy, saRaw, eaRaw, dummyAI, w: Double;
+  bt, rBeg, r, sn, cs, px, py, cx, cy, saRaw, eaRaw, dummyAI: Double;
   curScan, baseScan: TInputScan;
 begin
   baseScan := FInputScans[Coords.BaseScanIdx];
@@ -797,8 +797,6 @@ begin
   begin
     cs := coords.SinCosLUT[iAngle].Cos;
     sn := coords.SinCosLUT[iAngle].Sin;
-
-    w := Coords.Weights[iAngle];
 
     for iRadius := 0 to coords.RadiusCnt - 1 do
     begin
@@ -876,7 +874,8 @@ begin
     Result -= SpearmanRankCorrelation(coords^.PreparedRanks[iAngle], coords^.Ranks) * w;
   end;
 
-  Result /= wAcc;
+  if not IsZero(wAcc) then
+    Result /= wAcc;
 end;
 
 procedure TScanCorrelator.Correct;
