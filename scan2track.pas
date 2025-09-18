@@ -39,10 +39,6 @@ type
     FDPI: Integer;
     FRadiuses: TDoubleDynArray;
 
-    FPrevSamples: TDoubleDynArray;
-    FPrevSamplesPos, FPrevSamplesCount: Integer;
-    FPrevSamplesMeanAcc, FPrevSamplesStdDevAcc: Double;
-
     procedure Init(AProfileRef: TProfile; ASilent: Boolean; ASampleRate: Integer; ADecoderPrecision: Integer);
     procedure FindTrackStart;
     function DecodeSample(AScan: TInputScan; radius, prevRadius, angleSin, angleCos: Double): TPointD;
@@ -115,8 +111,6 @@ begin
 
   FPointsPerRevolution := Round(FSampleRate / FProfileRef.RevolutionsPerSecond);
   FRadiansPerRevolutionPoint := -Pi * 2.0 / FPointsPerRevolution;
-
-  SetLength(FPrevSamples, FPointsPerRevolution shl (FDecoderPrecision + 1));
 end;
 
 function CompareInputScansStartAngleQuality(Item1, Item2, UserParameter: Pointer): Integer;
@@ -169,28 +163,15 @@ function TScan2Track.DecodeSample(AScan: TInputScan; radius, prevRadius, angleSi
 var
   iSmp, posMin, posMax, decoderMax: Integer;
   r, cx, cy, px, py, cxa, sampleMean, sampleStdDev: Double;
+  smpBuf: array[SmallInt] of Double;
 
   function GetSampleIdx(iSmp: Integer): Double;
+  var
+    r: Double;
   begin
     r := radius + (iSmp + 0.5) * cxa;
     Result := AScan.GetPointD_Final(AScan.Image, angleSin * r + cy, angleCos * r + cx);
-
-    if FPrevSamplesCount >= Length(FPrevSamples) then
-    begin
-      FPrevSamplesStdDevAcc -= Sqr(FPrevSamplesMeanAcc / FPrevSamplesCount - FPrevSamples[FPrevSamplesPos]);
-      FPrevSamplesMeanAcc -= FPrevSamples[FPrevSamplesPos];
-    end;
-
-    FPrevSamples[FPrevSamplesPos] := Result;
-
-    Inc(FPrevSamplesPos);
-    if FPrevSamplesPos >= Length(FPrevSamples) then
-      FPrevSamplesPos := 0;
-    if FPrevSamplesCount <= Length(FPrevSamples) then
-      Inc(FPrevSamplesCount);
-
-    FPrevSamplesMeanAcc += Result;
-    FPrevSamplesStdDevAcc += Sqr(FPrevSamplesMeanAcc / FPrevSamplesCount - Result);
+    smpBuf[iSmp] := Result;
   end;
 
   function ConvertToSampleValue(ASampleIdxAcc: Double): Double;
@@ -218,7 +199,7 @@ begin
     Exit;
 
   if not IsNan(prevRadius) then
-    decoderMax := EnsureRange(Floor((prevRadius - radius) * 0.5 * CTrack2TrackToTrackWidthRatio / cxa), decoderMax shr 2, decoderMax);
+    decoderMax := EnsureRange(Floor((prevRadius - radius) * 0.5 * CTrack2TrackToTrackWidthRatio / cxa), 2, decoderMax);
 
   posMin := -decoderMax;
   posMax := decoderMax - 1;
@@ -233,18 +214,12 @@ begin
   for iSmp := posMin to -1 do
     Result.Y += GetSampleIdx(iSmp);
 
-  sampleMean := FPrevSamplesMeanAcc / FPrevSamplesCount;
-  sampleStdDev := Sqrt(FPrevSamplesStdDevAcc / FPrevSamplesCount);
+  MeanAndStdDev(@smpBuf[posMin], posMax - posMin + 1, sampleMean, sampleStdDev);
 
   Result.X := ConvertToSampleValue(Result.X);
   Result.Y := ConvertToSampleValue(Result.Y);
 
   Result.Y := -Result.Y;
-end;
-
-function CompareSamples(Item1, Item2, UserParameter: Pointer): Integer;
-begin
-  Result := CompareValue(PDouble(Item1)^, PDouble(Item2)^);
 end;
 
 procedure TScan2Track.EvalTrack;
