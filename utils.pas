@@ -97,6 +97,7 @@ function iDiv0(x, y: Integer): Integer;overload;inline;
 function iDiv0(x, y: Int64): Int64;overload;inline;
 function DivDef(x, y, def: Double): Double;inline;
 function NanDef(x, def: Double): Double; inline;
+function MeanNan(const x: TDoubleDynArray): Double;
 
 function SwapRB(c: Integer): Integer; inline;
 function ToRGB(r, g, b: Byte): Integer; inline;
@@ -235,6 +236,24 @@ begin
   Result := x;
   if IsNan(Result) then
     Result := def;
+end;
+
+function MeanNan(const x: TDoubleDynArray): Double;
+var
+  i, cnt: Integer;
+begin
+  cnt := 0;
+  Result := 0.0;
+
+  for i := 0 to High(x) do
+    if not IsNan(x[i]) then
+    begin
+      Result += x[i];
+      Inc(cnt);
+    end;
+
+  if cnt > 1 then
+    Result /= cnt;
 end;
 
 function SwapRB(c: Integer): Integer; inline;
