@@ -84,12 +84,15 @@ type
     procedure FindTrack(AUseGradient, AFindCroppedArea: Boolean; AForcedSampleRate: Integer = -1);
     procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle: Double);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
+    procedure DrawTrack;
 
     function InRangePointD(Y, X: Double): Boolean; inline;
     function GetPointD_Work(const Image: TWordDynArray; Y, X: Double): Double; inline;
     function GetPointD_Final(const Image: TWordDynArray; Y, X: Double): Double; inline;
     function GetMeanSD(const Image: TWordDynArray; AStartRadius, AEndRadius, AStartAngle, AEndAngle, ASigma: Double): TPointD;
     procedure GetGradientsD(const Image: TWordDynArray; Y, X: Double; out GY: Double; out GX: Double);
+
+    function DecodeSample(precision: Integer; radius, prevRadius, angleSin, angleCos: Double; out sampleMeanSD: TPointD): TPointD;
 
     procedure AddCorrectRef(AngleIdx, ScanIdx: Integer);
     function HasCorrectRef(const AList: TInputScanDynArray; AngleIdx, ScanIdx: Integer): Boolean;
@@ -245,7 +248,7 @@ begin
   BuildSinCosLUT(CPointsPerRevolution div 4, sinCosLUT, 0.0, Pi / 2.0);
 
   stencilY[NegativeValue] := -1;
-  stencilY[ZeroValue] := 4;
+  stencilY[ZeroValue] := 2;
   stencilY[PositiveValue] := -1;
 
   stencilX[NegativeValue] := -FProfileRef.LeadOutGrooveThickness * FDPI;
@@ -298,7 +301,7 @@ begin
     Exit;
 
   stencilY[NegativeValue] := -1;
-  stencilY[ZeroValue] := 4;
+  stencilY[ZeroValue] := 2;
   stencilY[PositiveValue] := -1;
 
   stencilX[NegativeValue] := -FProfileRef.LeadOutGrooveThickness * FDPI;
@@ -1146,6 +1149,179 @@ begin
   end;
 end;
 
+procedure TInputScan.DrawTrack;
+const
+  CDecoderPrecision = 2;
+  CMinGrooveWidthRatio = 0.25;
+  CPixelValue = High(Word) - 1;
+  CPrevPositions = 4;
+
+  function FindGrooveRadiuses(AAngle: Double): TDoubleDynArray;
+  var
+    iRadius, rBeg, rEnd, pos, inGrooveCnt, minGrooveWidth, lastGap: Integer;
+    sn, cs, px: Double;
+    meanSd: TPointD;
+  begin
+    SinCos(AAngle, sn, cs);
+
+    rBeg := Floor(FProfileRef.MinConcentricGroove * 0.5 * FDPI);
+    rEnd := Ceil(FProfileRef.StylusSetDown * 0.5 * FDPI);
+    minGrooveWidth := Ceil(FProfileRef.RecordingGrooveWidth * CMinGrooveWidthRatio * FDPI);
+
+    meanSd := GetMeanSD(FImage,
+        rBeg, rEnd,
+        NormalizeAngle(AAngle - FRadiansPerRevolutionPoint * 0.5),
+        NormalizeAngle(AAngle + FRadiansPerRevolutionPoint * 0.5),
+        1.0);
+
+    SetLength(Result, rEnd - rBeg + 1);
+
+    pos := 0;
+    inGrooveCnt := 0;
+    lastGap := rBeg;
+    for iRadius := rBeg to rEnd do
+    begin
+      px := GetPointD_Work(FImage, iRadius * sn + FCenter.Y, iRadius * cs + FCenter.X);
+
+      if px > meanSd.X then
+      begin
+        Inc(inGrooveCnt);
+      end
+      else
+      begin
+        if inGrooveCnt >= minGrooveWidth then
+        begin
+          Result[pos] := lastGap + inGrooveCnt * 0.5;
+          Inc(pos);
+        end;
+
+        lastGap := iRadius;
+        inGrooveCnt := 0;
+      end;
+    end;
+
+    SetLength(Result, pos);
+  end;
+
+var
+  iPP, iRadius, iStart, iCur, dir, px, py, yx: Integer;
+  sn, cs, r, fbRatio, rInc, prevRadius: Double;
+  allDone, isPrevPosition: Boolean;
+  meanSd: TPointD;
+
+  startData: array[0 .. 1] of record
+    Angle: Double;
+    Radiuses: TDoubleDynArray;
+  end;
+
+  curData: array[0 .. 3] of record
+    Angle: Double;
+    AngleInc: Double;
+    PrevPositionsPos: Integer;
+    Done: TBooleanDynArray;
+    Radius: TDoubleDynArray;
+    PrevPositions: array of array[0 .. CPrevPositions - 1] of Integer;
+  end;
+
+begin
+  // find start angles
+
+  startData[0].Angle := NormalizeAngle(NormalizedAngleDiff(FCropData.EndAngle, FCropData.StartAngleMirror) * 0.5 + FCropData.EndAngle);
+  startData[1].Angle := NormalizeAngle(NormalizedAngleDiff(FCropData.EndAngleMirror, FCropData.StartAngle) * 0.5 + FCropData.EndAngleMirror);
+
+  // find groove radiuses of start angles
+
+  for iStart := Low(startData) to High(startData) do
+    startData[iStart].Radiuses := FindGrooveRadiuses(startData[iStart].Angle);
+
+  // init
+
+  for iCur := Low(curData) to High(curData) do
+  begin
+    iStart := iCur shr 1;
+    dir := IfThen(Odd(iCur), -1, 1);
+
+    curData[iCur].AngleInc := FRadiansPerRevolutionPoint * dir;
+    curData[iCur].Angle := startData[iStart].Angle + curData[iCur].AngleInc * 0.5;
+    curData[iCur].PrevPositionsPos := 0;
+
+    SetLength(curData[iCur].Done, Length(startData[iStart].Radiuses));
+    SetLength(curData[iCur].Radius, Length(startData[iStart].Radiuses));
+    SetLength(curData[iCur].PrevPositions, Length(startData[iStart].Radiuses));
+
+    for iRadius := 0 to High(curData[iCur].Radius) do
+    begin
+      curData[iCur].Radius[iRadius] := startData[iStart].Radiuses[iRadius];
+
+      for iPP := 0 to CPrevPositions - 1 do
+        curData[iCur].PrevPositions[iRadius, iPP] := -1;
+    end;
+  end;
+
+  fbRatio := CutoffToFeedbackRatio(CLoopbackLowCutoffFreq, FPointsPerRevolution) * FProfileRef.RecordingGrooveWidth * 0.5 * FDPI;
+
+  // loop
+
+  repeat
+    allDone := True;
+
+    for iCur := Low(curData) to High(curData) do
+    begin
+      iStart := iCur shr 1;
+      dir := IfThen(Odd(iCur), -1, 1);
+
+      SinCos(curData[iCur].Angle, sn, cs);
+
+      for iRadius := 0 to High(curData[iCur].Radius) do
+      begin
+        if curData[iCur].Done[iRadius] then
+          Continue;
+
+        r := curData[iCur].Radius[iRadius];
+
+        px := round(r * cs + FCenter.X);
+        py := round(r * sn + FCenter.Y);
+
+        yx  := py * FWidth + px;
+
+        isPrevPosition := False;
+        for iPP := 0 to CPrevPositions - 1 do
+          isPrevPosition := isPrevPosition or (curData[iCur].PrevPositions[iRadius, iPP] = yx);
+
+        if InRangePointD(py, px) and (isPrevPosition or (FProcessedImage[yx] <> CPixelValue)) then
+        begin
+          FProcessedImage[yx] := CPixelValue;
+
+          prevRadius := FProfileRef.OuterSize * 0.5 * FDPI;
+          if iRadius < High(curData[iCur].Radius) then
+            prevRadius := curData[iCur].Radius[iRadius + 1];
+
+          rInc := GetMono(AdjustSample(DecodeSample(CDecoderPrecision, r, prevRadius, sn, cs, meanSd), meanSd));
+
+          curData[iCur].Radius[iRadius] += rInc * fbRatio;
+
+          allDone := False;
+        end
+        else
+        begin
+          curData[iCur].Done[iRadius] := True;
+        end;
+
+        curData[iCur].PrevPositions[iRadius, curData[iCur].PrevPositionsPos] := yx;
+      end;
+
+      Inc(curData[iCur].PrevPositionsPos);
+      if curData[iCur].PrevPositionsPos >= CPrevPositions then
+        curData[iCur].PrevPositionsPos := 0;
+
+      curData[iCur].Angle += curData[iCur].AngleInc;
+    end;
+
+  until allDone;
+
+  WriteLn(ImageShortName, RadToDeg(startData[0].Angle):9:3, RadToDeg(startData[1].Angle):9:3, Length(startData[0].Radiuses):4, Length(startData[1].Radiuses):4);
+end;
+
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
 begin
   Result := InRange(Y, -Low(TSerpCoeffs9), Height + Low(TSerpCoeffs9) - 2) and InRange(X, -Low(TSerpCoeffs9), Height + Low(TSerpCoeffs9) - 2);
@@ -1243,6 +1419,65 @@ begin
 
   GX := lgx;
   GY := lgy;
+end;
+
+function TInputScan.DecodeSample(precision: Integer; radius, prevRadius, angleSin, angleCos: Double; out
+  sampleMeanSD: TPointD): TPointD;
+var
+  iSmp, posMin, posMax, decoderMax: Integer;
+  r, cx, cy, px, py, cxa, sampleMean, sampleStdDev: Double;
+  smpBuf: array[SmallInt] of Double;
+
+  function GetSampleIdx(iSmp: Integer): Double;
+  var
+    r: Double;
+  begin
+    r := radius + (iSmp + 0.5) * cxa;
+    Result := GetPointD_Final(Image, angleSin * r + cy, angleCos * r + cx);
+    smpBuf[iSmp] := Result;
+  end;
+
+begin
+  Result.X := 0.0;
+  Result.Y := 0.0;
+
+  decoderMax := 1 shl precision;
+
+  cxa := FProfileRef.RecordingGrooveWidth * 0.5 * FDPI / decoderMax;
+
+  cx := FCenter.X;
+  cy := FCenter.Y;
+
+  r := radius + decoderMax * cxa;
+  px := angleCos * r + cx;
+  py := angleSin * r + cy;
+
+  if not InRangePointD(py, px) then
+    Exit;
+
+  if not IsNan(prevRadius) then
+    decoderMax := EnsureRange(Floor((prevRadius - radius) * 0.5 * CTrack2TrackToTrackWidthRatio / cxa), 2, decoderMax);
+
+  posMin := -decoderMax;
+  posMax := decoderMax - 1;
+  sampleMean := Infinity;
+  sampleStdDev := -Infinity;
+
+  Result.X := 0.0;
+  for iSmp := 0 to posMax do
+    Result.X += GetSampleIdx(iSmp);
+
+  Result.Y := 0.0;
+  for iSmp := posMin to -1 do
+    Result.Y += GetSampleIdx(iSmp);
+
+  MeanAndStdDev(@smpBuf[posMin], posMax - posMin + 1, sampleMean, sampleStdDev);
+
+  sampleMeanSD.X := sampleMean;
+  sampleMeanSD.Y := DivDef(1.0, sampleStdDev, 0.0);
+
+  Result.X /= decoderMax;
+  Result.Y /= decoderMax;
 end;
 
 procedure TInputScan.AddCorrectRef(AngleIdx, ScanIdx: Integer);

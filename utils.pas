@@ -157,6 +157,8 @@ procedure IncrementalSinCos(Angle: Double; var PrevAngle: Double; var ASinCos: T
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray); overload;
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TDoubleDynArray); overload;
+function GetMono(const ASample: TPointD): Double;
+function AdjustSample(const sample, meanSD: TPointD): TPointD;
 
 procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFunction:TCompareFunction;AUserParameter:Pointer=nil);
 
@@ -1549,6 +1551,17 @@ begin
     idata[i] := Make16BitSample(data[i]);
 
   CreateWAV(channels, resolution, rate, fn, idata);
+end;
+
+function GetMono(const ASample: TPointD): Double;
+begin
+  Result := (ASample.X + ASample.Y) * 0.5;
+end;
+
+function AdjustSample(const sample, meanSD: TPointD): TPointD;
+begin
+  Result.X := (sample.X - meanSD.X) * meanSD.Y;
+  Result.Y := -(sample.Y - meanSD.X) * meanSD.Y;
 end;
 
 procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFunction:TCompareFunction;AUserParameter:Pointer=nil);

@@ -92,6 +92,7 @@ type
     procedure AngleInit;
     procedure Analyze;
     procedure Crop;
+    procedure DrawTrack;
     procedure Correct;
     procedure Rebuild;
   public
@@ -607,6 +608,25 @@ begin
     WriteLn(FInputScans[i].ImageShortName, ', begin:', RadToDeg(FInputScans[i].CropData.StartAngle):9:3, ', end:', RadToDeg(FInputScans[i].CropData.EndAngle):9:3, ', begin2:', RadToDeg(FInputScans[i].CropData.StartAngleMirror):9:3, ', end2:', RadToDeg(FInputScans[i].CropData.EndAngleMirror):9:3);
 end;
 
+procedure TScanCorrelator.DrawTrack;
+
+  procedure DoDraw(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  begin
+    if not InRange(AIndex, 0, High(FInputScans)) then
+      Exit;
+
+    FInputScans[AIndex].DrawTrack;
+  end;
+
+begin
+ WriteLn('DrawTrack');
+
+ if Length(FInputScans) <= 0 then
+   Exit;
+
+ ProcThreadPool.DoParallelLocalProc(@DoDraw, 0, High(FInputScans));
+end;
+
 procedure TScanCorrelator.CorrectAnglesFromCoords(const coords: TCorrectCoords; out AStartAngle, AEndAngle,
   angleInc: Double; out angleCnt: Integer; AReduceAngles: Boolean);
 var
@@ -806,7 +826,7 @@ begin
       py := sn * r + cy;
 
       if baseScan.InRangePointD(py, px) then
-        coords.Data[iRadius] := baseScan.GetPointD_Work(baseScan.Image, py, px)
+        coords.Data[iRadius] := baseScan.GetPointD_Work(baseScan.ProcessedImage, py, px)
       else
         coords.Data[iRadius] := 1e6;
     end;
@@ -864,7 +884,7 @@ begin
       px := cs * rsk + cx;
       py := sn * rsk + cy;
 
-      coords^.Data[iRadius] := scan.GetPointD_Work(scan.Image, py, px);
+      coords^.Data[iRadius] := scan.GetPointD_Work(scan.ProcessedImage, py, px);
     end;
 
     w := coords^.Weights[iAngle];
@@ -1250,6 +1270,7 @@ begin
   AngleInit;
   if FAnalyzePass then Analyze;
   Crop;
+  DrawTrack;
   if FCorrectPass then Correct;
   Rebuild;
 end;

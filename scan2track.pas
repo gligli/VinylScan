@@ -41,8 +41,6 @@ type
 
     procedure Init(AProfileRef: TProfile; ASilent: Boolean; ASampleRate: Integer; ADecoderPrecision: Integer);
     procedure FindTrackStart;
-    function DecodeSample(AScan: TInputScan; radius, prevRadius, angleSin, angleCos: Double; out sampleMeanSD: TPointD): TPointD;
-    function AdjustSample(const sample, meanSD: TPointD): TPointD;
 
   public
     constructor Create(AProfileRef: TProfile; AScanFileNames: TStrings; ADefaultDPI: Integer = 2400; ASilent: Boolean = False; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 6);
@@ -160,76 +158,7 @@ begin
   end;
 end;
 
-function TScan2Track.DecodeSample(AScan: TInputScan; radius, prevRadius, angleSin, angleCos: Double; out sampleMeanSD: TPointD): TPointD;
-var
-  iSmp, posMin, posMax, decoderMax: Integer;
-  r, cx, cy, px, py, cxa, sampleMean, sampleStdDev: Double;
-  smpBuf: array[SmallInt] of Double;
-
-  function GetSampleIdx(iSmp: Integer): Double;
-  var
-    r: Double;
-  begin
-    r := radius + (iSmp + 0.5) * cxa;
-    Result := AScan.GetPointD_Final(AScan.Image, angleSin * r + cy, angleCos * r + cx);
-    smpBuf[iSmp] := Result;
-  end;
-
-begin
-  Result.X := 0.0;
-  Result.Y := 0.0;
-
-  decoderMax := 1 shl FDecoderPrecision;
-
-  cxa := FProfileRef.RecordingGrooveWidth * 0.5 * AScan.DPI / decoderMax;
-
-  cx := AScan.Center.X;
-  cy := AScan.Center.Y;
-
-  r := radius + decoderMax * cxa;
-  px := angleCos * r + cx;
-  py := angleSin * r + cy;
-
-  if not AScan.InRangePointD(py, px) then
-    Exit;
-
-  if not IsNan(prevRadius) then
-    decoderMax := EnsureRange(Floor((prevRadius - radius) * 0.5 * CTrack2TrackToTrackWidthRatio / cxa), 2, decoderMax);
-
-  posMin := -decoderMax;
-  posMax := decoderMax - 1;
-  sampleMean := Infinity;
-  sampleStdDev := -Infinity;
-
-  Result.X := 0.0;
-  for iSmp := 0 to posMax do
-    Result.X += GetSampleIdx(iSmp);
-
-  Result.Y := 0.0;
-  for iSmp := posMin to -1 do
-    Result.Y += GetSampleIdx(iSmp);
-
-  MeanAndStdDev(@smpBuf[posMin], posMax - posMin + 1, sampleMean, sampleStdDev);
-
-  sampleMeanSD.X := sampleMean;
-  sampleMeanSD.Y := DivDef(1.0, sampleStdDev, 0.0);
-
-  Result.X /= decoderMax;
-  Result.Y /= decoderMax;
-end;
-
-function TScan2Track.AdjustSample(const sample, meanSD: TPointD): TPointD;
-begin
-  Result.X := (sample.X - meanSD.X) * meanSD.Y;
-  Result.Y := -(sample.Y - meanSD.X) * meanSD.Y;
-end;
-
 procedure TScan2Track.EvalTrack;
-
-  function GetMono(const ASample: TPointD): Double;
-  begin
-    Result := (ASample.X + ASample.Y) * 0.5;
-  end;
 
   procedure StoreSample(var samplesArray: TDoubleDynArray; fsmp: TPointD; pos: Integer; mono: Boolean);
   begin
@@ -336,7 +265,7 @@ begin
 
         if not sampleCropped then
         begin
-          rawSamples[iScan] := DecodeSample(scan, FRadiuses[iScan], prevRadiuses[iLut, iScan], sn, cs, sampleMeanSD);
+          rawSamples[iScan] := scan.DecodeSample(FDecoderPrecision, FRadiuses[iScan], prevRadiuses[iLut, iScan], sn, cs, sampleMeanSD);
           radiusSamples[iScan] := GetMono(AdjustSample(rawSamples[iScan], sampleMeanSD));
         end
         else
