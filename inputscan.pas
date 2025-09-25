@@ -1077,10 +1077,10 @@ procedure TInputScan.FixCISScanners;
 
   procedure Resample(X1, X2, FixLen: Integer);
   var
-    iSerp, y, x, iPred, yoff, xii, leftFix, rightFix: Integer;
+    iHerp, y, x, iPred, yoff, xii, leftFix, rightFix: Integer;
     rt, alpha, xi: Double;
     pred: TDoubleDynArray2;
-    serpData: TSerpCoeffs9;
+    herpData: array[-1 .. 2] of Double;
   begin
     leftFix := FixLen div 2;
     rightFix := FixLen - leftFix;
@@ -1112,13 +1112,13 @@ procedure TInputScan.FixCISScanners;
         xii := Trunc(xi);
         alpha := xi - xii;
 
-        for iSerp := Low(TSerpCoeffs9) to -Low(TSerpCoeffs9) do
-          if not InRange(xii + iSerp, 0, High(pred[y])) then
-            serpData[iSerp] := FImage[yoff + EnsureRange(X1 + xii + iSerp, 0, FWidth - 1)]
+        for iHerp := Low(herpData) to High(herpData) do
+          if not InRange(xii + iHerp, 0, High(pred[y])) then
+            herpData[iHerp] := FImage[yoff + EnsureRange(X1 + xii + iHerp, 0, FWidth - 1)]
           else
-            serpData[iSerp] := pred[y, xii + iSerp];
+            herpData[iHerp] := pred[y, xii + iHerp];
 
-        FImage[yoff + x] := EnsureRange(Round(serpFromCoeffs(serpCoeffs(alpha), @serpData[0])), 0, High(Word));
+        FImage[yoff + x] := EnsureRange(Round(herp(herpData[-1], herpData[0], herpData[1], herpData[2], alpha)), 0, High(Word));
       end;
     end;
 
@@ -1152,7 +1152,7 @@ end;
 procedure TInputScan.DrawTrack;
 const
   CDecoderPrecision = 2;
-  CMinGrooveWidthRatio = 0.25;
+  CMinGrooveWidth = 0.001; // inches
   CPixelValue = High(Word) - 1;
   CPrevPositions = 4;
 
@@ -1166,7 +1166,7 @@ const
 
     rBeg := Floor(FProfileRef.MinConcentricGroove * 0.5 * FDPI);
     rEnd := Ceil(FProfileRef.StylusSetDown * 0.5 * FDPI);
-    minGrooveWidth := Ceil(FProfileRef.RecordingGrooveWidth * CMinGrooveWidthRatio * FDPI);
+    minGrooveWidth := Ceil(CMinGrooveWidth * FDPI);
 
     meanSd := GetMeanSD(FImage,
         rBeg, rEnd,
@@ -1181,7 +1181,7 @@ const
     lastGap := rBeg;
     for iRadius := rBeg to rEnd do
     begin
-      px := GetPointD_Work(FImage, iRadius * sn + FCenter.Y, iRadius * cs + FCenter.X);
+      px := GetPointD_Final(FImage, iRadius * sn + FCenter.Y, iRadius * cs + FCenter.X);
 
       if px > meanSd.X then
       begin
@@ -1204,7 +1204,7 @@ const
   end;
 
 var
-  iPP, iRadius, iStart, iCur, dir, px, py, yx: Integer;
+  iPP, iRadius, iStart, iCur, dir, px, py, yx, pxCount: Integer;
   sn, cs, r, fbRatio, rInc, prevRadius: Double;
   allDone, isPrevPosition: Boolean;
   meanSd: TPointD;
@@ -1259,6 +1259,7 @@ begin
   end;
 
   fbRatio := CutoffToFeedbackRatio(CLoopbackLowCutoffFreq, FPointsPerRevolution) * FProfileRef.RecordingGrooveWidth * 0.5 * FDPI;
+  pxCount := 0;
 
   // loop
 
@@ -1300,6 +1301,8 @@ begin
 
           curData[iCur].Radius[iRadius] += rInc * fbRatio;
 
+          Inc(pxCount);
+
           allDone := False;
         end
         else
@@ -1319,7 +1322,7 @@ begin
 
   until allDone;
 
-  WriteLn(ImageShortName, RadToDeg(startData[0].Angle):9:3, RadToDeg(startData[1].Angle):9:3, Length(startData[0].Radiuses):4, Length(startData[1].Radiuses):4);
+  WriteLn(ImageShortName, RadToDeg(startData[0].Angle):9:3, RadToDeg(startData[1].Angle):9:3, Length(startData[0].Radiuses):4, Length(startData[1].Radiuses):4, pxCount:8);
 end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
