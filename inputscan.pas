@@ -686,7 +686,7 @@ begin
 
   cx := Round(FCenter.X);
   cy := Round(FCenter.Y);
-  lblPos := Round(Sqr(FProfileRef.ConcentricGroove * 0.5 * FDPI));
+  lblPos := Round(Sqr(FProfileRef.MinConcentricGroove * 0.5 * FDPI));
 
   labelRadius := Ceil(0.02 * FDPI);
   labelOffsets := MakeRadiusOffsets(labelRadius);
