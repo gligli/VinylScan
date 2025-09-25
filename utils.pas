@@ -107,8 +107,6 @@ function ToLuma(r, g, b: Integer): Integer; inline;
 function ToBW(r, g, b: Integer): Integer; inline;
 
 function CompressRange(x: Double): Double; inline;
-function Sinc(x: Double): Double;
-function BlackmanExactWindow(w: Double): Double;
 
 function lerp(x, y, alpha: Double): Double; overload;
 function lerp(x, y: Word; alpha: Double): Double; overload;
@@ -119,12 +117,6 @@ function herp(y0, y1, y2, y3, alpha: Double): Double; inline;
 function herp(y0, y1, y2, y3: Word; alpha: Double): Double; inline;
 function herpXY(topleftPx: PWORD; stride: UInt64; alphaX, alphaY: Double): Double;
 function herpXY_asm(topleftPx_rcx: PWORD; stride_rdx: UInt64; alphax_xmm2, alphay_xmm3: Double): Double; register; assembler;
-
-function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
-procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
-function serpCoeffs(alpha: Double): PSingle;
-procedure serpFromCoeffsXY(coeffs: PSingle; centerPx: PWORD; stride: Integer; res: PSingle);
-function serpFromCoeffs(coeffs, data: PSingle): Single;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: array of Double; EpsilonG: Double; MaxIter: Integer; Silent: Boolean; Data: Pointer = nil): Double;
@@ -324,23 +316,6 @@ end;
 function CompressRange(x: Double): Double;
 begin
   Result := fast_tanh_rat3(x);
-end;
-
-function Sinc(x: Double): Double;
-begin
-  Result := DivDef(Sin(x), x, 1.0);
-end;
-
-function BlackmanExactWindow(w: Double): Double;
-begin
-  Result := 0.0;
-  if not InRange(w, 0.0, 1.0) then
-    Exit;
-
-  Result := 7938/18608 - 9240/18608 * Cos(2.0 * Pi * w) + 1430/18608 * Cos(4.0 * Pi * w);
-  //Result := 0.5 * (1.0 - Cos(2.0 * Pi * w));
-  //Result := 0.355768 - 0.487396 * Cos(2.0 * Pi * w) + 0.144232 * Cos(4.0 * Pi * w) - 0.012604 * Cos(6.0 * Pi * w);
-  //Result := 1;
 end;
 
 function lerp(x, y, alpha: Double): Double;
@@ -735,224 +710,6 @@ asm
   dq $3FE0000000000000
 @funcEnd:
 
-end;
-
-procedure serpCoeffsBuilsLUT(var coeffs: TSerpCoeffs9ByWord);
-var
-  iAlpha, iCoeff: Integer;
-  alpha, w: Double;
-begin
-  for iAlpha := 0 to High(TSerpCoeffs9ByWord) do
-  begin
-    alpha := iAlpha * (1.0 / Length(TSerpCoeffs9ByWord));
-    for iCoeff := Low(TSerpCoeffs9) to -Low(TSerpCoeffs9) do
-    begin
-      w := ((iCoeff - alpha) - Low(TSerpCoeffs9)) / (2.0 * -Low(TSerpCoeffs9));
-      coeffs[iAlpha, iCoeff] := Sinc((iCoeff - alpha) * Pi) * BlackmanExactWindow(w);
-    end;
-  end;
-end;
-
-function serpCoeffs(alpha: Double): PSingle;
-begin
-  Result := @GSerpCoeffs9ByWord[Trunc(alpha * Length(TSerpCoeffs9ByWord)), 0];
-end;
-
-{$ifdef CPUX64}
-
-function serpFromCoeffsX_asm(img_rcx: PWORD): Single; register; assembler;
-asm
-  movdqu xmm11, [rcx - 4 * 2]
-  movdqa xmm0, xmm11
-
-  punpckhwd xmm11, xmm12
-  punpcklwd xmm0, xmm12
-
-  cvtdq2ps xmm11, xmm11
-  cvtdq2ps xmm0, xmm0
-
-  mulps xmm11, xmm14
-  mulps xmm0, xmm13
-
-  addps xmm0, xmm11
-
-  haddps xmm0, xmm0
-  haddps xmm0, xmm0
-
-  movzx r15d, word ptr [rcx + 4 * 2]
-  cvtsi2ss xmm11, r15d
-  mulss xmm11, xmm15
-  addss xmm0, xmm11
-end;
-
-{$else}
-
-function serpFromCoeffsX(coeffs: PSingle; img: PWORD): Single;
-var
-  iCoeff: Integer;
-begin
-  Result := 0;
-  for iCoeff := Low(TSerpCoeffs9) to -Low(TSerpCoeffs9) do
-    Result += img[iCoeff] * coeffs[iCoeff];
-end;
-
-{$endif}
-
-{$ifdef CPUX64}
-
-procedure serpFromCoeffsXY(coeffs: PSingle; centerPx: PWORD; stride: Integer; res: PSingle); register; assembler;
-asm
-  sub rsp, 16 * 5
-  movdqa oword ptr [rsp], xmm11
-  movdqa oword ptr [rsp + $10], xmm12
-  movdqa oword ptr [rsp + $20], xmm13
-  movdqa oword ptr [rsp + $30], xmm14
-  movdqa oword ptr [rsp + $40], xmm15
-
-  pxor xmm12, xmm12
-  movdqu xmm13, [rcx - 4 * 4]
-  movdqu xmm14, [rcx]
-  movss xmm15, [rcx + 4 * 4]
-
-  push rax
-  push rcx
-  push r15
-
-  mov rax, r8
-  shl rax, 2
-
-  lea rcx, [rdx + rax * 2]
-  call serpFromCoeffsX_asm
-  movss [r9 + 4 * 4], xmm0
-
-  sub rax, r8
-
-  lea rcx, [rdx + rax * 2]
-  call serpFromCoeffsX_asm
-  movss [r9 + 3 * 4], xmm0
-
-  sub rax, r8
-
-  lea rcx, [rdx + rax * 2]
-  call serpFromCoeffsX_asm
-  movss [r9 + 2 * 4], xmm0
-
-  sub rax, r8
-
-  lea rcx, [rdx + rax * 2]
-  call serpFromCoeffsX_asm
-  movss [r9 + 1 * 4], xmm0
-
-  sub rax, r8
-
-  lea rcx, [rdx + rax * 2]
-  call serpFromCoeffsX_asm
-  movss [r9 + 0 * 4], xmm0
-
-  sub rax, r8
-
-  lea rcx, [rdx + rax * 2]
-  call serpFromCoeffsX_asm
-  movss [r9 + -1 * 4], xmm0
-
-  sub rax, r8
-
-  lea rcx, [rdx + rax * 2]
-  call serpFromCoeffsX_asm
-  movss [r9 + -2 * 4], xmm0
-
-  sub rax, r8
-
-  lea rcx, [rdx + rax * 2]
-  call serpFromCoeffsX_asm
-  movss [r9 + -3 * 4], xmm0
-
-  sub rax, r8
-
-  lea rcx, [rdx + rax * 2]
-  call serpFromCoeffsX_asm
-  movss [r9 + -4 * 4], xmm0
-
-  pop r15
-  pop rcx
-  pop rax
-
-  movdqa xmm11, oword ptr [rsp]
-  movdqa xmm12, oword ptr [rsp + $10]
-  movdqa xmm13, oword ptr [rsp + $20]
-  movdqa xmm14, oword ptr [rsp + $30]
-  movdqa xmm15, oword ptr [rsp + $40]
-  add rsp, 16 * 5
-end;
-{$else}
-procedure serpFromCoeffsXY(coeffs: PSingle; centerPx: PWORD; stride: Integer; res: PSingle);
-var
-  iCoeff: Integer;
-  pp: PWORD;
-begin
-  pp := @centerPx[-Low(TSerpCoeffs9) * stride];
-  for iCoeff := Low(TSerpCoeffs9) to -Low(TSerpCoeffs9) do
-  begin
-    res[iCoeff] := serpFromCoeffsX(coeffs, pp);
-    Dec(pp, stride);
-  end;
-end;
-{$endif}
-
-{$ifdef CPUX64}
-
-function serpFromCoeffs(coeffs, data: PSingle): Single; register; assembler;
-asm
-  sub rsp, 16 * 1
-  movdqa oword ptr [rsp], xmm1
-
-  movaps xmm0, [rcx - 4 * 4]
-  movaps xmm1, [rcx]
-
-  mulps xmm0, [rdx - 4 * 4]
-  mulps xmm1, [rdx]
-
-  addps xmm0, xmm1
-
-  movss xmm1, [rcx + 4 * 4]
-
-  haddps xmm0, xmm0
-  haddps xmm0, xmm0
-
-  mulss xmm1, [rdx + 4 * 4]
-
-  addss xmm0, xmm1
-
-  movdqa xmm1, oword ptr [rsp]
-  add rsp, 16 * 1
-end;
-
-{$else}
-
-function serpFromCoeffs(coeffs, data: PSingle): Single;
-var
-  iCoeff: Integer;
-begin
-  Result := 0;
-  for iCoeff := Low(TSerpCoeffs9) to -Low(TSerpCoeffs9) do
-    Result += data[iCoeff] * coeffs[iCoeff];
-end;
-
-{$endif}
-
-function serp(ym4, ym3, ym2, ym1, ycc, yp1, yp2, yp3, yp4, alpha: Double): Double;
-begin
-  alpha *= Pi;
-
-  Result := ym4 * Sinc(alpha + 4.0 * Pi);
-  Result += ym3 * Sinc(alpha + 3.0 * Pi);
-  Result += ym2 * Sinc(alpha + 2.0 * Pi);
-  Result += ym1 * Sinc(alpha + 1.0 * Pi);
-  Result += ycc * Sinc(alpha);
-  Result += yp1 * Sinc(alpha - 1.0 * Pi);
-  Result += yp2 * Sinc(alpha - 2.0 * Pi);
-  Result += yp3 * Sinc(alpha - 3.0 * Pi);
-  Result += yp4 * Sinc(alpha - 4.0 * Pi);
 end;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double;
@@ -1744,7 +1501,5 @@ initialization
   SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
   ProcThreadPool.MaxThreadCount := Max(1, NumberOfProcessors - 2); // let one full core unused
 {$endif}
-
-  serpCoeffsBuilsLUT(GSerpCoeffs9ByWord);
 end.
 
