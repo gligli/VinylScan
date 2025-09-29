@@ -248,8 +248,9 @@ end;
 
 procedure TScanCorrelator.AngleInit;
 const
-  CAngleCount = 720;
-  CAggregatedPixelsInches = 0.1;
+  CDataAngleCount = 180;
+  CPrecisionAngleCount = 3600;
+  CAggregatedPixelsInches = 0.2;
 var
   rBeg, rEnd, aggregatedPixelCount: Integer;
   baseRanks: TSpearmanRankDynArray;
@@ -257,7 +258,7 @@ var
   function DoAngle(Scan: TInputScan; a: Double; var arr: TDoubleDynArray): Integer;
   var
     iRadius, iAngle, pxAggr: Integer;
-    sn, cs, cy, cx, px, py: Double;
+    sn, cs, cy, cx, sky, skx, px, py: Double;
   begin
     Result := 0;
 
@@ -265,28 +266,34 @@ var
 
     cx := Scan.Center.X;
     cy := Scan.Center.Y;
-    for iAngle := 0 to CAngleCount - 1 do
+    skx := Scan.Skew.X;
+    sky := Scan.Skew.Y;
+    for iAngle := 0 to CDataAngleCount - 1 do
     begin
-      SinCos(a + DegToRad(iAngle * (360 / CAngleCount)), sn, cs);
+      SinCos(a + DegToRad(iAngle * (360 / CDataAngleCount)), sn, cs);
 
       pxAggr := 0;
       for iRadius:= rBeg to rEnd do
       begin
-        px := cx + cs * iRadius;
-        py := cy + sn * iRadius;
+        px := (cx + cs * iRadius) * skx;
+        py := (cy + sn * iRadius) * sky;
         if Scan.InRangePointD(py, px) then
           arr[Result] += Scan.GetPointD_Work(Scan.ProcessedImage, py, px);
 
         Inc(pxAggr);
         if pxAggr >= aggregatedPixelCount then
         begin
+          arr[Result] /= pxAggr;
           pxAggr := 0;
           Inc(Result);
         end;
       end;
 
       if pxAggr > 0 then
+      begin
+        arr[Result] /= pxAggr;
         Inc(Result);
+      end;
     end;
   end;
 
@@ -309,9 +316,9 @@ var
     bestr := Infinity;
     bestAngle := 0.0;
 
-    for iAngle := 0 to CAngleCount - 1 do
+    for iAngle := 0 to CPrecisionAngleCount - 1 do
     begin
-      a := DegToRad(iAngle * (360 / CAngleCount));
+      a := DegToRad(iAngle * (360 / CPrecisionAngleCount));
 
       DoAngle(scan, a, angle);
 
@@ -325,27 +332,30 @@ var
       end;
     end;
 
-    FInputScans[AIndex].CorrectByModel(NaN, NaN, NormalizeAngle(bestAngle));
+    FInputScans[AIndex].CorrectByModel(NormalizeAngle(bestAngle), NaN, NaN, NaN, NaN);
   end;
 
 var
-  iScan, pos: Integer;
+  iScan, pos, angleValueCount: Integer;
   base: TDoubleDynArray;
+  scan: TInputScan;
 begin
   WriteLn('AngleInit');
 
   if Length(FInputScans) <= 0 then
     Exit;
 
-  SetLength(base, FInputScans[0].Width * CAngleCount);
-
-  aggregatedPixelCount := Round(CAggregatedPixelsInches * FInputScans[0].DPI);
   rBeg := Round(FAngleInitAreaBegin * 0.5 * FInputScans[0].DPI);
   rEnd := Round(FAngleInitAreaEnd * 0.5 * FInputScans[0].DPI);
+  aggregatedPixelCount := Ceil(CAggregatedPixelsInches * FInputScans[0].DPI);
+  angleValueCount := Ceil((rEnd - rBeg + 1) / aggregatedPixelCount);
+
+  SetLength(base, angleValueCount * CDataAngleCount);
 
   pos := DoAngle(FInputScans[0], 0, base);
 
-  SetLength(base, pos);
+  Assert(pos = Length(base));
+
   SetLength(baseRanks, pos);
 
   SpearmanPrepareRanks(base, baseRanks);
@@ -353,13 +363,17 @@ begin
   ProcThreadPool.DoParallelLocalProc(@DoScan, 1, High(FInputScans));
 
   for iScan := 0 to High(FInputScans) do
-    WriteLn(FInputScans[iScan].ImageShortName, ', Angle: ', RadToDeg(FInputScans[iScan].RelativeAngle):9:3, ', CenterX: ', FInputScans[iScan].Center.X:9:3, ', CenterY: ', FInputScans[iScan].Center.Y:9:3);
+  begin
+    scan := FInputScans[iScan];
+
+    WriteLn(scan.ImageShortName, ', Angle: ', RadToDeg(scan.RelativeAngle):9:3, ', CenterX: ', scan.Center.X:9:3, ', CenterY: ', scan.Center.Y:9:3, ', SkewX: ', scan.Skew.X:9:6, ', SkewY: ', scan.Skew.Y:9:6);
+  end;
 end;
 
 function TScanCorrelator.PrepareAnalyze: TDoubleDynArray;
 var
   iRadiusAngle, pos, cnt, angleCnt, radiusCnt: Integer;
-  t, rBeg, px, py, cx, cy, r, ri, sn, cs: Double;
+  t, rBeg, px, py, cx, cy, skx, sky, r, ri, sn, cs: Double;
   sinCosLUT: TSinCosDynArray;
   baseScan: TInputScan;
   baseMeanSD: TPointD;
@@ -371,9 +385,11 @@ begin
   cnt := radiusCnt * angleCnt;
   SetLength(Result, cnt);
 
-  t   := baseScan.RelativeAngle;
-  cx  := baseScan.Center.X;
-  cy  := baseScan.Center.Y;
+  t := baseScan.RelativeAngle;
+  cx := baseScan.Center.X;
+  cy := baseScan.Center.Y;
+  skx := baseScan.Skew.X;
+  sky := baseScan.Skew.Y;
 
   BuildSinCosLUT(angleCnt, sinCosLUT, t);
   baseMeanSD := baseScan.GetMeanSD(baseScan.ProcessedImage, FAnalyzeAreaBegin * 0.5 * baseScan.DPI, FAnalyzeAreaEnd * 0.5 * baseScan.DPI, -Pi, Pi, CAnalyzeSigma);
@@ -388,8 +404,8 @@ begin
 
     r := rBeg + iRadiusAngle * ri;
 
-    px := cs * r + cx;
-    py := sn * r + cy;
+    px := (cs * r + cx) * skx;
+    py := (sn * r + cy) * sky;
 
     if baseScan.InRangePointD(py, px) then
     begin
@@ -435,8 +451,8 @@ var
 
       r := rBeg + pos * ri;
 
-      px := cs * r * skx + cx;
-      py := sn * r * sky + cy;
+      px := (cs * r + cx) * skx;
+      py := (sn * r + cy) * sky;
 
       imgInt := CompressRange((scan.GetPointD_Work(scan.ProcessedImage, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y);
       mseInt := coords^.PreparedData[pos] - imgInt;
@@ -506,7 +522,6 @@ end;
 procedure TScanCorrelator.Analyze;
 var
   preparedData: TDoubleDynArray;
-  skewData: TPointDDynArray;
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
@@ -526,13 +541,11 @@ var
     coords.PreparedData := preparedData;
     coords.MeanSD := scan.GetMeanSD(scan.ProcessedImage, FAnalyzeAreaBegin * 0.5 * scan.DPI, FAnalyzeAreaEnd * 0.5 * scan.DPI, -Pi, Pi, CAnalyzeSigma);
 
-    X := [scan.RelativeAngle, scan.Center.X, scan.Center.Y, skewData[AIndex].X, skewData[AIndex].Y];
+    X := [scan.RelativeAngle, scan.Center.X, scan.Center.Y, scan.Skew.X, scan.Skew.Y];
     func := NelderMeadMinimize(@NelderMeadAnalyze, X, [DegToRad(1.0), 0.02 * scan.DPI, 0.02 * scan.DPI, 0.001, 0.001], 1e-6, @coords);
 
     scan.Objective := func;
-    scan.CorrectByModel(X[1], X[2], X[0]);
-    skewData[AIndex].X := X[3];
-    skewData[AIndex].Y := X[4];
+    scan.CorrectByModel(X[0], X[1], X[2], X[3], X[4]);
   end;
 
 var
@@ -548,13 +561,6 @@ begin
 
   preparedData := PrepareAnalyze;
 
-  SetLength(skewData, Length(FInputScans));
-  for iScan := 0 to High(FInputScans) do
-  begin
-    skewData[iScan].X := 1.0;
-    skewData[iScan].Y := 1.0;
-  end;
-
   // compute
 
   ProcThreadPool.DoParallelLocalProc(@DoEval, 1, High(FInputScans));
@@ -566,7 +572,7 @@ begin
   begin
     scan := FInputScans[iScan];
 
-    WriteLn(scan.ImageShortName, ', Angle: ', RadToDeg(scan.RelativeAngle):9:3, ', CenterX: ', scan.Center.X:9:3, ', CenterY: ', scan.Center.Y:9:3, ', SkewX: ', skewData[iScan].X:9:6, ', SkewY: ', skewData[iScan].Y:9:6, ', RMSE: ', scan.Objective:12:9);
+    WriteLn(scan.ImageShortName, ', Angle: ', RadToDeg(scan.RelativeAngle):9:3, ', CenterX: ', scan.Center.X:9:3, ', CenterY: ', scan.Center.Y:9:3, ', SkewX: ', scan.Skew.X:9:6, ', SkewY: ', scan.Skew.Y:9:6, ', RMSE: ', scan.Objective:12:9);
   end;
 
   // sort scans by RMSE (best to worst) for next algos
@@ -780,7 +786,7 @@ end;
 procedure TScanCorrelator.PrepareCorrect(var coords: TCorrectCoords);
 var
   iRadius, iAngle, dummyAC: Integer;
-  bt, rBeg, r, sn, cs, px, py, cx, cy, saRaw, eaRaw, dummyAI: Double;
+  bt, rBeg, r, sn, cs, px, py, cx, cy, skx, sky, saRaw, eaRaw, dummyAI: Double;
   curScan, baseScan: TInputScan;
 begin
   baseScan := FInputScans[Coords.BaseScanIdx];
@@ -810,6 +816,8 @@ begin
 
   cx := baseScan.Center.X;
   cy := baseScan.Center.Y;
+  skx := baseScan.Skew.X;
+  sky := baseScan.Skew.Y;
 
   rBeg := FCorrectAreaBegin * 0.5 * baseScan.DPI;
 
@@ -822,8 +830,8 @@ begin
     begin
       r := rBeg + iRadius;
 
-      px := cs * r + cx;
-      py := sn * r + cy;
+      px := (cs * r + cx) * skx;
+      py := (sn * r + cy) * sky;
 
       if baseScan.InRangePointD(py, px) then
         coords.Data[iRadius] := baseScan.GetPointD_Work(baseScan.ProcessedImage, py, px)
@@ -845,7 +853,7 @@ function TScanCorrelator.NelderMeadCorrect(const arg: TVector; obj: Pointer): TS
 var
   coords: PCorrectCoords absolute obj;
   iRadius, iScan, iAngle: Integer;
-  r, rBeg, rEnd, sn, cs, px, py, cx, cy, rsk, w, wAcc: Double;
+  r, rBeg, rEnd, sn, cs, px, py, skx, sky, cx, cy, rsk, w, wAcc: Double;
   skew: TCorrectSkew;
   scan: TInputScan;
 begin
@@ -856,6 +864,8 @@ begin
 
   cx := scan.Center.X;
   cy := scan.Center.Y;
+  skx := scan.Skew.X;
+  sky := scan.Skew.Y;
 
   // parse image arcs
 
@@ -881,8 +891,8 @@ begin
 
       rsk := SkewRadius(r, skew);
 
-      px := cs * rsk + cx;
-      py := sn * rsk + cy;
+      px := (cs * rsk + cx) * skx;
+      py := (sn * rsk + cy) * sky;
 
       coords^.Data[iRadius] := scan.GetPointD_Work(scan.ProcessedImage, py, px);
     end;
@@ -1156,8 +1166,8 @@ var
           ct := NormalizeAngle(bt + scan.RelativeAngle);
 
           SinCos(ct, sn, cs);
-          px := cs * rSkew + scan.Center.X;
-          py := sn * rSkew + scan.Center.Y;
+          px := (cs * rSkew + scan.Center.X) * scan.Skew.X;
+          py := (sn * rSkew + scan.Center.Y) * scan.Skew.Y;
 
           sample := High(Word);
           if scan.InRangePointD(py, px) and

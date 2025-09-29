@@ -38,6 +38,7 @@ type
 
     FCenterExtents: TRect;
     FCenter: TPointD;
+    FSkew: TPointD;
     FConcentricGrooveRadius: Double;
     FSetDownRadius: Double;
     FGrooveStartAngle: Double;
@@ -82,7 +83,7 @@ type
     procedure BrickwallLimit;
     procedure Blur;
     procedure FindTrack(AUseGradient, AFindCroppedArea: Boolean; AForcedSampleRate: Integer = -1);
-    procedure CorrectByModel(ACenterX, ACenterY, ARelativeAngle: Double);
+    procedure CorrectByModel(ARelativeAngle, ACenterX, ACenterY, ASkewX, ASkewY: Double);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
     procedure DrawTrack;
 
@@ -115,6 +116,7 @@ type
 
     property CenterExtents: TRect read FCenterExtents;
     property Center: TPointD read FCenter;
+    property Skew: TPointD read FSkew;
     property RelativeAngle: Double read FRelativeAngle;
     property CropData: TCropData read FCropData;
 
@@ -294,7 +296,7 @@ begin
   cx := arg[0];
   cy := arg[1];
   r := arg[2];
-  sky := arg[3] * 1e-4;
+  sky := arg[3];
 
   func := 1e6;
   if not InRange(sky, CScannerTolLo, CScannerTolHi) then
@@ -328,7 +330,7 @@ begin
       sy := stencilY[vs];
 
       px := cs * rsx + cx;
-      py := sn * rsx * sky + cy;
+      py := (sn * rsx + cy) * sky;
 
       if InRangePointD(py, px) then
       begin
@@ -345,7 +347,7 @@ begin
           gcx -= gimgx * gInt;
           gcy -= gimgy * gInt;
           gr -= (gimgx * cs + gimgy * sn * sky) * gInt;
-          gsky -= gimgy * sn * r * gInt;
+          gsky -= gimgy * (sn * rsx + cy) * gInt;
         end;
       end;
     end;
@@ -370,14 +372,14 @@ begin
 
   meanSD := GetMeanSD(FProcessedImage, FProfileRef.MinConcentricGroove * 0.5 * FDPI, FProfileRef.MaxConcentricGroove * 0.5 * FDPI, -Pi, Pi, 1.0);
 
-  X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius, 1.0 * 1e4];
+  X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius, 1.0];
 
-  ff := BFGSMinimize(@GradientConcentricGroove, X, 1e-6, @meanSD);
+  ff := LBFGSMinimize(@GradientConcentricGroove, X, 1e-6, 4, @meanSD);
 
   FCenter.X := X[0];
   FCenter.Y := X[1];
   FConcentricGrooveRadius := X[2];
-  //WriteLn(ImageShortName, X[3]:12:9);
+  FSkew.Y := X[3];
   FCenterQuality := -ff;
 end;
 
@@ -410,8 +412,8 @@ begin
 
     SinCos(i * FRadiansPerRevolutionPoint, sn, cs);
 
-    x := cs * FSetDownRadius + FCenter.X;
-    y := sn * FSetDownRadius + FCenter.Y;
+    x := (cs * FSetDownRadius + FCenter.X) * FSkew.X;
+    y := (sn * FSetDownRadius + FCenter.Y) * FSkew.Y;
 
     if InRangePointD(y, x) then
     begin
@@ -443,6 +445,8 @@ begin
   FCenterQuality := -Infinity;
   FGrooveStartAngleQuality := -Infinity;
   FObjective := Infinity;
+  FSkew.X := 1.0;
+  FSkew.Y := 1.0;
 
   SetRevolutionFromDPI(FDPI);
 end;
@@ -733,11 +737,13 @@ begin
   end;
 end;
 
-procedure TInputScan.CorrectByModel(ACenterX, ACenterY, ARelativeAngle: Double);
+procedure TInputScan.CorrectByModel(ARelativeAngle, ACenterX, ACenterY, ASkewX, ASkewY: Double);
 begin
+  if not IsNan(ARelativeAngle) then FRelativeAngle := ARelativeAngle;
   if not IsNan(ACenterX) then FCenter.X := ACenterX;
   if not IsNan(ACenterY) then FCenter.Y := ACenterY;
-  if not IsNan(ARelativeAngle) then FRelativeAngle := ARelativeAngle;
+  if not IsNan(ASkewX) then FSkew.X := ASkewX;
+  if not IsNan(ASkewY) then FSkew.Y := ASkewY;
 end;
 
 procedure TInputScan.FindCenterExtents;
@@ -849,7 +855,7 @@ const
   CMaxCrop = 120.0;
 var
   iLut: Integer;
-  a0a, a1a, a0b, a1b, cx, cy, r, px, py, bt: Double;
+  a0a, a1a, a0b, a1b, cx, cy, skx, sky, r, px, py, bt: Double;
   cropped: Boolean;
   cnt: array[Boolean] of Integer;
   acc: array[Boolean] of Double;
@@ -869,6 +875,8 @@ begin
 
   cx := FCenter.X;
   cy := FCenter.Y;
+  skx := FSkew.X;
+  sky := FSkew.Y;
 
   for cropped := False to True do
   begin
@@ -884,8 +892,8 @@ begin
     bt := ra^.Angle;
     r := ra^.Radius;
 
-    px := sc^.Cos * r + cx;
-    py := sc^.Sin * r + cy;
+    px := (sc^.Cos * r + cx) * skx;
+    py := (sc^.Sin * r + cy) * sky;
 
     if InRangePointD(py, px) then
     begin
@@ -966,7 +974,7 @@ begin
     SinCos(angle, sn, cs);
 
     for iRadius := beginRadius to endRadius do
-      angleData[iRadius - beginRadius] := GetPointD_Work(FImage, sn * iRadius + FCenter.Y, cs * iRadius + FCenter.X);
+      angleData[iRadius - beginRadius] := GetPointD_Work(FImage, (sn * iRadius + FCenter.Y) * FSkew.Y, (cs * iRadius + FCenter.X) * FSkew.X);
 
     angleCropped[iAngle] := IsZero(StdDev(angleData));
   end;
@@ -1165,7 +1173,7 @@ const
     SinCos(AAngle, sn, cs);
 
     rBeg := Floor(FProfileRef.MinConcentricGroove * 0.5 * FDPI);
-    rEnd := Ceil(FProfileRef.StylusSetDown * 0.5 * FDPI);
+    rEnd := Ceil(FProfileRef.OuterSize * 0.5 * FDPI);
     minGrooveWidth := Ceil(CMinGrooveWidth * FDPI);
 
     meanSd := GetMeanSD(FImage,
@@ -1181,7 +1189,7 @@ const
     lastGap := rBeg;
     for iRadius := rBeg to rEnd do
     begin
-      px := GetPointD_Final(FImage, iRadius * sn + FCenter.Y, iRadius * cs + FCenter.X);
+      px := GetPointD_Final(FImage, (iRadius * sn + FCenter.Y) * FSkew.Y, (iRadius * cs + FCenter.X) * FSkew.X);
 
       if px > meanSd.X then
       begin
@@ -1280,8 +1288,8 @@ begin
 
         r := curData[iCur].Radius[iRadius];
 
-        px := round(r * cs + FCenter.X);
-        py := round(r * sn + FCenter.Y);
+        px := round((r * cs + FCenter.X) * FSkew.X);
+        py := round((r * sn + FCenter.Y) * FSkew.Y);
 
         yx  := py * FWidth + px;
 
@@ -1368,8 +1376,8 @@ begin
   for iRadius := Floor(AStartRadius) to Ceil(AEndRadius) do
     for iLut := 0 to High(sinCosLUT) do
     begin
-      px := sinCosLUT[iLut].Cos * iRadius + FCenter.X;
-      py := sinCosLUT[iLut].Sin * iRadius + FCenter.Y;
+      px := (sinCosLUT[iLut].Cos * iRadius + FCenter.X) * FSkew.X;
+      py := (sinCosLUT[iLut].Sin * iRadius + FCenter.Y) * FSkew.Y;
       if InRangePointD(py, px) then
       begin
         Result.X += GetPointD_Work(Image, py, px);
@@ -1383,8 +1391,8 @@ begin
   for iRadius := Floor(AStartRadius) to Ceil(AEndRadius) do
     for iLut := 0 to High(sinCosLUT) do
     begin
-      px := sinCosLUT[iLut].Cos * iRadius + FCenter.X;
-      py := sinCosLUT[iLut].Sin * iRadius + FCenter.Y;
+      px := (sinCosLUT[iLut].Cos * iRadius + FCenter.X) * FSkew.X;
+      py := (sinCosLUT[iLut].Sin * iRadius + FCenter.Y) * FSkew.Y;
       if InRangePointD(py, px) then
       begin
         Result.Y += Sqr(GetPointD_Work(Image, py, px) - Result.X);
@@ -1428,7 +1436,7 @@ function TInputScan.DecodeSample(precision: Integer; radius, prevRadius, angleSi
   sampleMeanSD: TPointD): TPointD;
 var
   iSmp, posMin, posMax, decoderMax: Integer;
-  r, cx, cy, px, py, cxa, sampleMean, sampleStdDev: Double;
+  r, cx, cy, skx, sky, px, py, cxa, sampleMean, sampleStdDev: Double;
   smpBuf: array[SmallInt] of Double;
 
   function GetSampleIdx(iSmp: Integer): Double;
@@ -1436,7 +1444,7 @@ var
     r: Double;
   begin
     r := radius + (iSmp + 0.5) * cxa;
-    Result := GetPointD_Final(Image, angleSin * r + cy, angleCos * r + cx);
+    Result := GetPointD_Final(Image, (angleSin * r + cy) * sky, (angleCos * r + cx) * skx);
     smpBuf[iSmp] := Result;
   end;
 
@@ -1450,10 +1458,12 @@ begin
 
   cx := FCenter.X;
   cy := FCenter.Y;
+  skx := FSkew.X;
+  sky := FSkew.Y;
 
   r := radius + decoderMax * cxa;
-  px := angleCos * r + cx;
-  py := angleSin * r + cy;
+  px := (angleCos * r + cx) * skx;
+  py := (angleSin * r + cy) * sky;
 
   if not InRangePointD(py, px) then
     Exit;

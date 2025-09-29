@@ -123,6 +123,10 @@ function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray
 function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 function GridReduceMinimize(Func: TEvalFunc; var X: TDoubleDynArray; GridSize: array of Integer; GridExtents: array of Double; EpsilonReduce: Double; VerboseTag: String = ''; Data: Pointer = nil): Double;
 function NelderMeadMinimize(Func: TEvalFunc; var X: TDoubleDynArray; SimplexExtents: array of Double; Epsilon: Double = 1e-9; Data: Pointer = nil): Double;
+function LBFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; M: Integer = 5; Data: Pointer = nil): Double;
+function LBFGSScaledMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Scale: array of Double; Epsilon: Double = 1e-12; M: Integer = 5; Data: Pointer = nil): Double;
+function NonSmoothMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
+function NonSmoothBoundedMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 
 function PseudoHuber(x: Double): Double;
 function MAE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
@@ -132,6 +136,7 @@ function MSE(const a: TWordDynArray; const b: TWordDynArray): Double; overload;
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 procedure SpearmanPrepareRanks(const a: TDoubleDynArray; var ranks: TSpearmanRankDynArray);
 function SpearmanRankCorrelation(const a: TSpearmanRankDynArray; const b: TSpearmanRankDynArray): Double;
+function Median(const x: TDoubleDynArray): Double;
 
 function Make8BitSample(smp: Double): ShortInt;
 function Make16BitSample(smp: Double): SmallInt;
@@ -162,6 +167,10 @@ uses utypes, ubfgs, usimplex;
 var
   GInvariantFormatSettings: TFormatSettings;
   GSerpCoeffs9ByWord: TSerpCoeffs9ByWord;
+
+function alglib_NonSmoothBoundedMinimize(Func: Pointer; n: Integer; X, LowBound, UpBound: PDouble; Epsilon, Radius, Penalty: Double; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
+function alglib_LBFGSMinimize(Func: Pointer; n: Integer; X, Scale: PDouble; Epsilon: Double; M: Integer; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
+function alglib_SpearmanRankCorrelation(X, Y: PDouble; n: Integer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
 
 procedure SpinEnter(Lock: PSpinLock); assembler;
 label spin_lock;
@@ -938,6 +947,97 @@ begin
   Result := bestFunc;
 end;
 
+threadvar
+  GLBFGSFunc: TGradientEvalFunc;
+
+  procedure LBFGSFunc(n: Integer; arg: PDouble; func: PDouble; grad: PDouble; obj: Pointer);
+  var
+    i: Integer;
+    lfunc: Double;
+    larg: TDoubleDynArray;
+    lgrad: TDoubleDynArray;
+  begin
+    lfunc := NaN;
+    SetLength(larg, n);
+    SetLength(lgrad, n);
+    for i := 0 to n - 1 do
+      larg[i] := arg[i];
+
+    GLBFGSFunc(larg, lfunc, lgrad, obj);
+
+    for i := 0 to n - 1 do
+      grad[i] := lgrad[i];
+
+    func^ := lfunc;
+  end;
+
+function LBFGSScaledMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Scale: array of Double; Epsilon: Double;
+  M: Integer; Data: Pointer): Double;
+begin
+  GLBFGSFunc := Func;
+  try
+    M := min(Length(X), M);
+    Result := alglib_LBFGSMinimize(@LBFGSFunc, Length(X), @X[0], @Scale[0], Epsilon, M, Data);
+  finally
+    GLBFGSFunc := nil;
+  end;
+end;
+
+function LBFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double; M: Integer; Data: Pointer): Double;
+begin
+  GLBFGSFunc := Func;
+  try
+    M := min(Length(X), M);
+    Result := alglib_LBFGSMinimize(@LBFGSFunc, Length(X), @X[0], nil, Epsilon, M, Data);
+  finally
+    GLBFGSFunc := nil;
+  end;
+end;
+
+threadvar
+  GNSFunc: TGradientEvalFunc;
+
+  procedure NSFunc(n: Integer; arg: PDouble; fi: PDouble; jac: PPDouble; obj: Pointer);
+  var
+    i: Integer;
+    lfunc: Double;
+    larg: TDoubleDynArray;
+    lgrad: TDoubleDynArray;
+  begin
+    lfunc := NaN;
+    SetLength(larg, n);
+    SetLength(lgrad, n);
+    for i := 0 to n - 1 do
+      larg[i] := arg[i];
+
+    GNSFunc(larg, lfunc, lgrad, obj);
+
+    for i := 0 to n - 1 do
+      jac[0, i] := lgrad[i];
+
+    fi[0] := lfunc;
+  end;
+
+function NonSmoothMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double; Data: Pointer): Double;
+begin
+  GNSFunc := Func;
+  try
+    Result := alglib_NonSmoothBoundedMinimize(@NSFunc, Length(X), @X[0], nil, nil, Epsilon, 1e-3, 0.0, Data);
+  finally
+    GNSFunc := nil;
+  end;
+end;
+
+function NonSmoothBoundedMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double; Data: Pointer): Double;
+begin
+  GNSFunc := Func;
+  try
+    Result := alglib_NonSmoothBoundedMinimize(@NSFunc, Length(X), @X[0], @LowBound[0], @UpBound[0], Epsilon, 1e-3, 50.0, Data);
+  finally
+    GNSFunc := nil;
+  end;
+end;
+
 function PseudoHuber(x: Double): Double;
 const
   CDelta = 512.0;
@@ -1106,6 +1206,27 @@ begin
   Result := 1.0;
   if den <> 0.0 then
     Result := num / den;
+end;
+
+function CompareDouble(Item1, Item2, UserParameter: Pointer): Integer;
+var
+  d1: PDouble absolute Item1;
+  d2: PDouble absolute Item2;
+begin
+  Result := CompareValue(d1^, d2^);
+end;
+
+function Median(const x: TDoubleDynArray): Double;
+var
+  hl: Integer;
+begin
+  QuickSort(x[0], 0, High(x), SizeOf(Double), @CompareDouble);
+
+  hl := Length(x) shr 1;
+  if Odd(Length(x)) then
+    Result := x[hl]
+  else
+    Result := (x[hl] + x[hl + 1]) * 0.5;
 end;
 
 function Make8BitSample(smp: Double): ShortInt;
