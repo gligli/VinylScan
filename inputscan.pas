@@ -86,6 +86,7 @@ type
     procedure CorrectByModel(ARelativeAngle, ACenterX, ACenterY, ASkewX, ASkewY: Double);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
     procedure DrawTrack;
+    procedure Linearize;
 
     function InRangePointD(Y, X: Double): Boolean; inline;
     function GetPointD_Work(const Image: TWordDynArray; Y, X: Double): Double; inline;
@@ -374,7 +375,7 @@ begin
 
   X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius, 1.0];
 
-  ff := LBFGSMinimize(@GradientConcentricGroove, X, 1e-6, 4, @meanSD);
+  ff := LBFGSScaledMinimize(@GradientConcentricGroove, X, [1.0, 1.0, 1.0, 1e-4], 1e-6, 4, @meanSD);
 
   FCenter.X := X[0];
   FCenter.Y := X[1];
@@ -645,6 +646,8 @@ begin
 end;
 
 procedure TInputScan.Blur;
+const
+  CPica = 0.03; // inches
 var
   labelRadius, lblPos, cx, cy: Integer;
   labelOffsets: TIntegerDynArray;
@@ -692,7 +695,7 @@ begin
   cy := Round(FCenter.Y);
   lblPos := Round(Sqr(FProfileRef.MinConcentricGroove * 0.5 * FDPI));
 
-  labelRadius := Ceil(0.02 * FDPI);
+  labelRadius := Ceil(CPica * FDPI);
   labelOffsets := MakeRadiusOffsets(labelRadius);
 
   srcImage := FImage;
@@ -725,6 +728,7 @@ begin
   if not FSilent then
   begin
     WriteLn('Center:', FCenter.X:12:3, ',', FCenter.Y:12:3);
+    WriteLn('Skew:', FSkew.X:12:6, ',', FSkew.Y:12:6);
     WriteLn('ConcentricGrooveRadius:', FConcentricGrooveRadius:12:3);
     WriteLn('CenterQuality:', FCenterQuality:12:6);
     WriteLn('SetDownRadius:', FSetDownRadius:12:3);
@@ -733,7 +737,7 @@ begin
   end
   else
   begin
-    WriteLn(ImageShortName, ', CenterX:', FCenter.X:9:3, ', CenterY:', FCenter.Y:9:3, ', ConcentricGroove:', FConcentricGrooveRadius:10:3, ', Quality:', FCenterQuality:12:3);
+    WriteLn(ImageShortName, ', CenterX:', FCenter.X:12:3, ', CenterY:', FCenter.Y:12:3, ', SkewY:', FSkew.Y:12:6, ', ConcentricGroove:', FConcentricGrooveRadius:10:3, ', Quality:', FCenterQuality:12:3);
   end;
 end;
 
@@ -1331,6 +1335,114 @@ begin
   until allDone;
 
   WriteLn(ImageShortName, RadToDeg(startData[0].Angle):9:3, RadToDeg(startData[1].Angle):9:3, Length(startData[0].Radiuses):4, Length(startData[1].Radiuses):4, pxCount:8);
+end;
+
+procedure TInputScan.Linearize;
+var
+  iAngle, iy, ix, yx, rBeg, rEnd: Integer;
+  iCurve: Word;
+  mx, ind: Cardinal;
+  t, r, sqy: Double;
+  ext: TRect;
+  Freqs: array[0 .. High(Word)] of Cardinal;
+  AngleIndicator: TCardinalDynArray;
+  AngleExtents: array of TRect;
+begin
+  // identify angles
+
+  SetLength(AngleIndicator, Length(FImage));
+  SetLength(AngleExtents, FPointsPerRevolution);
+
+  for iAngle := 0 to FPointsPerRevolution - 1 do
+  begin
+    AngleExtents[iAngle].Left := High(Integer);
+    AngleExtents[iAngle].Top := High(Integer);
+    AngleExtents[iAngle].Right := Low(Integer);
+    AngleExtents[iAngle].Bottom := Low(Integer);
+  end;
+
+  rBeg := Floor(FProfileRef.MinConcentricGroove * 0.5 * FDPI);
+  rEnd := Ceil(FProfileRef.OuterSize * 0.5 * FDPI);
+
+  yx := 0;
+  for iy := 0 to FHeight - 1 do
+  begin
+    sqy := Sqr(iy - FCenter.Y);
+
+    for ix := 0 to FWidth - 1 do
+    begin
+      r := Sqrt(sqy + Sqr(ix - FCenter.X));
+
+      if InRange(r, rBeg, rEnd) then
+      begin
+        t := ArcTan2(iy - FCenter.Y, ix - FCenter.X);
+        iAngle := Round(NormalizedAngleTo02Pi(t) * (FPointsPerRevolution - 1) / (2.0 * Pi));
+        ind := iAngle + 1;
+        AngleIndicator[yx] := ind;
+        AngleExtents[iAngle].Left := Min(AngleExtents[iAngle].Left, ix);
+        AngleExtents[iAngle].Top := Min(AngleExtents[iAngle].Top, iy);
+        AngleExtents[iAngle].Right := Max(AngleExtents[iAngle].Right, ix);
+        AngleExtents[iAngle].Bottom := Max(AngleExtents[iAngle].Bottom, iy);
+      end
+      else
+      begin
+        FProcessedImage[yx] := FImage[yx];
+      end;
+
+      Inc(yx);
+    end;
+  end;
+
+  // compute per angle curves
+
+  for iAngle := 0 to FPointsPerRevolution - 1 do
+  begin
+    ind := iAngle + 1;
+    ext := AngleExtents[iAngle];
+    FillChar(Freqs, SizeOf(Freqs), 0);
+
+    // devise pixel values frequencies
+
+    for iy := ext.Top to ext.Bottom do
+    begin
+      yx := iy * FWidth + ext.Left;
+
+      for ix := ext.Left to ext.Right do
+      begin
+        if AngleIndicator[yx] = ind then
+          Inc(Freqs[FImage[yx]]);
+
+        Inc(yx);
+      end;
+    end;
+
+    // cumulate frequencies
+
+    for iCurve := 1 to High(Word) do
+      Freqs[iCurve] += Freqs[iCurve - 1];
+
+    // normalize
+
+    mx := Freqs[High(Word)];
+    if mx > 0 then
+      for iCurve := 0 to High(Word) do
+        Freqs[iCurve] := Freqs[iCurve] * High(Word) div mx;
+
+    // apply to image
+
+    for iy := ext.Top to ext.Bottom do
+    begin
+      yx := iy * FWidth + ext.Left;
+
+      for ix := ext.Left to ext.Right do
+      begin
+        if AngleIndicator[yx] = ind then
+          FProcessedImage[yx] := Freqs[FImage[yx]];
+
+        Inc(yx);
+      end;
+    end;
+  end;
 end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
