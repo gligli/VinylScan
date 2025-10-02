@@ -75,7 +75,7 @@ begin
   SetLength(FInputScans, AScanFileNames.Count);
   for iScan := 0 to High(FInputScans) do
   begin
-    FInputScans[iScan] := TInputScan.Create(AProfileRef, ADefaultDPI, True);
+    FInputScans[iScan] := TInputScan.Create(AProfileRef, ADefaultDPI, Length(FInputScans) > 1);
     FInputScans[iScan].ImageFileName := AScanFileNames[iScan];
   end;
 
