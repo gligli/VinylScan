@@ -11,6 +11,11 @@ uses
 type
   TInputScan = class;
 
+  TStencil = record
+    X: array[TValueSign] of Double;
+    Y: array[TValueSign] of Integer;
+  end;
+
   TCorrectRef = record
     AngleIdx, ScanIdx: Integer;
   end;
@@ -60,6 +65,7 @@ type
     procedure SetRevolutionFromDPI(ADPI: Integer);
     procedure SetRevolutionFromSampleRate(ASampleRate: Integer);
     function GetImageShortName: String;
+    function MakeStencil: TStencil;
 
     procedure GradientConcentricGroove(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
     function NelderMeadCrop(const x: TVector; obj: Pointer): TScalar;
@@ -175,6 +181,17 @@ begin
   Result := ChangeFileExt(ExtractFileName(FImageFileName), '');
 end;
 
+function TInputScan.MakeStencil: TStencil;
+begin
+  Result.Y[NegativeValue] := -1;
+  Result.Y[ZeroValue] := 2;
+  Result.Y[PositiveValue] := -1;
+
+  Result.X[NegativeValue] := -FProfileRef.LeadOutGrooveThickness * 0.5 * FDPI;
+  Result.X[ZeroValue] := 0;
+  Result.X[PositiveValue] := FProfileRef.LeadOutGrooveThickness * 0.5 * FDPI;
+end;
+
 procedure TInputScan.FindConcentricGroove_GridSearch;
 const
   CPointsPerRevolution = 512;
@@ -182,8 +199,7 @@ var
   extents: TRect;
   sinCosLUT: TSinCosDynArray;
   mnRadius, mxRadius: Integer;
-  stencilX: array[TValueSign] of Double;
-  stencilY: array[TValueSign] of Integer;
+  stencil: TStencil;
   results: array of record
     Objective: Int64;
     X: TVector;
@@ -207,8 +223,8 @@ var
     for vs := Low(TValueSign) to High(TValueSign) do
       for iLut := 0 to High(sinCosLUT) do
       begin
-        pxArr[vs, ilut] := round(sinCosLUT[iLut].Cos * (r + stencilX[vs]));
-        pyArr[vs, ilut] := round(sinCosLUT[iLut].Sin * (r + stencilX[vs]))
+        pxArr[vs, ilut] := round(sinCosLUT[iLut].Cos * (r + stencil.X[vs]));
+        pyArr[vs, ilut] := round(sinCosLUT[iLut].Sin * (r + stencil.X[vs]))
       end;
 
     for cy := extents.Top to extents.Bottom do
@@ -230,7 +246,7 @@ var
             ff += FProcessedImage[(cy + py) * Width + cx - px];
           end;
 
-          f += ff * stencilY[vs];
+          f += ff * stencil.Y[vs];
         end;
 
         if f > results[resIdx].Objective then
@@ -250,13 +266,7 @@ begin
 
   BuildSinCosLUT(CPointsPerRevolution div 4, sinCosLUT, 0.0, Pi / 2.0);
 
-  stencilY[NegativeValue] := -1;
-  stencilY[ZeroValue] := 2;
-  stencilY[PositiveValue] := -1;
-
-  stencilX[NegativeValue] := -FProfileRef.LeadOutGrooveThickness * FDPI;
-  stencilX[ZeroValue] := 0;
-  stencilX[PositiveValue] := FProfileRef.LeadOutGrooveThickness * FDPI;
+  stencil := MakeStencil;
 
   extents := FCenterExtents;
   extents.Inflate(extents.Right - extents.CenterPoint.X, extents.Bottom - extents.CenterPoint.Y);
@@ -290,8 +300,7 @@ var
   meanSD: ^TPointD absolute obj;
   iLut: Integer;
   px, py, cx, cy, r, sky, cs, sn, imgInt, gInt, gimgx, gimgy, gcx, gcy, gr, gsky, rsx, sy: Double;
-  stencilX: array[TValueSign] of Double;
-  stencilY: array[TValueSign] of Integer;
+  stencil: TStencil;
   vs: TValueSign;
 begin
   cx := arg[0];
@@ -303,13 +312,7 @@ begin
   if not InRange(sky, CScannerTolLo, CScannerTolHi) then
     Exit;
 
-  stencilY[NegativeValue] := -1;
-  stencilY[ZeroValue] := 2;
-  stencilY[PositiveValue] := -1;
-
-  stencilX[NegativeValue] := -FProfileRef.LeadOutGrooveThickness * FDPI;
-  stencilX[ZeroValue] := 0;
-  stencilX[PositiveValue] := FProfileRef.LeadOutGrooveThickness * FDPI;
+  stencil := MakeStencil;
 
   func := 0.0;
   if Assigned(grad) then
@@ -327,8 +330,8 @@ begin
 
     for vs := Low(TValueSign) to High(TValueSign) do
     begin
-      rsx := r + stencilX[vs];
-      sy := stencilY[vs];
+      rsx := r + stencil.X[vs];
+      sy := stencil.Y[vs];
 
       px := cs * rsx + cx;
       py := (sn * rsx + cy) * sky;
@@ -389,15 +392,21 @@ var
   i: Integer;
   v, best, sn, cs, bestr, x, y, bestx, besty, angle: Double;
   hasCrop: Boolean;
+  vs: TValueSign;
+  stencil: TStencil;
+  sliding: array[TValueSign] of Double;
 begin
   best := -Infinity;
   bestx := 0;
   besty := 0;
   bestr := 0;
-  v := 0;
+  for vs := Low(TValueSign) to High(TValueSign) do
+    sliding[vs] := 0;
 
   hasCrop := (NormalizedAngleDiff(FCropData.StartAngle, FCropData.EndAngle) <> 0) or
       (NormalizedAngleDiff(FCropData.StartAngleMirror, FCropData.EndAngleMirror) <> 0);
+
+  stencil := MakeStencil;
 
   for i := 0 to FPointsPerRevolution - 1  do
   begin
@@ -407,29 +416,35 @@ begin
         (InNormalizedAngle(angle, FCropData.StartAngle, FCropData.EndAngle) or
         InNormalizedAngle(angle, FCropData.StartAngleMirror, FCropData.EndAngleMirror)) then
     begin
-      v := 0;
+      for vs := Low(TValueSign) to High(TValueSign) do
+        sliding[vs] := 0;
       Continue;
     end;
 
     SinCos(i * FRadiansPerRevolutionPoint, sn, cs);
 
-    x := (cs * FSetDownRadius + FCenter.X) * FSkew.X;
-    y := (sn * FSetDownRadius + FCenter.Y) * FSkew.Y;
-
-    if InRangePointD(y, x) then
+    for vs := Low(TValueSign) to High(TValueSign) do
     begin
-      v := v * 0.99 + GetPointD_Final(FImage, y, x) * 0.01;
+      x := (cs * (FSetDownRadius + stencil.X[vs]) + FCenter.X) * FSkew.X;
+      y := (sn * (FSetDownRadius + stencil.X[vs]) + FCenter.Y) * FSkew.Y;
 
-      if v > best then
-      begin
-        best := v;
-        bestx := x;
-        besty := y;
-        bestr := angle;
-      end;
+      if InRangePointD(y, x) then
+        sliding[vs] := sliding[vs] * 0.99 + GetPointD_Final(FImage, y, x) * 0.01;
     end;
 
-    //writeln(i:6,x:8,y:8,v:9:3,best:9:3,bestx:8,besty:8);
+    v := 0;
+    for vs := Low(TValueSign) to High(TValueSign) do
+      v += sliding[vs] * stencil.Y[vs];
+
+    if v > best then
+    begin
+      best := v;
+      bestx := x;
+      besty := y;
+      bestr := angle;
+    end;
+
+    //writeln(i:6,x:8,y:8,sliding:9:3,best:9:3,bestx:8,besty:8);
   end;
 
   FGrooveStartAngleQuality := best;
@@ -715,7 +730,7 @@ begin
   else
     SetRevolutionFromDPI(FDPI);
 
-  FSetDownRadius := (FProfileRef.StylusSetDown + 2.0 * FProfileRef.FirstMusicGroove) / 3.0 * FDPI * 0.5;
+  FSetDownRadius := lerp(FProfileRef.FirstMusicGroove, FProfileRef.StylusSetDown, 0.0) * FDPI * 0.5;
   FConcentricGrooveRadius := FProfileRef.ConcentricGroove * FDPI * 0.5;
 
   FindConcentricGroove_GridSearch;
