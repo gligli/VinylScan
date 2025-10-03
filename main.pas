@@ -27,7 +27,7 @@ type
     chkCorrect: TCheckBox;
     cbDPI: TComboBox;
     cbSR: TComboBox;
-    chkBrickLim: TCheckBox;
+    chkLinearize: TCheckBox;
     chkAnalyze: TCheckBox;
     edInputPNG: TEdit;
     edOutputPNG: TEdit;
@@ -177,8 +177,8 @@ begin
   try
     sc.OutputPNGFileName := edOutputPNG.Text;
     sc.FixCISScanners := chkFixCIS.Checked;
-    sc.BrickwallLimitScans := chkBrickLim.Checked;
     sc.AnalyzePass := chkAnalyze.Checked;
+    sc.LinearizePass := chkLinearize.Checked;
     sc.CorrectPass := chkCorrect.Checked;
     sc.RebuildBlendCount := seBlend.Value;
     sc.RebuildScaled := not chkDefaultDPI.Checked;
@@ -343,8 +343,8 @@ begin
   s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, sl);
   try
     chkFixCIS.Checked := sc.FixCISScanners;
-    chkBrickLim.Checked := sc.BrickwallLimitScans;
     chkAnalyze.Checked := sc.AnalyzePass;
+    chkLinearize.Checked := sc.LinearizePass;
     chkCorrect.Checked := sc.CorrectPass;
     seBlend.Value := sc.RebuildBlendCount;
     chkDefaultDPI.Checked := not sc.RebuildScaled;
@@ -419,6 +419,7 @@ var
   C: TCanvas;
   cx, cy, sx, sy, rfx, rfy, rcx, rcy, rax, ray: Integer;
   cer: TRect;
+  sk: TPointD;
 
   procedure CropLine(AAngle: Double);
   var
@@ -435,22 +436,27 @@ begin
   C.Pen.Color := clRed;
   C.Pen.Style := psDot;
 
-  cer := AScan.CenterExtents;
-  cer.Left := Round(cer.Left * FReducFactor);
-  cer.Top := Round(cer.Top * FReducFactor);
-  cer.Right := Round(cer.Right * FReducFactor);
-  cer.Bottom := Round(cer.Bottom * FReducFactor);
+  sk := AScan.Skew;
 
-  cx := Round(AScan.Center.X * FReducFactor);
-  cy := Round(AScan.Center.Y * FReducFactor);
-  sx := Round(AScan.GrooveStartPoint.X * FReducFactor);
-  sy := Round(AScan.GrooveStartPoint.Y * FReducFactor);
-  rfx := Round(AScan.SetDownRadius * FReducFactor);
-  rfy := Round(AScan.SetDownRadius * FReducFactor);
-  rcx := Round(AScan.ConcentricGrooveRadius * FReducFactor);
-  rcy := Round(AScan.ConcentricGrooveRadius * FReducFactor);
-  rax := Round(AScan.ProfileRef.AdapterSize * 0.5 * AScan.DPI * FReducFactor);
-  ray := Round(AScan.ProfileRef.AdapterSize * 0.5 * AScan.DPI * FReducFactor);
+  sk.X *= FReducFactor;
+  sk.Y *= FReducFactor;
+
+  cer := AScan.CenterExtents;
+  cer.Left := Round(cer.Left * sk.X);
+  cer.Top := Round(cer.Top * sk.Y);
+  cer.Right := Round(cer.Right * sk.X);
+  cer.Bottom := Round(cer.Bottom * sk.Y);
+
+  cx := Round(AScan.Center.X * sk.X);
+  cy := Round(AScan.Center.Y * sk.Y);
+  sx := Round(AScan.GrooveStartPoint.X * sk.X);
+  sy := Round(AScan.GrooveStartPoint.Y * sk.Y);
+  rfx := Round(AScan.SetDownRadius * sk.X);
+  rfy := Round(AScan.SetDownRadius * sk.Y);
+  rcx := Round(AScan.ConcentricGrooveRadius * sk.X);
+  rcy := Round(AScan.ConcentricGrooveRadius * sk.Y);
+  rax := Round(AScan.ProfileRef.AdapterSize * 0.5 * AScan.DPI * sk.X);
+  ray := Round(AScan.ProfileRef.AdapterSize * 0.5 * AScan.DPI * sk.Y);
 
   C.Rectangle(cer);
 
@@ -469,11 +475,11 @@ begin
   begin
     CropLine(AScan.CropData.StartAngle);
     CropLine(AScan.CropData.EndAngle);
-    CropLine(AScan.CropData.StartAngle + NormalizedAngleDiff(AScan.CropData.StartAngle, AScan.CropData.EndAngle) * 0.5);
+    CropLine(lerp(AScan.CropData.StartAngle, AScan.CropData.EndAngle, 0.5));
 
     CropLine(AScan.CropData.StartAngleMirror);
     CropLine(AScan.CropData.EndAngleMirror);
-    CropLine(AScan.CropData.StartAngleMirror + NormalizedAngleDiff(AScan.CropData.StartAngleMirror, AScan.CropData.EndAngleMirror) * 0.5);
+    CropLine(lerp(AScan.CropData.StartAngleMirror, AScan.CropData.EndAngleMirror, 0.5));
   end;
 
   HorzScrollBar.Position := cx - Width div 2;
