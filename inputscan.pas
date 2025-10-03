@@ -86,7 +86,6 @@ type
     procedure InitImage(AWidth, AHeight, ADPI: Integer);
     procedure LoadImage;
     procedure FixCISScanners;
-    procedure BrickwallLimit;
     procedure Blur;
     procedure FindTrack(AUseGradient, AFindCroppedArea: Boolean; AForcedSampleRate: Integer = -1);
     procedure CorrectByModel(ARelativeAngle, ACenterX, ACenterY, ASkewX, ASkewY: Double);
@@ -587,79 +586,6 @@ begin
   end;
 end;
 
-procedure TInputScan.BrickwallLimit;
-const
-  CSigma = 1;
-var
-  radius: Integer;
-  offsets: TIntegerDynArray;
-  srcImage: TWordDynArray;
-
-  procedure GetL2Extents(ayx: Integer; out amean, astddev: Integer);
-  var
-    i: Integer;
-    px, mn: Integer;
-    sd: Single;
-    sdAcc: UInt64;
-  begin
-    mn := 0;
-    for i := 0 to High(offsets) do
-    begin
-      px := srcImage[ayx + offsets[i]];
-      mn += px;
-    end;
-    mn := mn div Length(offsets);
-
-    sdAcc := 0;
-    for i := 0 to High(offsets) do
-    begin
-      px := srcImage[ayx + offsets[i]];
-      px -= mn;
-      sdAcc += px * px;
-    end;
-    sd := Sqrt(sdAcc div Length(offsets));
-
-    amean := mn;
-    astddev := round(CSigma * sd);
-  end;
-
-  procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
-  var
-    px, x, y, yx: Integer;
-    mn, sd: Integer;
-  begin
-    if not InRange(AIndex, radius, FHeight - 1 - radius) then
-      Exit;
-
-    y := AIndex;
-
-    for x := radius to FWidth - 1 - radius do
-    begin
-      yx := y * Width + x;
-
-      px := srcImage[yx];
-
-      GetL2Extents(yx, mn, sd);
-      px := (px - mn) * (High(Word) + 1) div (sd + 1) + mn;
-      px := EnsureRange(px, 0, High(word));
-
-      FProcessedImage[yx] := px;
-    end;
-  end;
-
-begin
-  if not FSilent then WriteLn('BrickwallLimit');
-
-  radius := Ceil(FProfileRef.RecordingGrooveWidth * FDPI);
-  offsets := MakeRadiusOffsets(radius);
-
-  srcImage := FProcessedImage;
-  FProcessedImage := nil;
-  SetLength(FProcessedImage, Height * Width);
-
-  ProcThreadPool.DoParallelLocalProc(@DoY, radius, FHeight - 1 - radius);
-end;
-
 procedure TInputScan.Blur;
 const
   CPica = 0.03; // inches
@@ -869,17 +795,37 @@ begin
 end;
 
 function TInputScan.NelderMeadCrop(const x: TVector; obj: Pointer): TScalar;
+var
+  a0a, a1a, a0b, a1b, cx, cy, skx, sky: Double;
+
+  procedure GetCoords(iLut: Integer; out py, px: Double; out cropped: Boolean);
+  var
+    bt, r: Double;
+    ra: ^TRadiusAngle;
+    sc: ^TSinCos;
+  begin
+    ra := @FCropData.RadiusAngleLut[iLut];
+    sc := @FCropData.SinCosLut[iLut];
+
+    bt := ra^.Angle;
+    r := ra^.Radius;
+
+    px := (sc^.Cos * r + cx) * skx;
+    py := (sc^.Sin * r + cy) * sky;
+
+    cropped := InNormalizedAngle(bt, a0a, a0b) or InNormalizedAngle(bt, a1a, a1b);
+  end;
+
 const
   CMinCrop = 30.0;
   CMaxCrop = 120.0;
 var
   iLut: Integer;
-  a0a, a1a, a0b, a1b, cx, cy, skx, sky, r, px, py, bt: Double;
+  px, py: Double;
   cropped: Boolean;
   cnt: array[Boolean] of Integer;
-  acc: array[Boolean] of Double;
-  ra: ^TRadiusAngle;
-  sc: ^TSinCos;
+  acc: array[Boolean, Boolean] of TDoubleDynArray;
+  corr: array[Boolean] of Double;
 begin
   Result := 1e6;
 
@@ -899,30 +845,27 @@ begin
 
   for cropped := False to True do
   begin
-    acc[cropped] := 0.0;
+    SetLength(acc[cropped, False], Length(FCropData.RadiusAngleLut));
+    SetLength(acc[cropped, True], Length(FCropData.RadiusAngleLut));
     cnt[cropped] := 0;
   end;
 
   for iLut := 0 to High(FCropData.RadiusAngleLut) do
   begin
-    ra := @FCropData.RadiusAngleLut[iLut];
-    sc := @FCropData.SinCosLut[iLut];
-
-    bt := ra^.Angle;
-    r := ra^.Radius;
-
-    px := (sc^.Cos * r + cx) * skx;
-    py := (sc^.Sin * r + cy) * sky;
-
-    if InRangePointD(py, px) then
-    begin
-      cropped := InNormalizedAngle(bt, a0a, a0b) or InNormalizedAngle(bt, a1a, a1b);
-      acc[cropped] += GetPointD_Work(FImage, py, px);
-      Inc(cnt[cropped]);
-    end;
+    GetCoords(iLut, py, px, cropped);
+    acc[cropped, False, cnt[cropped]] := GetPointD_Work(FImage, py, px);
+    acc[cropped, True, cnt[cropped]] := GetPointD_Work(FProcessedImage, py, px);
+    Inc(cnt[cropped]);
   end;
 
-  Result := DivDef(acc[True], cnt[True], 0.0) - DivDef(acc[False], cnt[False], 0.0);
+  for cropped := False to True do
+  begin
+    SetLength(acc[cropped, False], cnt[cropped]);
+    SetLength(acc[cropped, True], cnt[cropped]);
+    corr[cropped] := PearsonCorrelation(acc[cropped, False], acc[cropped, True]);
+  end;
+
+  Result := corr[True] - corr[False];
 
   //WriteLn(ImageShortName, ', begin:', RadToDeg(a0a):9:3, ', end:', RadToDeg(a0b):9:3, result:18:6);
 end;
@@ -1025,9 +968,6 @@ begin
 
     prevAngleCropped := angleCropped[iAngle];
   end;
-
-  if not FSilent then
-    WriteLn(ImageShortName, ', begin:', RadToDeg(CropData.StartAngle):9:3, ', end:', RadToDeg(CropData.EndAngle):9:3, ', begin2:', RadToDeg(CropData.StartAngleMirror):9:3, ', end2:', RadToDeg(CropData.EndAngleMirror):9:3);
 end;
 
 procedure TInputScan.FixCISScanners;
