@@ -488,12 +488,12 @@ begin
   end;
 end;
 
-function CompareInputScansObjective(Item1, Item2, UserParameter: Pointer): Integer;
+function CompareInputScansRelAngle(Item1, Item2, UserParameter: Pointer): Integer;
 var
   s1: ^TInputScan absolute Item1;
   s2: ^TInputScan absolute Item2;
 begin
-  Result := CompareValue(s1^.Objective, s2^.Objective);
+  Result := CompareValue(NormalizedAngleTo02Pi(s1^.RelativeAngle), NormalizedAngleTo02Pi(s2^.RelativeAngle));
 end;
 
 procedure TScanCorrelator.Analyze;
@@ -558,9 +558,9 @@ begin
     WriteLn(scan.ImageShortName, ', Angle: ', RadToDeg(scan.RelativeAngle):9:3, ', CenterX: ', scan.Center.X:9:3, ', CenterY: ', scan.Center.Y:9:3, ', SkewX: ', scan.Skew.X:9:6, ', SkewY: ', scan.Skew.Y:9:6, ', RMSE: ', scan.Objective:12:9);
   end;
 
-  // sort scans by RMSE (best to worst) for next algos
+  // sort scans by relative angle for next algos
 
-  QuickSort(FInputScans[0], 1, High(FInputScans), SizeOf(TInputScan), @CompareInputScansObjective);
+  QuickSort(FInputScans[0], 1, High(FInputScans), SizeOf(TInputScan), @CompareInputScansRelAngle);
 end;
 
 procedure TScanCorrelator.Crop;
@@ -703,12 +703,12 @@ end;
 function TScanCorrelator.ArgToSkew(arg: TVector): TCorrectSkew;
 begin
   Result.ConstSkew := arg[0];
-  Result.MulSkew := arg[1] * 1e-6;
+  Result.MulSkew := arg[1];
 end;
 
 function TScanCorrelator.SkewToArg(const skew: TCorrectSkew): TVector;
 begin
-  Result := [skew.ConstSkew, skew.MulSkew * 1e6];
+  Result := [skew.ConstSkew, skew.MulSkew];
 end;
 
 function TScanCorrelator.InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
@@ -769,12 +769,9 @@ begin
   // devise best baseScan
 
   best := Infinity;
-  for iBaseScan := 0 to High(FInputScans) do
+  for iBaseScan := 0 to Coords.ScanIdx - 1 do
   begin
     baseScan := FInputScans[iBaseScan];
-
-    if (Coords.ScanIdx = iBaseScan) or curScan.HasCorrectRef(FInputScans, Coords.AngleIdx, iBaseScan) then
-      Continue;
 
     v := objectives[iBaseScan];
 
@@ -799,9 +796,6 @@ begin
   end;
 
   //WriteLn(Coords.ScanIdx:4, Coords.AngleIdx:4, Coords.BaseScanIdx:4, best:12:6);
-
-  baseScan := FInputScans[Coords.BaseScanIdx];
-  baseScan.AddCorrectRef(Coords.AngleIdx, Coords.ScanIdx);
 end;
 
 procedure TScanCorrelator.PrepareCorrect(var coords: TCorrectCoords);
@@ -925,10 +919,8 @@ var
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     coords: PCorrectCoords;
-    iMul, iConst: Integer;
-    f, loss: Double;
+    loss: Double;
     scan: TInputScan;
-    skew, tmpSk: TCorrectSkew;
   begin
     if not InRange(AIndex, 0, High(FPerAngleSkew)) then
       Exit;
@@ -943,31 +935,7 @@ var
     begin
       PrepareCorrect(coords^);
 
-      loss := Infinity;
-      skew := ArgToSkew(coords^.X);
-
-      for iMul := -CMulCorrectHalfCount to CMulCorrectHalfCount do
-      begin
-        tmpSk := skew;
-        tmpSk.MulSkew := iMul * CMulCorrectExtents / CMulCorrectHalfCount;
-
-        for iConst := -CConstCorrectHalfCount to CConstCorrectHalfCount do
-        begin
-          tmpSk.ConstSkew := iConst * CConstCorrectExtents / CConstCorrectHalfCount * scan.DPI;
-
-          f := NelderMeadCorrect(SkewToArg(tmpSk), coords);
-
-          if f < loss then
-          begin
-            loss := f;
-            skew := tmpSk;
-          end;
-        end;
-      end;
-
-      coords^.X := SkewToArg(skew);
-
-      //loss := NelderMeadMinimize(@NelderMeadCorrect, coords^.X, [0.01, 0.01], 0.0, coords);
+      loss := GridReduceMinimize(@NelderMeadCorrect, coords^.X, [CConstCorrectHalfCount, CMulCorrectHalfCount], [CConstCorrectExtents * scan.DPI, CMulCorrectExtents], 1e-3, '', coords);
 
       // free up memory
       SetLength(coords^.SinCosLUT, 0);
