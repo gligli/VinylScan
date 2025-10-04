@@ -1294,15 +1294,75 @@ end;
 
 procedure TInputScan.Linearize;
 var
-  iAngle, iy, ix, yx, rBeg, rEnd: Integer;
-  iCurve: Word;
-  mx, ind: Cardinal;
-  t, r, sqy: Double;
-  ext: TRect;
-  Freqs: array[0 .. High(Word)] of Cardinal;
   AngleIndicator: TCardinalDynArray;
   AngleExtents: array of TRect;
+
+  procedure DoAngle(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+  var
+    iy, ix, yx: Integer;
+    iCurve: Word;
+    mx, ind: Cardinal;
+    ext: TRect;
+    Freqs: array[0 .. High(Word)] of Cardinal;
+  begin
+    if not InRange(AIndex, 0, FPointsPerRevolution - 1) then
+      Exit;
+
+    ind := AIndex + 1;
+    ext := AngleExtents[AIndex];
+    FillChar(Freqs, SizeOf(Freqs), 0);
+
+    // devise pixel values frequencies
+
+    for iy := ext.Top to ext.Bottom do
+    begin
+      yx := iy * FWidth + ext.Left;
+
+      for ix := ext.Left to ext.Right do
+      begin
+        if AngleIndicator[yx] = ind then
+          Inc(Freqs[FImage[yx]]);
+
+        Inc(yx);
+      end;
+    end;
+
+    // cumulate frequencies
+
+    for iCurve := 1 to High(Word) do
+      Freqs[iCurve] += Freqs[iCurve - 1];
+
+    // normalize
+
+    mx := Freqs[High(Word)];
+    if mx > 0 then
+      for iCurve := 0 to High(Word) do
+        Freqs[iCurve] := Freqs[iCurve] * High(Word) div mx;
+
+    // apply to image
+
+    for iy := ext.Top to ext.Bottom do
+    begin
+      yx := iy * FWidth + ext.Left;
+
+      for ix := ext.Left to ext.Right do
+      begin
+        if AngleIndicator[yx] = ind then
+          FProcessedImage[yx] := Freqs[FImage[yx]];
+
+        Inc(yx);
+      end;
+    end;
+  end;
+
+var
+  iAngle, iy, ix, yx, rBeg, rEnd: Integer;
+  ind: Cardinal;
+  t, r, sqy: Double;
 begin
+  FProcessedImage := nil;
+  SetLength(FProcessedImage, Height * Width);
+
   // identify angles
 
   SetLength(AngleIndicator, Length(FImage));
@@ -1350,54 +1410,7 @@ begin
 
   // compute per angle curves
 
-  for iAngle := 0 to FPointsPerRevolution - 1 do
-  begin
-    ind := iAngle + 1;
-    ext := AngleExtents[iAngle];
-    FillChar(Freqs, SizeOf(Freqs), 0);
-
-    // devise pixel values frequencies
-
-    for iy := ext.Top to ext.Bottom do
-    begin
-      yx := iy * FWidth + ext.Left;
-
-      for ix := ext.Left to ext.Right do
-      begin
-        if AngleIndicator[yx] = ind then
-          Inc(Freqs[FImage[yx]]);
-
-        Inc(yx);
-      end;
-    end;
-
-    // cumulate frequencies
-
-    for iCurve := 1 to High(Word) do
-      Freqs[iCurve] += Freqs[iCurve - 1];
-
-    // normalize
-
-    mx := Freqs[High(Word)];
-    if mx > 0 then
-      for iCurve := 0 to High(Word) do
-        Freqs[iCurve] := Freqs[iCurve] * High(Word) div mx;
-
-    // apply to image
-
-    for iy := ext.Top to ext.Bottom do
-    begin
-      yx := iy * FWidth + ext.Left;
-
-      for ix := ext.Left to ext.Right do
-      begin
-        if AngleIndicator[yx] = ind then
-          FProcessedImage[yx] := Freqs[FImage[yx]];
-
-        Inc(yx);
-      end;
-    end;
-  end;
+  ProcThreadPool.DoParallelLocalProc(@DoAngle, 0, FPointsPerRevolution - 1);
 end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
@@ -1503,15 +1516,15 @@ function TInputScan.DecodeSample(precision: Integer; radius, prevRadius, angleSi
   sampleMeanSD: TPointD): TPointD;
 var
   iSmp, posMin, posMax, decoderMax: Integer;
-  r, cx, cy, skx, sky, px, py, cxa, sampleMean, sampleStdDev: Double;
+  r, cx, cy, skx, sky, px, py, cvtSmpRadius, sampleMean, sampleStdDev: Double;
   smpBuf: array[SmallInt] of Double;
 
   function GetSampleIdx(iSmp: Integer): Double;
   var
     r: Double;
   begin
-    r := radius + (iSmp + 0.5) * cxa;
-    Result := GetPointD_Final(Image, (angleSin * r + cy) * sky, (angleCos * r + cx) * skx);
+    r := radius + (iSmp + 0.5) * cvtSmpRadius;
+    Result := GetPointD_Final(FImage, (angleSin * r + cy) * sky, (angleCos * r + cx) * skx);
     smpBuf[iSmp] := Result;
   end;
 
@@ -1521,22 +1534,21 @@ begin
 
   decoderMax := 1 shl precision;
 
-  cxa := FProfileRef.RecordingGrooveWidth * 0.5 * FDPI / decoderMax;
+  cvtSmpRadius := FProfileRef.RecordingGrooveWidth * 0.5 * FDPI / decoderMax;
+  if not IsNan(prevRadius) then
+    cvtSmpRadius := EnsureRange((prevRadius - radius) * 0.5 * CTrack2TrackToTrackWidthRatio / decoderMax, 0.0, cvtSmpRadius);
 
   cx := FCenter.X;
   cy := FCenter.Y;
   skx := FSkew.X;
   sky := FSkew.Y;
 
-  r := radius + decoderMax * cxa;
+  r := radius + decoderMax * cvtSmpRadius;
   px := (angleCos * r + cx) * skx;
   py := (angleSin * r + cy) * sky;
 
   if not InRangePointD(py, px) then
     Exit;
-
-  if not IsNan(prevRadius) then
-    decoderMax := EnsureRange(Floor((prevRadius - radius) * 0.5 * CTrack2TrackToTrackWidthRatio / cxa), 2, decoderMax);
 
   posMin := -decoderMax;
   posMax := decoderMax - 1;
@@ -1558,6 +1570,7 @@ begin
 
   Result.X /= decoderMax;
   Result.Y /= decoderMax;
+
 end;
 
 procedure TInputScan.AddCorrectRef(AngleIdx, ScanIdx: Integer);
