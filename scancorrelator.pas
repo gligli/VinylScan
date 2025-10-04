@@ -604,19 +604,12 @@ begin
 end;
 
 procedure TScanCorrelator.Linearize;
-
-  procedure DoLinearize(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
-  begin
-    if not InRange(AIndex, 0, High(FInputScans)) then
-      Exit;
-
-    FInputScans[AIndex].Linearize;
-  end;
-
+var
+  iScan: Integer;
 begin
  WriteLn('Linearize');
-
- ProcThreadPool.DoParallelLocalProc(@DoLinearize, 0, High(FInputScans));
+ for iScan := 0 to High(FInputScans) do
+   FInputScans[iScan].Linearize;
 end;
 
 procedure TScanCorrelator.CorrectAnglesFromCoords(const coords: TCorrectCoords; out AStartAngle, AEndAngle,
