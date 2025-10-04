@@ -181,10 +181,9 @@ var
   rOuter, sn, cs, ox, oy, fbRatio, instantPct, maxPct, angle: Double;
   iScan, iSample, iLut, cnt, channels: Integer;
   hasOutFile, validSample, sampleCropped: Boolean;
-  smp, sample, filteredSample, sampleMeanSD: TPointD;
+  sample, filteredSample, sampleMeanSD: TPointD;
   fltSampleL, fltSampleR: TFilterIIRHPBessel;
   sinCosLut: TSinCosDynArray;
-  angleMeanSDLut: TPointDDynArray2;
   rawSamples: TPointDDynArray;
   radiusSamples: TDoubleDynArray;
   samples: TDoubleDynArray;
@@ -211,25 +210,6 @@ begin
     // build Sin/Cos LUT
 
     BuildSinCosLUT(FPointsPerRevolution, sinCosLut, FStartAngle, -2.0 * Pi);
-
-    // build per angle Mean/StdDev LUT
-
-    SetLength(angleMeanSDLut, FPointsPerRevolution, Length(FInputScans));
-    for iLut := 0 to High(angleMeanSDLut) do
-    begin
-      angle := ArcTan2(sinCosLut[iLut].Sin, sinCosLut[iLut].Cos);
-
-      for iScan := 0 to High(FInputScans) do
-      begin
-        scan := FInputScans[iScan];
-        angleMeanSDLut[iLut, iScan] := scan.GetMeanSD(scan.Image,
-            FProfileRef.LastMusicGroove * 0.5 * scan.DPI,
-            FProfileRef.FirstMusicGroove * 0.5 * scan.DPI,
-            NormalizeAngle(angle + FRadiansPerRevolutionPoint * 0.5),
-            NormalizeAngle(angle - FRadiansPerRevolutionPoint * 0.5),
-            CDecoderSigma);
-      end;
-    end;
 
     // init
 
@@ -265,8 +245,12 @@ begin
 
         if not sampleCropped then
         begin
-          rawSamples[iScan] := scan.DecodeSample(FDecoderPrecision, FRadiuses[iScan], prevRadiuses[iLut, iScan], sn, cs, sampleMeanSD);
-          radiusSamples[iScan] := GetMono(AdjustSample(rawSamples[iScan], sampleMeanSD));
+          sample := scan.DecodeSample(FDecoderPrecision, FRadiuses[iScan], prevRadiuses[iLut, iScan], sn, cs, sampleMeanSD);
+
+          radiusSamples[iScan] := GetMono(AdjustSample(sample, sampleMeanSD));
+
+          sampleMeanSD.Y *= Sqrt(2.0) / 2.0;
+          rawSamples[iScan] := AdjustSample(sample, sampleMeanSD);
         end
         else
         begin
@@ -304,10 +288,8 @@ begin
 
         if not sampleCropped then
         begin
-          smp := AdjustSample(rawSamples[iScan], angleMeanSDLut[iLut, iScan]);
-
-          sample.X += smp.X;
-          sample.Y += smp.Y;
+          sample.X += rawSamples[iScan].X;
+          sample.Y += rawSamples[iScan].Y;
           Inc(cnt);
         end;
       end;
