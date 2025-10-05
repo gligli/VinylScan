@@ -689,8 +689,12 @@ begin
 end;
 
 function TScanCorrelator.SkewRadius(ARadius: Double; const ASkew: TCorrectSkew): Double;
+var
+  rBeg: Double;
 begin
-  Result := ARadius + ASkew.MulSkew * ARadius + ASkew.ConstSkew;
+  rBeg := FCorrectAreaBegin * 0.5 * FInputScans[0].DPI;
+
+  Result := ARadius + ASkew.MulSkew * (ARadius - rBeg) + ASkew.ConstSkew;
 end;
 
 function TScanCorrelator.ArgToSkew(arg: TVector): TCorrectSkew;
@@ -727,7 +731,7 @@ var
       tmpCoords.SinCosLUT := nil;
       BuildSinCosLUT(tmpCoords.AngleCnt, tmpCoords.sinCosLUT, tmpCoords.StartAngle + baseScan.RelativeAngle, NormalizedAngleDiff(tmpCoords.StartAngle, tmpCoords.EndAngle));
 
-      objectives[AIndex] := NelderMeadCorrect([0.0, 0.0], @tmpCoords);
+      objectives[AIndex] := NelderMeadCorrect(tmpCoords.X, @tmpCoords);
     end
     else
     begin
@@ -739,6 +743,7 @@ var
   iAngle, iBaseScan: Integer;
   t, bt, v, best: Double;
   curScan, baseScan: TInputScan;
+  skew: TCorrectSkew;
 begin
   Result := True;
   Coords.BaseScanIdx := -1;
@@ -746,6 +751,9 @@ begin
 
   CorrectAnglesFromCoords(coords, coords.StartAngle, coords.EndAngle, coords.AngleInc, coords.AngleCnt, AReduceAngles);
   coords.RadiusCnt := Ceil(FCorrectAreaWidth * curScan.DPI);
+
+  FillChar(skew, SizeOf(skew), 0);
+  coords.X := SkewToArg(skew);
 
   if IsNan(coords.StartAngle) or IsNan(coords.EndAngle) then
     Exit(False);
@@ -900,10 +908,12 @@ end;
 
 procedure TScanCorrelator.Correct;
 const
-  CConstCorrectExtents = 0.05; // inches
-  CConstCorrectHalfCount = 50;
-  CMulCorrectExtents = 0.01;
-  CMulCorrectHalfCount = 50;
+  CConstExtents = 0.02; // inches
+  CConstHalfCount = 50;
+  CMulExtents = 0.01;
+  CMulHalfCount = 50;
+  CSqrCorrectExtents = 0.00001;
+  CSqrCorrectHalfCount = 50;
 var
   rmses: TDoubleDynArray;
   coordsArray: array of TCorrectCoords;
@@ -922,13 +932,12 @@ var
     scan := FInputScans[coords^.ScanIdx];
 
     loss := NaN;
-    coords^.X := [0.0, 0.0];
 
     if not IsNan(coords^.StartAngle) and not IsNan(coords^.EndAngle) then
     begin
       PrepareCorrect(coords^);
 
-      loss := GridReduceMinimize(@NelderMeadCorrect, coords^.X, [CConstCorrectHalfCount, CMulCorrectHalfCount], [CConstCorrectExtents * scan.DPI, CMulCorrectExtents], 1e-3, '', coords);
+      loss := GridReduceMinimize(@NelderMeadCorrect, coords^.X, [CConstHalfCount, CMulHalfCount], [CConstExtents * scan.DPI, CMulExtents], 1e-3, '', coords);
 
       // free up memory
       SetLength(coords^.SinCosLUT, 0);
