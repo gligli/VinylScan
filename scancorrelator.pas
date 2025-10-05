@@ -386,7 +386,7 @@ begin
 
     if baseScan.InRangePointD(py, px) then
     begin
-      Result[iRadiusAngle] := CompressRange((baseScan.GetPointD_Work(baseScan.ProcessedImage, py, px) - baseMeanSD.X) * baseMeanSD.Y);
+      Result[iRadiusAngle] := (baseScan.GetPointD_Work(baseScan.ProcessedImage, py, px) - baseMeanSD.X) * baseMeanSD.Y;
     end
     else
     begin
@@ -431,7 +431,7 @@ var
       px := (cs * r + cx) * skx;
       py := (sn * r + cy) * sky;
 
-      imgInt := CompressRange((scan.GetPointD_Work(scan.ProcessedImage, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y);
+      imgInt := (scan.GetPointD_Work(scan.ProcessedImage, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y;
       mseInt := coords^.PreparedData[pos] - imgInt;
       funcAcc += Sqr(mseInt);
 
