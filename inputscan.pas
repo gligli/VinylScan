@@ -337,7 +337,7 @@ begin
 
       if InRangePointD(py, px) then
       begin
-        imgInt := CompressRange((GetPointD_Work(FProcessedImage, py, px) - meanSD^.X) * meanSD^.Y);
+        imgInt := (GetPointD_Work(FProcessedImage, py, px) - meanSD^.X) * meanSD^.Y;
 
         func -= imgInt * sy;
 
@@ -345,7 +345,7 @@ begin
         begin
           GetGradientsD(FProcessedImage, py, px, gimgy, gimgx);
 
-          gInt := meanSD^.Y * sy * (1.0 - Sqr(imgInt));
+          gInt := meanSD^.Y * sy;
 
           gcx -= gimgx * gInt;
           gcy -= gimgy * gInt;
@@ -377,7 +377,7 @@ begin
 
   X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius, 1.0];
 
-  ff := LBFGSScaledMinimize(@GradientConcentricGroove, X, [1.0, 1.0, 1.0, 1e-4], 1e-6, 4, @meanSD);
+  ff := LBFGSScaledMinimize(@GradientConcentricGroove, X, [1.0, 1.0, 1.0, 1e-3], 1e-9, 4, @meanSD);
 
   FCenter.X := X[0];
   FCenter.Y := X[1];
@@ -448,8 +448,8 @@ begin
 
   FGrooveStartAngleQuality := best;
   FGrooveStartAngle := bestr;
-  FGrooveStartPoint.X := bestx;
-  FGrooveStartPoint.Y := besty;
+  FGrooveStartPoint.X := bestx / FSkew.X;
+  FGrooveStartPoint.Y := besty / FSkew.Y;
 end;
 
 constructor TInputScan.Create(AProfileRef: TProfile; ADefaultDPI: Integer; ASilent: Boolean);
