@@ -37,7 +37,7 @@ type
     X: TVector;
 
     SinCosLUT: TSinCosDynArray;
-    PreparedData: TDoubleDynArray;
+    PreparedData: TWordDynArray;
   end;
 
   PCorrectCoords = ^TCorrectCoords;
@@ -837,9 +837,9 @@ begin
       py := (sn * r + cy) * sky;
 
       if baseScan.InRangePointD(py, px) then
-        coords.PreparedData[pos] := baseScan.GetPointD_Work(baseScan.ProcessedImage, py, px)
+        coords.PreparedData[pos] := baseScan.ProcessedImage[Trunc(py) * baseScan.Width + Trunc(px)]
       else
-        coords.PreparedData[pos] := 1e6;
+        coords.PreparedData[pos] := 0;
 
       Inc(pos);
     end;
@@ -858,6 +858,7 @@ var
   r, rBeg, rEnd, sn, cs, px, py, skx, sky, cx, cy, rsk: Double;
   skew: TCorrectSkew;
   scan: TInputScan;
+  acc: UInt64;
 begin
   iScan := coords^.ScanIdx;
   scan := FInputScans[iScan];
@@ -879,8 +880,7 @@ begin
   if not InRange(SkewRadius(rEnd, skew), rEnd * CScannerTolLo, rEnd * CScannerTolHi) then
     Exit(1e6);
 
-  Result := 0.0;
-
+  acc := 0;
   pos := 0;
   for iAngle := 0 to coords^.AngleCnt - 1 do
   begin
@@ -896,14 +896,14 @@ begin
       px := (cs * rsk + cx) * skx;
       py := (sn * rsk + cy) * sky;
 
-      Result += Sqr(coords^.PreparedData[pos] - scan.GetPointD_Work(scan.ProcessedImage, py, px));
+      acc += Sqr(coords^.PreparedData[pos] - scan.ProcessedImage[Trunc(py) * scan.Width + Trunc(px)]);
 
       Inc(pos);
     end;
   end;
   Assert(pos = Length(coords^.PreparedData));
 
-  Result := Sqrt(Result / pos) / High(Word);
+  Result := Sqrt(acc / pos) / High(Word);
 end;
 
 procedure TScanCorrelator.Correct;
