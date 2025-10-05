@@ -249,7 +249,7 @@ begin
 
           radiusSamples[iScan] := GetMono(AdjustSample(sample, sampleMeanSD));
 
-          sampleMeanSD.Y *= Sqrt(2.0) / 2.0;
+          sampleMeanSD.Y := 1.0 / (Sqrt(2.0) / 2.0 * -Low(SmallInt)); // only L1 normalization for output audio
           rawSamples[iScan] := AdjustSample(sample, sampleMeanSD);
         end
         else
