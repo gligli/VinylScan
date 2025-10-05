@@ -369,7 +369,7 @@ begin
   sky := baseScan.Skew.Y;
 
   BuildSinCosLUT(angleCnt, sinCosLUT, t);
-  baseMeanSD := baseScan.GetMeanSD(baseScan.ProcessedImage, FAnalyzeAreaBegin * 0.5 * baseScan.DPI, FAnalyzeAreaEnd * 0.5 * baseScan.DPI, -Pi, Pi, CAnalyzeSigma);
+  baseMeanSD := baseScan.GetMeanSD(baseScan.Image, FAnalyzeAreaBegin * 0.5 * baseScan.DPI, FAnalyzeAreaEnd * 0.5 * baseScan.DPI, -Pi, Pi, CAnalyzeSigma);
 
   pos := 0;
   rBeg := FAnalyzeAreaBegin * 0.5 * baseScan.DPI;
@@ -386,7 +386,7 @@ begin
 
     if baseScan.InRangePointD(py, px) then
     begin
-      Result[iRadiusAngle] := (baseScan.GetPointD_Work(baseScan.ProcessedImage, py, px) - baseMeanSD.X) * baseMeanSD.Y;
+      Result[iRadiusAngle] := (baseScan.GetPointD_Work(baseScan.Image, py, px) - baseMeanSD.X) * baseMeanSD.Y;
     end
     else
     begin
@@ -431,7 +431,7 @@ var
       px := (cs * r + cx) * skx;
       py := (sn * r + cy) * sky;
 
-      imgInt := (scan.GetPointD_Work(scan.ProcessedImage, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y;
+      imgInt := (scan.GetPointD_Work(scan.Image, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y;
       mseInt := coords^.PreparedData[pos] - imgInt;
       funcAcc += Sqr(mseInt);
 
@@ -908,7 +908,7 @@ end;
 
 procedure TScanCorrelator.Correct;
 const
-  CConstExtents = 0.02; // inches
+  CConstExtents = 0.03; // inches
   CConstHalfCount = 50;
   CMulExtents = 0.01;
   CMulHalfCount = 50;
