@@ -1294,22 +1294,28 @@ end;
 
 procedure TInputScan.Linearize;
 var
-  AngleIndicator: TCardinalDynArray;
+  ppr: Integer;
+
+  AngleIndicator: TWordDynArray;
   AngleExtents: array of TRect;
 
   procedure DoAngle(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     iy, ix, yx: Integer;
-    iCurve: Word;
-    mx, ind: Cardinal;
+    ind, iCurve: Word;
+    mx: Cardinal;
     ext: TRect;
     Freqs: array[0 .. High(Word)] of Cardinal;
   begin
-    if not InRange(AIndex, 0, FPointsPerRevolution - 1) then
+    if not InRange(AIndex, 0, ppr - 1) then
       Exit;
 
     ind := AIndex + 1;
     ext := AngleExtents[AIndex];
+
+    if (ext.Left > ext.Right) or (ext.Top > ext.Bottom) then
+      Exit;
+
     FillChar(Freqs, SizeOf(Freqs), 0);
 
     // devise pixel values frequencies
@@ -1357,27 +1363,31 @@ var
 
 var
   iAngle, iy, ix, yx, rBeg, rEnd: Integer;
-  ind: Cardinal;
+  ind: Word;
   t, r, sqy: Double;
 begin
   FProcessedImage := nil;
   SetLength(FProcessedImage, Height * Width);
 
+  rBeg := Floor(FProfileRef.MinConcentricGroove * 0.5 * FDPI);
+  rEnd := Ceil(FProfileRef.OuterSize * 0.5 * FDPI);
+
+  ppr := Ceil(rBeg * 2.0 * Pi * 0.25);
+
+  Assert(ppr < High(Word));
+
   // identify angles
 
   SetLength(AngleIndicator, Length(FImage));
-  SetLength(AngleExtents, FPointsPerRevolution);
+  SetLength(AngleExtents, ppr);
 
-  for iAngle := 0 to FPointsPerRevolution - 1 do
+  for iAngle := 0 to ppr - 1 do
   begin
     AngleExtents[iAngle].Left := High(Integer);
     AngleExtents[iAngle].Top := High(Integer);
     AngleExtents[iAngle].Right := Low(Integer);
     AngleExtents[iAngle].Bottom := Low(Integer);
   end;
-
-  rBeg := Floor(FProfileRef.MinConcentricGroove * 0.5 * FDPI);
-  rEnd := Ceil(FProfileRef.OuterSize * 0.5 * FDPI);
 
   yx := 0;
   for iy := 0 to FHeight - 1 do
@@ -1391,7 +1401,7 @@ begin
       if InRange(r, rBeg, rEnd) then
       begin
         t := ArcTan2(iy - FCenter.Y, ix - FCenter.X);
-        iAngle := Round(NormalizedAngleTo02Pi(t) * (FPointsPerRevolution - 1) / (2.0 * Pi));
+        iAngle := Trunc(NormalizedAngleTo02Pi(t) * ppr / (2.0 * Pi));
         ind := iAngle + 1;
         AngleIndicator[yx] := ind;
         AngleExtents[iAngle].Left := Min(AngleExtents[iAngle].Left, ix);
@@ -1410,7 +1420,7 @@ begin
 
   // compute per angle curves
 
-  ProcThreadPool.DoParallelLocalProc(@DoAngle, 0, FPointsPerRevolution - 1);
+  ProcThreadPool.DoParallelLocalProc(@DoAngle, 0, ppr - 1);
 end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
@@ -1524,7 +1534,7 @@ var
     r: Double;
   begin
     r := radius + (iSmp + 0.5) * cvtSmpRadius;
-    Result := GetPointD_Final(FImage, (angleSin * r + cy) * sky, (angleCos * r + cx) * skx);
+    Result := GetPointD_Final(FProcessedImage, (angleSin * r + cy) * sky, (angleCos * r + cx) * skx);
     smpBuf[iSmp] := Result;
   end;
 
