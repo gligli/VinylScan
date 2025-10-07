@@ -461,7 +461,7 @@ begin
   BuildSinCosLUT(angleCnt, sinCosLUT, t);
 
   SetLength(results, radiusCnt);
-  ProcThreadPool.DoParallelLocalProc(@DoSpiral, 0, radiusCnt - 1, nil, Round(ProcThreadPool.MaxThreadCount / High(FInputScans)));
+  ProcThreadPool.DoParallelLocalProc(@DoSpiral, 0, radiusCnt - 1);
 
   cnt := radiusCnt * angleCnt;
   Result := 0;
@@ -844,10 +844,12 @@ function TScanCorrelator.NelderMeadCorrect(const arg: TVector; obj: Pointer): TS
 var
   coords: PCorrectCoords absolute obj;
   iRadius, iScan, iAngle, pos: Integer;
-  r, rBeg, rEnd, sn, cs, px, py, skx, sky, cx, cy, rsk: Double;
+  r, rBeg, rEnd, skx, sky, cx, cy, rsk: Double;
+  sn, cs, px, py, cskx, csky: Single;
   skew: TCorrectSkew;
   scan: TInputScan;
   acc: UInt64;
+  skewedRadiuses: array of TPointF;
 begin
   iScan := coords^.ScanIdx;
   scan := FInputScans[iScan];
@@ -859,8 +861,6 @@ begin
   skx := scan.Skew.X;
   sky := scan.Skew.Y;
 
-  // parse image arcs
-
   rBeg := FCorrectAreaBegin * 0.5 * scan.DPI;
   if not InRange(SkewRadius(rBeg, skew), rBeg * CScannerTolLo, rBeg * CScannerTolHi) then
     Exit(1e6);
@@ -868,6 +868,24 @@ begin
   rEnd := FCorrectAreaEnd * 0.5 * scan.DPI;
   if not InRange(SkewRadius(rEnd, skew), rEnd * CScannerTolLo, rEnd * CScannerTolHi) then
     Exit(1e6);
+
+  // prepare final radius LUT
+
+  cskx := cx * skx;
+  csky := cy * sky;
+
+  SetLength(skewedRadiuses, coords^.RadiusCnt);
+  for iRadius := 0 to coords^.RadiusCnt - 1 do
+  begin
+    r := rBeg + iRadius;
+
+    rsk := SkewRadius(r, skew);
+
+    skewedRadiuses[iRadius].X := rsk * skx;
+    skewedRadiuses[iRadius].Y := rsk * sky;
+  end;
+
+  // parse image arcs
 
   acc := 0;
   pos := 0;
@@ -878,12 +896,8 @@ begin
 
     for iRadius := 0 to coords^.RadiusCnt - 1 do
     begin
-      r := rBeg + iRadius;
-
-      rsk := SkewRadius(r, skew);
-
-      px := (cs * rsk + cx) * skx;
-      py := (sn * rsk + cy) * sky;
+      px := cs * skewedRadiuses[iRadius].X + cskx;
+      py := sn * skewedRadiuses[iRadius].Y + csky;
 
       acc += Sqr(coords^.PreparedData[pos] - scan.ProcessedImage[Trunc(py) * scan.Width + Trunc(px)]);
 
