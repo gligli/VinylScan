@@ -64,7 +64,6 @@ type
 
     FOutputWidth, FOutputHeight: Integer;
     FOutputImage: TWordDynArray;
-    FOutputScans: TInputScanDynArray;
 
     FAngleInitAreaBegin: Double;
     FAngleInitAreaEnd: Double;
@@ -119,7 +118,6 @@ type
     property ProfileRef: TProfile read FProfileRef;
     property InputScans: TInputScanDynArray read FInputScans;
     property OutputImage: TWordDynArray read FOutputImage;
-    property OutputScans: TInputScanDynArray read FOutputScans;
   end;
 
   { TDPIAwareWriterPNG }
@@ -147,14 +145,11 @@ begin
   FProfileRef := AProfileRef;
   FOutputDPI := AOutputDPI;
   SetLength(FInputScans, AFileNames.Count);
-  SetLength(FOutputScans, Length(FInputScans));
 
   for iScan := 0 to AFileNames.Count - 1 do
   begin
     FInputScans[iScan] := TInputScan.Create(FProfileRef, FOutputDPI, True);
     FInputScans[iScan].ImageFileName := AFileNames[iScan];
-    FOutputScans[iScan] := TInputScan.Create(FProfileRef, FOutputDPI, True);
-    FOutputScans[iScan].ImageFileName := AFileNames[iScan];
   end;
 
   SpinLeave(@FLock);
@@ -184,10 +179,7 @@ var
   i: Integer;
 begin
   for i := 0 to High(FInputScans) do
-  begin
     FInputScans[i].Free;
-    FOutputScans[i].Free;
-	end;
 
   inherited Destroy;
 end;
@@ -1194,11 +1186,6 @@ var
               Inc(cnt);
             end;
           end;
-
-          if r >= rLim then
-            FOutputScans[iScan].Image[yx + ox] := EnsureRange(Round(sample), 0, High(Word))
-          else
-            FOutputScans[iScan].Image[yx + ox] := EnsureRange(Round(sample * CLabelDepthMaxValue / High(Word)), 0, CLabelDepthMaxValue) * High(Word) div CLabelDepthMaxValue; // lower bit depth for label
         end;
 
         acc := DivDef(acc, cnt, High(Word));
@@ -1212,15 +1199,11 @@ var
       begin
         // dark outside the disc, inner inside
         sample := IfThen(r >= rLim, Round(0.25 * High(Word)), Round(1.0 * High(Word)));
-        for iScan := 0 to High(FInputScans) do
-          FOutputScans[iScan].Image[yx + ox] := Round(sample);
         FOutputImage[yx + ox] := Round(sample);
       end;
     end;
   end;
 
-var
-  iScan: Integer;
 begin
   WriteLn('Rebuild');
 
@@ -1229,8 +1212,6 @@ begin
   FOutputWidth := Ceil(FProfileRef.OuterSize * FOutputDPI);
   FOutputHeight := FOutputWidth;
   SetLength(FOutputImage, sqr(FOutputWidth));
-  for iScan := 0 to High(FOutputScans) do
-    FOutputScans[iScan].InitImage(FOutputWidth, FOutputHeight, FOutputDPI);
 
   center := FOutputWidth / 2.0;
   rBeg := FProfileRef.AdapterSize * 0.5 * FOutputDPI;
@@ -1276,12 +1257,8 @@ procedure TScanCorrelator.Save;
     end;
   end;
 
-var
-  iScan: Integer;
 begin
   DoSave(FOutputPNGFileName, FOutputImage);
-  for iScan := 0 to High(FOutputScans) do
-    DoSave(ChangeFileExt(FOutputPNGFileName, '.' + IntToStr(iScan) + ExtractFileExt(FOutputPNGFileName)), FOutputScans[iScan].Image);
 
   WriteLn('Done!');
 end;
