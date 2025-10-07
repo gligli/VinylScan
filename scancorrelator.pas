@@ -165,7 +165,7 @@ begin
   FAnalyzeAreaEnd := FProfileRef.MinConcentricGroove;
   FAnalyzeAreaWidth := (FAnalyzeAreaEnd - FAnalyzeAreaBegin) * 0.5;
   FCorrectAreaBegin := FProfileRef.MinConcentricGroove;
-  FCorrectAreaEnd := FProfileRef.StylusSetDown;
+  FCorrectAreaEnd := FProfileRef.OuterSize;
   FCorrectAreaWidth := (FCorrectAreaEnd - FCorrectAreaBegin) * 0.5;
 
   FFixCISScanners := False;
@@ -350,14 +350,17 @@ end;
 function TScanCorrelator.PrepareAnalyze: TDoubleDynArray;
 var
   iRadiusAngle, pos, cnt, angleCnt, radiusCnt: Integer;
-  t, rBeg, px, py, cx, cy, skx, sky, r, ri, sn, cs: Double;
+  t, rBeg, rEnd, px, py, cx, cy, skx, sky, r, ri, sn, cs: Double;
   sinCosLUT: TSinCosDynArray;
   baseScan: TInputScan;
   baseMeanSD: TPointD;
 begin
   baseScan := FInputScans[0];
 
-  angleCnt := Ceil(baseScan.PointsPerRevolution * FQualitySpeedRatio);
+  rBeg := FAnalyzeAreaBegin * 0.5 * baseScan.DPI;
+  rEnd := FAnalyzeAreaEnd * 0.5 * baseScan.DPI;
+
+  angleCnt := Ceil(rEnd * 2.0 * Pi * FQualitySpeedRatio);
   radiusCnt := Ceil(FAnalyzeAreaWidth * baseScan.DPI);
   cnt := radiusCnt * angleCnt;
   SetLength(Result, cnt);
@@ -372,7 +375,6 @@ begin
   baseMeanSD := baseScan.GetMeanSD(baseScan.Image, FAnalyzeAreaBegin * 0.5 * baseScan.DPI, FAnalyzeAreaEnd * 0.5 * baseScan.DPI, -Pi, Pi, CAnalyzeSigma);
 
   pos := 0;
-  rBeg := FAnalyzeAreaBegin * 0.5 * baseScan.DPI;
   ri := 1.0 / angleCnt;
   for iRadiusAngle := 0 to High(Result) do
   begin
@@ -447,18 +449,19 @@ var
 begin
   scan := FInputScans[coords^.ScanIdx];
 
-  angleCnt := Ceil(scan.PointsPerRevolution * FQualitySpeedRatio);
+  rBeg := FAnalyzeAreaBegin * 0.5 * scan.DPI;
+  rEnd := FAnalyzeAreaEnd * 0.5 * scan.DPI;
+
+  angleCnt := Ceil(rEnd * 2.0 * Pi * FQualitySpeedRatio);
   radiusCnt := Ceil(FAnalyzeAreaWidth * scan.DPI);
+
+  ri := 1.0 / angleCnt;
 
   t := arg[0];
   cx := arg[1];
   cy := arg[2];
   skx := arg[3];
   sky := arg[4];
-
-  rBeg := FAnalyzeAreaBegin * 0.5 * scan.DPI;
-  rEnd := FAnalyzeAreaEnd * 0.5 * scan.DPI;
-  ri := 1.0 / angleCnt;
 
   if not scan.InRangePointD(cy - rEnd * sky, cx - rEnd * skx) or not scan.InRangePointD(cy + rEnd * sky, cx + rEnd * skx) then
     Exit(1e6);
@@ -502,11 +505,9 @@ var
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
-    iAngle: Integer;
     coords: TAnalyzeCoords;
     X: TVector;
     scan: TInputScan;
-    best, f, t: Double;
   begin
     if not InRange(AIndex, 1, High(FInputScans)) then
       Exit;
@@ -616,7 +617,7 @@ procedure TScanCorrelator.CorrectAnglesFromCoords(const coords: TCorrectCoords; 
   angleInc: Double; out angleCnt: Integer; AReduceAngles: Boolean);
 var
   croppedCnt: Integer;
-  angle, angleExtents, startAngle, endAngle, sa, ea, a0a, a1a, a0b, a1b: Double;
+  angle, angleExtents, startAngle, endAngle, a0a, a1a, a0b, a1b: Double;
   scan: TInputScan;
 begin
   angle := (coords.AngleIdx / FProfileRef.CorrectAngleCount) * 2.0 * Pi;
@@ -628,8 +629,8 @@ begin
   begin
     scan := FInputScans[coords.ScanIdx];
 
-    sa := startAngle;
-    ea := endAngle;
+    startAngle := startAngle;
+    endAngle := endAngle;
 
     // use CropData to potentially reduce angle span
 
@@ -640,33 +641,33 @@ begin
 
     croppedCnt := 0;
 
-    if InNormalizedAngle(sa, a0a, a0b) then
+    if InNormalizedAngle(startAngle, a0a, a0b) then
     begin
-      sa := a0b;
+      startAngle := a0b;
       Inc(croppedCnt);
     end;
 
-    if InNormalizedAngle(sa, a1a, a1b) then
+    if InNormalizedAngle(startAngle, a1a, a1b) then
     begin
-      sa := a1b;
+      startAngle := a1b;
       Inc(croppedCnt);
     end;
 
-    if InNormalizedAngle(ea, a0a, a0b) then
+    if InNormalizedAngle(endAngle, a0a, a0b) then
     begin
-      ea := a0a;
+      endAngle := a0a;
       Inc(croppedCnt);
     end;
 
-    if InNormalizedAngle(ea, a1a, a1b) then
+    if InNormalizedAngle(endAngle, a1a, a1b) then
     begin
-      ea := a1a;
+      endAngle := a1a;
       Inc(croppedCnt);
     end;
 
     // entirely cropped angle? -> not to be computed
 
-    if (croppedCnt >= 2) or (NormalizedAngleDiff(sa, ea) <= 0.0) then
+    if (croppedCnt >= 2) or (NormalizedAngleDiff(startAngle, endAngle) <= 0.0) then
     begin
       startAngle := NaN;
       endAngle := NaN;
@@ -689,12 +690,8 @@ begin
 end;
 
 function TScanCorrelator.SkewRadius(ARadius: Double; const ASkew: TCorrectSkew): Double;
-var
-  rBeg: Double;
 begin
-  rBeg := FCorrectAreaBegin * 0.5 * FInputScans[0].DPI;
-
-  Result := ARadius + ASkew.MulSkew * (ARadius - rBeg) + ASkew.ConstSkew;
+  Result := ARadius + ASkew.MulSkew * ARadius + ASkew.ConstSkew;
 end;
 
 function TScanCorrelator.ArgToSkew(arg: TVector): TCorrectSkew;
@@ -922,7 +919,23 @@ var
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
     coords: PCorrectCoords;
+    gsData: array of record
+      Skew: TCorrectSkew;
+      Objective: Double;
+    end;
+
+    procedure DoGS(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+    begin
+      if not InRange(AIndex, 0, High(gsData)) then
+        Exit;
+
+      gsData[AIndex].Objective := NelderMeadCorrect(SkewToArg(gsData[AIndex].Skew), coords);
+    end;
+
+  var
+    iConst, iMul, iGS: Integer;
     loss: Double;
+    skew, tmpSk: TCorrectSkew;
     scan: TInputScan;
   begin
     if not InRange(AIndex, 0, High(FPerAngleSkew)) then
@@ -937,7 +950,44 @@ var
     begin
       PrepareCorrect(coords^);
 
-      loss := GridReduceMinimize(@NelderMeadCorrect, coords^.X, [CConstHalfCount, CMulHalfCount], [CConstExtents * scan.DPI, CMulExtents], 1e-3, '', coords);
+      // prepare grid search iterations
+
+      skew := ArgToSkew(coords^.X);
+      SetLength(gsData, (CMulHalfCount * 2 + 1) * (CConstHalfCount * 2 + 1));
+
+      iGS := 0;
+      for iMul := -CMulHalfCount to CMulHalfCount do
+      begin
+        tmpSk := skew;
+        tmpSk.MulSkew := iMul * CMulExtents / CMulHalfCount;
+
+        for iConst := -CConstHalfCount to CConstHalfCount do
+        begin
+          tmpSk.ConstSkew := iConst * CConstExtents / CConstHalfCount * scan.DPI;
+
+          gsData[iGS].Skew := tmpSk;
+          gsData[iGS].Objective := NaN;
+
+          Inc(iGS);
+        end;
+      end;
+      Assert(iGS = Length(gsData));
+
+      // grid search iterations
+
+      ProcThreadPool.DoParallelLocalProc(@DoGS, 0, High(gsData));
+
+      // find best iteration
+
+      loss := Infinity;
+      for iGS := 0 to High(gsData) do
+        if gsData[iGS].Objective < loss then
+        begin
+          skew := gsData[iGS].Skew;
+          loss := gsData[iGS].Objective;
+        end;
+
+      coords^.X := SkewToArg(skew);
 
       // free up memory
       SetLength(coords^.SinCosLUT, 0);
