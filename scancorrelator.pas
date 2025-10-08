@@ -86,7 +86,7 @@ type
     function NelderMeadAnalyze(const arg: TVector; obj: Pointer): TScalar;
     function InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
     procedure PrepareCorrect(var coords: TCorrectCoords);
-    function NelderMeadCorrect(const arg: TVector; obj: Pointer): TScalar;
+    function GridSearchCorrect(const skew: TCorrectSkew; const coords: TCorrectCoords): Double;
 
     procedure AngleInit;
     procedure Analyze;
@@ -699,6 +699,7 @@ end;
 
 function TScanCorrelator.InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
 var
+  skew: TCorrectSkew;
   baseCoords: TCorrectCoords;
   objectives: TDoubleDynArray;
 
@@ -720,7 +721,7 @@ var
       tmpCoords.SinCosLUT := nil;
       BuildSinCosLUT(tmpCoords.AngleCnt, tmpCoords.sinCosLUT, tmpCoords.StartAngle + baseScan.RelativeAngle, NormalizedAngleDiff(tmpCoords.StartAngle, tmpCoords.EndAngle));
 
-      objectives[AIndex] := NelderMeadCorrect(tmpCoords.X, @tmpCoords);
+      objectives[AIndex] := GridSearchCorrect(skew, tmpCoords);
     end
     else
     begin
@@ -732,7 +733,6 @@ var
   iAngle, iBaseScan: Integer;
   t, bt, v, best: Double;
   curScan, baseScan: TInputScan;
-  skew: TCorrectSkew;
 begin
   Result := True;
   Coords.BaseScanIdx := -1;
@@ -840,21 +840,17 @@ begin
   BuildSinCosLUT(coords.AngleCnt, coords.sinCosLUT, coords.StartAngle + curScan.RelativeAngle, NormalizedAngleDiff(coords.StartAngle, coords.EndAngle));
 end;
 
-function TScanCorrelator.NelderMeadCorrect(const arg: TVector; obj: Pointer): TScalar;
+function TScanCorrelator.GridSearchCorrect(const skew: TCorrectSkew; const coords: TCorrectCoords): Double;
 var
-  coords: PCorrectCoords absolute obj;
   iRadius, iScan, iAngle, pos: Integer;
   r, rBeg, rEnd, skx, sky, cx, cy, rsk: Double;
   sn, cs, px, py, cskx, csky: Single;
-  skew: TCorrectSkew;
   scan: TInputScan;
   acc: UInt64;
   skewedRadiuses: array of TPointF;
 begin
-  iScan := coords^.ScanIdx;
+  iScan := coords.ScanIdx;
   scan := FInputScans[iScan];
-
-  skew := ArgToSkew(arg);
 
   cx := scan.Center.X;
   cy := scan.Center.Y;
@@ -874,8 +870,8 @@ begin
   cskx := cx * skx;
   csky := cy * sky;
 
-  SetLength(skewedRadiuses, coords^.RadiusCnt);
-  for iRadius := 0 to coords^.RadiusCnt - 1 do
+  SetLength(skewedRadiuses, coords.RadiusCnt);
+  for iRadius := 0 to coords.RadiusCnt - 1 do
   begin
     r := rBeg + iRadius;
 
@@ -889,34 +885,32 @@ begin
 
   acc := 0;
   pos := 0;
-  for iAngle := 0 to coords^.AngleCnt - 1 do
+  for iAngle := 0 to coords.AngleCnt - 1 do
   begin
-    cs := coords^.SinCosLUT[iAngle].Cos;
-    sn := coords^.SinCosLUT[iAngle].Sin;
+    cs := coords.SinCosLUT[iAngle].Cos;
+    sn := coords.SinCosLUT[iAngle].Sin;
 
-    for iRadius := 0 to coords^.RadiusCnt - 1 do
+    for iRadius := 0 to coords.RadiusCnt - 1 do
     begin
       px := cs * skewedRadiuses[iRadius].X + cskx;
       py := sn * skewedRadiuses[iRadius].Y + csky;
 
-      acc += Sqr(coords^.PreparedData[pos] - scan.ProcessedImage[Trunc(py) * scan.Width + Trunc(px)]);
+      acc += Sqr(coords.PreparedData[pos] - scan.ProcessedImage[Trunc(py) * scan.Width + Trunc(px)]);
 
       Inc(pos);
     end;
   end;
-  Assert(pos = Length(coords^.PreparedData));
+  Assert(pos = Length(coords.PreparedData));
 
   Result := Sqrt(acc / pos) / High(Word);
 end;
 
 procedure TScanCorrelator.Correct;
 const
-  CConstExtents = 0.03; // inches
-  CConstHalfCount = 50;
+  CConstExtents = 0.02; // inches
+  CConstHalfCount = 48;
   CMulExtents = 0.01;
-  CMulHalfCount = 50;
-  CSqrCorrectExtents = 0.00001;
-  CSqrCorrectHalfCount = 50;
+  CMulHalfCount = 100;
 var
   rmses: TDoubleDynArray;
   coordsArray: array of TCorrectCoords;
@@ -935,7 +929,7 @@ var
       if not InRange(AIndex, 0, High(gsData)) then
         Exit;
 
-      gsData[AIndex].Objective := NelderMeadCorrect(SkewToArg(gsData[AIndex].Skew), coords);
+      gsData[AIndex].Objective := GridSearchCorrect(gsData[AIndex].Skew, coords^);
     end;
 
   var
