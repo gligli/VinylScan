@@ -16,6 +16,7 @@ type
     FName: String;
     FRevolutionsPerSecond: Double;
     FRecordingGrooveWidth: Double;
+    FRecordingGrooveThickness: Double;
     FLeadOutGrooveThickness: Double;
     FOuterSize: Double;
     FInnerSize: Double;
@@ -35,21 +36,22 @@ type
 
     property Name: String read FName;
 
-    property RevolutionsPerSecond: Double   read FRevolutionsPerSecond;
-    property RecordingGrooveWidth: Double   read FRecordingGrooveWidth;
-    property LeadOutGrooveThickness: Double read FLeadOutGrooveThickness;
-    property OuterSize: Double              read FOuterSize;
-    property InnerSize: Double              read FInnerSize;
-    property LabelOuterSize: Double         read FLabelOuterSize;
-    property ConcentricGroove: Double       read FConcentricGroove;
-    property MinConcentricGroove: Double    read FMinConcentricGroove;
-    property MaxConcentricGroove: Double    read FMaxConcentricGroove;
-    property StylusSetDown: Double          read FStylusSetDown;
-    property FirstMusicGroove: Double       read FFirstMusicGroove;
-    property LastMusicGroove: Double        read FLastMusicGroove;
-    property AdapterSize: Double            read FAdapterSize;
-    property Mono: Boolean                  read FMono;
-    property CorrectAngleCount: Integer     read FCorrectAngleCount;
+    property RevolutionsPerSecond: Double     read FRevolutionsPerSecond;
+    property RecordingGrooveWidth: Double     read FRecordingGrooveWidth;
+    property RecordingGrooveThickness: Double read FRecordingGrooveThickness;
+    property LeadOutGrooveThickness: Double   read FLeadOutGrooveThickness;
+    property OuterSize: Double                read FOuterSize;
+    property InnerSize: Double                read FInnerSize;
+    property LabelOuterSize: Double           read FLabelOuterSize;
+    property ConcentricGroove: Double         read FConcentricGroove;
+    property MinConcentricGroove: Double      read FMinConcentricGroove;
+    property MaxConcentricGroove: Double      read FMaxConcentricGroove;
+    property StylusSetDown: Double            read FStylusSetDown;
+    property FirstMusicGroove: Double         read FFirstMusicGroove;
+    property LastMusicGroove: Double          read FLastMusicGroove;
+    property AdapterSize: Double              read FAdapterSize;
+    property Mono: Boolean                    read FMono;
+    property CorrectAngleCount: Integer       read FCorrectAngleCount;
   end;
 
   TProfileArray = array of TProfile;
@@ -92,22 +94,23 @@ begin
   try
     ini.FormatSettings := InvariantFormatSettings;
 
-    FRevolutionsPerSecond   := GetValue('RevolutionsPerMinute') / 60.0;
-    FRecordingGrooveWidth   := GetValue('RecordingGrooveWidth');
-    FLeadOutGrooveThickness := GetValue('LeadOutGrooveThickness');
-    FOuterSize              := GetValue('OuterSize');
-    FInnerSize              := GetValue('InnerSize');
-    FLabelOuterSize         := GetValue('LabelOuterSize');
-    FConcentricGroove       := GetValue('ConcentricGroove');
-    FMinConcentricGroove    := GetValue('ConcentricGrooveLowTol') * -1 + FConcentricGroove;
-    FMaxConcentricGroove    := GetValue('MaxConcentricGrooveHighTol') + FConcentricGroove;
-    FStylusSetDown          := GetValue('StylusSetDown');
-    FFirstMusicGroove       := GetValue('FirstMusicGroove');
-    FLastMusicGroove        := GetValue('LastMusicGroove');
-    FAdapterSize            := GetValue('AdapterSize');
+    FRevolutionsPerSecond     := GetValue('RevolutionsPerMinute') / 60.0;
+    FRecordingGrooveWidth     := GetValue('RecordingGrooveWidth');
+    FRecordingGrooveThickness := GetValue('RecordingGrooveThickness');
+    FLeadOutGrooveThickness   := GetValue('LeadOutGrooveThickness');
+    FOuterSize                := GetValue('OuterSize');
+    FInnerSize                := GetValue('InnerSize');
+    FLabelOuterSize           := GetValue('LabelOuterSize');
+    FConcentricGroove         := GetValue('ConcentricGroove');
+    FMinConcentricGroove      := GetValue('ConcentricGrooveLowTol') * -1 + FConcentricGroove;
+    FMaxConcentricGroove      := GetValue('ConcentricGrooveHighTol') + FConcentricGroove;
+    FStylusSetDown            := GetValue('StylusSetDown');
+    FFirstMusicGroove         := GetValue('FirstMusicGroove');
+    FLastMusicGroove          := GetValue('LastMusicGroove');
+    FAdapterSize              := GetValue('AdapterSize');
 
-    FMono                   := ini.ReadBool(CSection, 'Mono', True);
-    FCorrectAngleCount      := ini.ReadInteger(CSection, 'CorrectAngleCount', 36);
+    FMono                     := ini.ReadBool(CSection, 'Mono', True);
+    FCorrectAngleCount        := ini.ReadInteger(CSection, 'CorrectAngleCount', 36);
   finally
     ini.Free;
   end;

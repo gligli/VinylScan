@@ -21,7 +21,6 @@ type
     btScansCorrelator: TButton;
     cbProfile: TComboBox;
     cbQSRatio: TComboBox;
-    chkMulti: TCheckBox;
     chkFixCIS: TCheckBox;
     chkDefaultDPI: TCheckBox;
     chkCorrect: TCheckBox;
@@ -66,7 +65,7 @@ type
     FLastTickCount: QWord;
     FPoints: TPointValueList;
 
-    function OnSample(Sender: TScan2Track; ScanIdx: Integer; Sample: TPointD; X, Y: Double; var Radius: Double; Percent: Double; Finished: Boolean): Boolean;
+    function OnSample(Sender: TScan2Track; Sample, LeftPx, RightPx: TPointD; Percent: Double; Finished: Boolean): Boolean;
   public
     procedure UnitTests;
 
@@ -90,45 +89,25 @@ implementation
 
 procedure TMainForm.btScan2TrackClick(Sender: TObject);
 var
-  iScan: Integer;
   fn: String;
-  sl: TStringList;
   s2t: TScan2Track;
 begin
   if not pnSettings.Enabled then
     Exit;
 
   pnSettings.Enabled := False;
-  sl := TStringList.Create;
   try
-    if chkMulti.Checked then
-    begin
-      iScan := 0;
-      repeat
-        fn := ChangeFileExt(edInputPNG.Text, '.' + IntToStr(iScan) + ExtractFileExt(edInputPNG.Text));
-        if not FileExists(fn) then
-          Break;
-        sl.Add(fn);
-        Inc(iScan);
-      until False;
-    end;
+    fn := edInputPNG.Text;
 
-    if sl.Count <= 0 then
-    begin
-      if chkMulti.Checked then
-        WriteLn('Warning: Individual scans not found, using aggregated scan!');
-      sl.Add(edInputPNG.Text);
-    end;
-
-    s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, sl, StrToIntDef(cbDPI.Text, 2400), False, StrToIntDef(cbSR.Text, 48000), sePrec.Value);
+    s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, fn, StrToIntDef(cbDPI.Text, 2400), False, StrToIntDef(cbSR.Text, 48000), sePrec.Value);
     try
       s2t.OnSample := @OnSample;
       s2t.OutputWAVFileName := edOutputWAV.Text;
 
-      s2t.LoadScans;
+      s2t.LoadScan;
 
-      DrawImage(s2t.InputScans[0].ProcessedImage, s2t.InputScans[0].Width, s2t.InputScans[0].Height);
-      DrawExtents(s2t.InputScans[0]);
+      DrawImage(s2t.InputScan.ProcessedImage, s2t.InputScan.Width, s2t.InputScan.Height);
+      DrawExtents(s2t.InputScan);
 
       s2t.EvalTrack;
 
@@ -136,7 +115,6 @@ begin
       s2t.Free;
     end;
   finally
-    sl.Free;
     pnSettings.Enabled := True;
   end;
 end;
@@ -340,7 +318,7 @@ begin
 
   sl := TStringList.Create;
   sc := TScanCorrelator.Create(FProfiles.CurrentProfileRef, sl);
-  s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, sl);
+  s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, '');
   try
     chkFixCIS.Checked := sc.FixCISScanners;
     chkAnalyze.Checked := sc.AnalyzePass;
@@ -378,8 +356,9 @@ begin
     end;
 end;
 
-function TMainForm.OnSample(Sender: TScan2Track; ScanIdx: Integer; Sample: TPointD; X, Y: Double; var Radius: Double;
-  Percent: Double; Finished: Boolean): Boolean;
+function TMainForm.OnSample(Sender: TScan2Track; Sample, LeftPx, RightPx: TPointD; Percent: Double; Finished: Boolean): Boolean;
+const
+  CPointsPerSample = 2;
 var
   SecondsAtATime: Double;
   tc: QWord;
@@ -388,16 +367,17 @@ begin
 
   SecondsAtATime := 0.25 / Sender.ProfileRef.RevolutionsPerSecond;
 
-  FPoints.Add(TPointValue.Create(X, Y, ToRGB(0, High(Byte) - iDiv0(ScanIdx * High(Byte), High(Sender.InputScans)), iDiv0(ScanIdx * High(Byte), High(Sender.InputScans)))));
+  FPoints.Add(TPointValue.Create(LeftPx.X, LeftPx.Y, $ff8000));
+  FPoints.Add(TPointValue.Create(RightPx.X, RightPx.Y, $0080ff));
 
-  if Finished or (FPoints.Count >= Sender.SampleRate * SecondsAtATime * Length(Sender.InputScans)) then
+  if Finished or (FPoints.Count >= Sender.SampleRate * SecondsAtATime * CPointsPerSample) then
   begin
     Result := not ((GetForegroundWindow = Handle) and (GetAsyncKeyState(VK_ESCAPE) and $8000 <> 0));
 
     DrawPoints(FPoints);
 
     tc := GetTickCount64;
-    Write(Percent:6:2, '%,', DivDef(FPoints.Count / (Sender.SampleRate * Length(Sender.InputScans)) * 1000.0, tc - FLastTickCount, 0.0):6:3, 'x', #13);
+    Write(Percent:6:2, '%,', DivDef(FPoints.Count / (Sender.SampleRate * CPointsPerSample) * 1000.0, tc - FLastTickCount, 0.0):6:3, 'x', #13);
     pbS2T.Position := Round(Percent);
     FLastTickCount := tc;
 
@@ -433,7 +413,7 @@ begin
   C := Image.Picture.Bitmap.Canvas;
 
   C.Brush.Style := bsClear;
-  C.Pen.Color := clRed;
+  C.Pen.Color := $00ff80;
   C.Pen.Style := psDot;
 
   sk := AScan.Skew;
@@ -482,8 +462,8 @@ begin
     CropLine(lerp(AScan.CropData.StartAngleMirror, AScan.CropData.EndAngleMirror, 0.5));
   end;
 
-  HorzScrollBar.Position := cx - Width div 2;
-  VertScrollBar.Position := cy - Height div 2;
+  HorzScrollBar.Position := sx - Width div 2;
+  VertScrollBar.Position := sy - Height div 2;
 
   Application.ProcessMessages;
 end;

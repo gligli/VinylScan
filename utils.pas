@@ -65,13 +65,8 @@ type
   TCompareFunction = function(Item1, Item2, UserParameter: Pointer): Integer;
 
 const
-  CTrack2TrackToTrackWidthRatio = 0.7;
-
   CScannerTolLo = 0.985;
   CScannerTolHi = 1.015;
-
-  CLoopbackLowCutoffFreq = 40.0;
-  CLowCutoffFreq = 20.0;
 
   cRedMul = 299;
   cGreenMul = 587;
@@ -772,11 +767,11 @@ begin
 
     if not Silent then
     begin
-      Write(Result:16:9, gm:16:9);
+      Write(Result:16:6, gm:16:6);
       for i := 0 to High(X) do
-        Write(X[i]:14:9);
+        Write(X[i]:14:6);
       for i := 0 to High(grad) do
-        Write(grad[i]:16:9);
+        Write(grad[i]:16:6);
       WriteLn;
     end;
 
@@ -927,7 +922,10 @@ begin
       XBestFunc[iX] := Infinity;
     end;
 
-    ProcThreadPool.DoParallelLocalProc(@DoX, 0, High(X));
+    if Length(X) = 0 then
+      DoX(0, nil, nil)
+    else
+      ProcThreadPool.DoParallelLocalProc(@DoX, 0, High(X));
 
     Inc(iter);
     bestFunc := MinValue(XBestFunc);

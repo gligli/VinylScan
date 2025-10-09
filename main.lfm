@@ -7,16 +7,17 @@ object MainForm: TMainForm
   HorzScrollBar.Page = 904
   HorzScrollBar.Tracking = True
   VertScrollBar.Increment = 240
-  VertScrollBar.Page = 653
+  VertScrollBar.Page = 661
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 1429
+  ClientHeight = 1461
   ClientWidth = 1488
   Color = 4210752
   DoubleBuffered = True
   KeyPreview = True
   ParentDoubleBuffered = False
+  LCLVersion = '4.2.0.0'
   Scaled = False
   WindowState = wsMaximized
   OnCreate = FormCreate
@@ -49,7 +50,7 @@ object MainForm: TMainForm
       Left = 8
       Height = 23
       Hint = 'Scan to track output WAV file'
-      Top = 457
+      Top = 473
       Width = 224
       ParentShowHint = False
       ShowHint = True
@@ -60,7 +61,7 @@ object MainForm: TMainForm
       Left = 8
       Height = 23
       Hint = 'Scan to track input PNG file'
-      Top = 432
+      Top = 448
       Width = 224
       ParentShowHint = False
       ShowHint = True
@@ -108,7 +109,7 @@ object MainForm: TMainForm
       Top = 584
       Width = 131
       Caption = 'Scan to track (F11)'
-      TabOrder = 21
+      TabOrder = 20
       OnClick = btScan2TrackClick
     end
     object cbDPI: TComboBox
@@ -127,7 +128,7 @@ object MainForm: TMainForm
       )
       ParentShowHint = False
       ShowHint = True
-      TabOrder = 18
+      TabOrder = 17
       Text = '2400'
     end
     object btInPNGs: TButton
@@ -151,7 +152,7 @@ object MainForm: TMainForm
     object btInPNG: TButton
       Left = 232
       Height = 23
-      Top = 432
+      Top = 448
       Width = 23
       Caption = '...'
       TabOrder = 14
@@ -160,7 +161,7 @@ object MainForm: TMainForm
     object btOutWAV: TButton
       Left = 232
       Height = 23
-      Top = 456
+      Top = 472
       Width = 23
       Caption = '...'
       TabOrder = 16
@@ -182,7 +183,7 @@ object MainForm: TMainForm
       )
       ParentShowHint = False
       ShowHint = True
-      TabOrder = 19
+      TabOrder = 18
       Text = '48000'
     end
     object chkCorrect: TCheckBox
@@ -238,7 +239,7 @@ object MainForm: TMainForm
       Width = 80
       MaxValue = 16
       MinValue = 1
-      TabOrder = 20
+      TabOrder = 19
       Value = 1
     end
     object llPrec: TLabel
@@ -251,10 +252,10 @@ object MainForm: TMainForm
     object pbS2T: TProgressBar
       Left = 8
       Height = 20
-      Top = 632
+      Top = 640
       Width = 247
       Smooth = True
-      TabOrder = 22
+      TabOrder = 21
     end
     object llBlend: TLabel
       Left = 8
@@ -305,14 +306,6 @@ object MainForm: TMainForm
       TabOrder = 11
       Text = '1.0'
     end
-    object chkMulti: TCheckBox
-      Left = 8
-      Height = 19
-      Top = 484
-      Width = 202
-      Caption = 'Extract audio from individual scans'
-      TabOrder = 17
-    end
     object cbProfile: TComboBox
       Left = 64
       Height = 23
@@ -337,27 +330,27 @@ object MainForm: TMainForm
     Filter = 'PNG; TIFF|*.png;*.tif'
     InitialDir = 'C:\VinylScan\data\'
     Options = [ofAllowMultiSelect, ofEnableSizing, ofViewDetail]
-    Top = 648
+    Top = 656
   end
   object odInPNG: TOpenDialog
     DefaultExt = '.PNG'
     Filter = 'PNG; TIFF|*.png;*.tif'
     InitialDir = 'data'
     Left = 64
-    Top = 648
+    Top = 656
   end
   object sdOutPNG: TSaveDialog
     DefaultExt = '.PNG'
     Filter = 'PNG|*.png'
     InitialDir = 'data'
     Left = 128
-    Top = 648
+    Top = 656
   end
   object sdOutWAV: TSaveDialog
     DefaultExt = '.WAV'
     Filter = 'WAV|*.wav'
     InitialDir = 'data'
     Left = 192
-    Top = 648
+    Top = 656
   end
 end
