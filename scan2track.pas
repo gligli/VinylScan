@@ -9,9 +9,9 @@ uses
   utils, inputscan, profiles, Filter, FilterIIRLPBessel, FilterIIRHPBessel;
 
 const
-  CLoopbackLowCutoffFreq = 2000.0;
+  CLoopbackLowCutoffFreq = 500.0;
   CLowCutoffFreq = 20.0;
-  CTrebbleBoostAmp = 10.0;
+  CTrebbleBoostAmp = 4.5;
   CTrack2TrackToTrackWidthRatio = 0.7;
 
 type
@@ -91,7 +91,7 @@ var
     r: Double;
   begin
     r := radius + (iSmp + 0.5) * cvtSmpRadius;
-    Result := FInputScan.GetPointD_Final(FInputScan.Image, (angleSin * r + cy) * sky, (angleCos * r + cx) * skx);
+    Result := FInputScan.GetPointD_Final(FInputScan.ProcessedImage, (angleSin * r + cy) * sky, (angleCos * r + cx) * skx);
   end;
 
 begin
@@ -324,6 +324,7 @@ begin
 
   FInputScan.LoadImage;
   FInputScan.FindTrack(False, False, FSampleRate);
+  FInputScan.Linearize;
 end;
 
 end.
