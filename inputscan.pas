@@ -1124,7 +1124,7 @@ var
   var
     iy, ix, yx: Integer;
     ind, iCurve: Word;
-    mx: Cardinal;
+    mx, mn: Cardinal;
     ext: TRect;
     Freqs: array[0 .. High(Word)] of Cardinal;
   begin
@@ -1161,10 +1161,11 @@ var
 
     // normalize
 
-    mx := Freqs[High(Word)];
+    mn := Freqs[0];
+    mx := Freqs[High(Word)] - mn;
     if mx > 0 then
       for iCurve := 0 to High(Word) do
-        Freqs[iCurve] := Freqs[iCurve] * High(Word) div mx;
+        Freqs[iCurve] := (Freqs[iCurve] - mn) * High(Word) div mx;
 
     // apply to image
 
