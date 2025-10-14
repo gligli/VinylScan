@@ -9,8 +9,8 @@ uses
   utils, inputscan, profiles, Filter, FilterIIRLPBessel, FilterIIRHPBessel;
 
 const
-  CLoopbackLowCutoffFreq = 500.0;
   CLowCutoffFreq = 20.0;
+  CTrebbleBoostFreq = 500.0;
   CTrebbleBoostAmp = 4.5;
   CTrack2TrackToTrackWidthRatio = 0.7;
 
@@ -83,17 +83,19 @@ end;
 
 function TScan2Track.DecodeSample(radius, prevRadius, angleSin, angleCos: Double): TPointD;
 var
-  iSmp, posMin, posMax, decoderMax: Integer;
-  r, cx, cy, skx, sky, px, py, cvtSmpRadius, sum: Double;
+  cx, cy, cvtSmpRadius: Double;
 
-  function GetSampleIdx(iSmp: Integer): Double;
+  function GetSample(ASmpPos: Double): Double;
   var
     r: Double;
   begin
-    r := radius + (iSmp + 0.5) * cvtSmpRadius;
-    Result := FInputScan.GetPointD_Final(FInputScan.ProcessedImage, (angleSin * r + cy) * sky, (angleCos * r + cx) * skx);
+    r := radius + ASmpPos * cvtSmpRadius;
+    Result := FInputScan.GetPointD_Final(FInputScan.ProcessedImage, angleSin * r + cy, angleCos * r + cx);
   end;
 
+var
+  iSmp, decoderMax: Integer;
+  r, px, py, md, mx, sample: Double;
 begin
   Result.X := 0.0;
   Result.Y := 0.0;
@@ -106,34 +108,35 @@ begin
 
   cx := FInputScan.Center.X;
   cy := FInputScan.Center.Y;
-  skx := FInputScan.Skew.X;
-  sky := FInputScan.Skew.Y;
 
   r := radius + decoderMax * cvtSmpRadius;
-  px := (angleCos * r + cx) * skx;
-  py := (angleSin * r + cy) * sky;
+  px := angleCos * r + cx;
+  py := angleSin * r + cy;
 
   if not FInputScan.InRangePointD(py, px) then
     Exit;
 
-  posMin := -decoderMax;
-  posMax := decoderMax - 1;
+  mx := GetSample(0);
 
-  Result.X := 0.0;
-  for iSmp := 0 to posMax do
-    Result.X += GetSampleIdx(iSmp);
+  for iSmp := 1 to decoderMax - 1 do
+  begin
+    sample := GetSample(iSmp);
+    Result.X += sample;
 
-  Result.Y := 0.0;
-  for iSmp := posMin to -1 do
-    Result.Y += GetSampleIdx(iSmp);
+    sample := GetSample(-iSmp);
+    Result.Y += sample;
+  end;
 
-  sum := GetMono(Result);
+  Result.X /= decoderMax - 1;
+  Result.Y /= decoderMax - 1;
 
-  Result.X -= sum;
-  Result.Y -= sum;
+  md := GetMono(Result);
 
-  Result.X /= decoderMax * -Low(SmallInt);
-  Result.Y /= -decoderMax * -Low(SmallInt);
+  Result.X := (Result.X - md) / (mx * 0.5);
+  Result.Y := (Result.Y - md) / (mx * 0.5);
+
+  Result.X := EnsureRange(Result.X, -1.0, 1.0);
+  Result.Y := EnsureRange(Result.Y, -1.0, 1.0);
 end;
 
 procedure TScan2Track.EvalTrack;
@@ -168,7 +171,7 @@ procedure TScan2Track.EvalTrack;
 
 var
   iSample, iLut, channels: Integer;
-  rOuter, sn, cs, fbRatio, instantPct, maxPct, grooveRadius, maxSample: Double;
+  rOuter, sn, cs, instantPct, maxPct, grooveRadius: Double;
   hasOutFile, validSample: Boolean;
   sample, rawSample, filteredSample: TPointD;
   radius: TPointD;
@@ -200,16 +203,16 @@ begin
     fltSampleR.SampleRate := FSampleRate;
     fltSampleR.Order := 4;
 
-    fltXHL.FreqCut1 := CLoopbackLowCutoffFreq;
+    fltXHL.FreqCut1 := CTrebbleBoostFreq;
     fltXHL.SampleRate := FSampleRate;
     fltXHL.Order := 4;
-    fltXHR.FreqCut1 := CLoopbackLowCutoffFreq;
+    fltXHR.FreqCut1 := CTrebbleBoostFreq;
     fltXHR.SampleRate := FSampleRate;
     fltXHR.Order := 4;
-    fltXLL.FreqCut1 := CLoopbackLowCutoffFreq;
+    fltXLL.FreqCut1 := CTrebbleBoostFreq;
     fltXLL.SampleRate := FSampleRate;
     fltXLL.Order := 4;
-    fltXLR.FreqCut1 := CLoopbackLowCutoffFreq;
+    fltXLR.FreqCut1 := CTrebbleBoostFreq;
     fltXLR.SampleRate := FSampleRate;
     fltXLR.Order := 4;
 
@@ -229,7 +232,6 @@ begin
     end;
 
     grooveRadius := FProfileRef.RecordingGrooveWidth * 0.5 * FInputScan.DPI;
-    fbRatio := CutoffToFeedbackRatio(CLoopbackLowCutoffFreq, FSampleRate) * grooveRadius;
 
     maxPct := 0.0;
     rOuter := FProfileRef.OuterSize * 0.5 * FInputScan.DPI;
@@ -244,13 +246,16 @@ begin
       cs := sinCosLut[iLut].Cos;
       sn := sinCosLut[iLut].Sin;
 
-      rawSample := DecodeSample(GetMono(radius), prevRadiuses[iLut].Y, sn, cs);
+      rawSample := DecodeSample(GetMono(radius), GetMono(prevRadiuses[iLut]), sn, cs);
 
-      radius.X += rawSample.X * fbRatio;
-      radius.Y += rawSample.Y * fbRatio;
+      radius.X += rawSample.X * grooveRadius;
+      radius.Y -= rawSample.Y * grooveRadius;
 
-      sample.X := FilterAndStuff(fltXLL, radius.X / grooveRadius, iSample) + CTrebbleBoostAmp * FilterAndStuff(fltXHL, rawSample.X, iSample);
-      sample.Y := FilterAndStuff(fltXLR, radius.Y / grooveRadius, iSample) + CTrebbleBoostAmp * FilterAndStuff(fltXHR, rawSample.Y, iSample);
+      sample.X := radius.X / grooveRadius;
+      sample.Y := radius.Y / grooveRadius;
+
+      sample.X := (FilterAndStuff(fltXLL, sample.X, iSample) + CTrebbleBoostAmp * FilterAndStuff(fltXHL, sample.X, iSample)) * 0.5;
+      sample.Y := (FilterAndStuff(fltXLR, sample.Y, iSample) + CTrebbleBoostAmp * FilterAndStuff(fltXHR, sample.Y, iSample)) * 0.5;
 
       // handle and store sample
 
@@ -266,15 +271,15 @@ begin
           InRange(radius.X, FInputScan.ConcentricGrooveRadius, rOuter) and
           InRange(radius.Y, FInputScan.ConcentricGrooveRadius, rOuter) and
           (IsNan(prevRadiuses[iLut].Y) or (prevRadiuses[iLut].Y > radius.X)) and
-          (radius.X >= radius.Y);
+          (IsNan(prevRadiuses[iLut].Y) or (prevRadiuses[iLut].Y > radius.Y));
 
       if Assigned(FOnSample) then
       begin
-        leftPx.X := (cs * radius.X + FInputScan.Center.X) * FInputScan.Skew.X;
-        leftPx.Y := (sn * radius.X + FInputScan.Center.Y) * FInputScan.Skew.Y;
+        leftPx.X := cs * radius.X + FInputScan.Center.X;
+        leftPx.Y := sn * radius.X + FInputScan.Center.Y;
 
-        rightPx.X := (cs * radius.Y + FInputScan.Center.X) * FInputScan.Skew.X;
-        rightPx.Y := (sn * radius.Y + FInputScan.Center.Y) * FInputScan.Skew.Y;
+        rightPx.X := cs * radius.Y + FInputScan.Center.X;
+        rightPx.Y := sn * radius.Y + FInputScan.Center.Y;
 
         instantPct := (GetMono(radius) - FInputScan.ConcentricGrooveRadius) / (FInputScan.SetDownRadius - FInputScan.ConcentricGrooveRadius);
         instantPct := EnsureRange(1.0 - instantPct, 0.0, 1.0) * 100.0;
@@ -299,14 +304,6 @@ begin
       channels := IfThen(FProfileRef.Mono, 1, 2);
       SetLength(samples, iSample * channels);
 
-      // normalize samples
-      maxSample := -Infinity;
-      for iSample := 0 to High(samples) do
-        maxSample := Max(maxSample, Abs(samples[iSample]));
-      maxSample := DivDef(1.0, maxSample, 1.0);
-      for iSample := 0 to High(samples) do
-        samples[iSample] *= maxSample;
-
       CreateWAV(channels, 16, FSampleRate, FOutputWAVFileName, samples);
     end;
 
@@ -324,7 +321,6 @@ begin
 
   FInputScan.LoadImage;
   FInputScan.FindTrack(False, False, FSampleRate);
-  FInputScan.Linearize;
 end;
 
 end.
