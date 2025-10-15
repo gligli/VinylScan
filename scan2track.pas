@@ -6,12 +6,11 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Graphics, GraphType, FPCanvas, FPImage, FPWritePNG, MTProcs,
-  utils, inputscan, profiles, Filter, FilterIIRLPBessel, FilterIIRHPBessel;
+  utils, inputscan, profiles, Filter, FilterIIRLPBessel, FilterIIRHPBessel, filter_rbj;
 
 const
+  CLoopbackLowCutoffFreq = 150.0;
   CLowCutoffFreq = 20.0;
-  CTrebbleBoostFreq = 500.0;
-  CTrebbleBoostAmp = 4.5;
   CTrack2TrackToTrackWidthRatio = 0.7;
 
 type
@@ -35,6 +34,11 @@ type
     FRadiansPerRevolutionPoint: Double;
     FSilent: Boolean;
 
+    FRiaaFilters: array[0..1, Boolean{stereo right?}] of TRbjEqFilter;
+
+    procedure InitRiaa;
+    procedure FreeRiaa;
+    function FilterRiaa(ASample: TPointD): TPointD;
     function DecodeSample(radius, prevRadius, angleSin, angleCos: Double): TPointD;
 
   public
@@ -72,13 +76,54 @@ begin
 
   FInputScan := TInputScan.Create(AProfileRef, ADefaultDPI, False);
   FInputScan.ImageFileName := AScanFileName;
+
+  InitRiaa;
 end;
 
 destructor TScan2Track.Destroy;
 begin
+  FreeRiaa;
   FInputScan.Free;
 
   inherited Destroy;
+end;
+
+procedure TScan2Track.InitRiaa;
+var
+  iFilter: Integer;
+  stereoRight: Boolean;
+begin
+  for stereoRight := False to True do
+  begin
+    for iFilter := Low(FRiaaFilters) to High(FRiaaFilters) do
+      FRiaaFilters[iFilter, stereoRight] := TRbjEqFilter.create(FSampleRate, 0);
+
+    FRiaaFilters[0, stereoRight].CalcFilterCoeffs(kHighShelf, 1031.990, 0.467, 12.570, False);
+    FRiaaFilters[1, stereoRight].CalcFilterCoeffs(kPeaking, 37794.908, 0.559, 6.130, False);
+  end;
+end;
+
+procedure TScan2Track.FreeRiaa;
+var
+  iFilter: Integer;
+  stereoRight: Boolean;
+begin
+  for iFilter := Low(FRiaaFilters) to High(FRiaaFilters) do
+    for stereoRight := False to True do
+      FRiaaFilters[iFilter, stereoRight].Free;
+end;
+
+function TScan2Track.FilterRiaa(ASample: TPointD): TPointD;
+var
+  iFilter: Integer;
+begin
+  Result := ASample;
+
+  for iFilter := Low(FRiaaFilters) to High(FRiaaFilters) do
+  begin
+    Result.X := FRiaaFilters[iFilter, False].Process(Result.X);
+    Result.Y := FRiaaFilters[iFilter, True].Process(Result.Y);
+  end;
 end;
 
 function TScan2Track.DecodeSample(radius, prevRadius, angleSin, angleCos: Double): TPointD;
@@ -133,7 +178,7 @@ begin
   md := GetMono(Result);
 
   Result.X := (Result.X - md) / (mx * 0.5);
-  Result.Y := (Result.Y - md) / (mx * 0.5);
+  Result.Y := -(Result.Y - md) / (mx * 0.5);
 
   Result.X := EnsureRange(Result.X, -1.0, 1.0);
   Result.Y := EnsureRange(Result.Y, -1.0, 1.0);
@@ -171,7 +216,7 @@ procedure TScan2Track.EvalTrack;
 
 var
   iSample, iLut, channels: Integer;
-  rOuter, sn, cs, instantPct, maxPct, grooveRadius: Double;
+  rOuter, sn, cs, fbRatio, instantPct, maxPct, grooveRadius, maxSample: Double;
   hasOutFile, validSample: Boolean;
   sample, rawSample, filteredSample: TPointD;
   radius: TPointD;
@@ -180,8 +225,6 @@ var
   sinCosLut: TSinCosDDynArray;
   samples: TDoubleDynArray;
   fltSampleL, fltSampleR: TFilterIIRHPBessel;
-  fltXHL, fltXHR: TFilterIIRHPBessel;
-  fltXLL, fltXLR: TFilterIIRLPBessel;
 begin
   if not FSilent then
     WriteLn('EvalTrack');
@@ -191,10 +234,6 @@ begin
     SetLength(samples, FSampleRate * 2);
   fltSampleL := TFilterIIRHPBessel.Create(nil);
   fltSampleR := TFilterIIRHPBessel.Create(nil);
-  fltXHL := TFilterIIRHPBessel.Create(nil);
-  fltXHR := TFilterIIRHPBessel.Create(nil);
-  fltXLL := TFilterIIRLPBessel.Create(nil);
-  fltXLR := TFilterIIRLPBessel.Create(nil);
   try
     fltSampleL.FreqCut1 := CLowCutoffFreq;
     fltSampleL.SampleRate := FSampleRate;
@@ -202,19 +241,6 @@ begin
     fltSampleR.FreqCut1 := CLowCutoffFreq;
     fltSampleR.SampleRate := FSampleRate;
     fltSampleR.Order := 4;
-
-    fltXHL.FreqCut1 := CTrebbleBoostFreq;
-    fltXHL.SampleRate := FSampleRate;
-    fltXHL.Order := 4;
-    fltXHR.FreqCut1 := CTrebbleBoostFreq;
-    fltXHR.SampleRate := FSampleRate;
-    fltXHR.Order := 4;
-    fltXLL.FreqCut1 := CTrebbleBoostFreq;
-    fltXLL.SampleRate := FSampleRate;
-    fltXLL.Order := 4;
-    fltXLR.FreqCut1 := CTrebbleBoostFreq;
-    fltXLR.SampleRate := FSampleRate;
-    fltXLR.Order := 4;
 
     // build Sin/Cos LUT
 
@@ -232,6 +258,7 @@ begin
     end;
 
     grooveRadius := FProfileRef.RecordingGrooveWidth * 0.5 * FInputScan.DPI;
+    fbRatio := CutoffToFeedbackRatio(CLoopbackLowCutoffFreq, FSampleRate) * grooveRadius;
 
     maxPct := 0.0;
     rOuter := FProfileRef.OuterSize * 0.5 * FInputScan.DPI;
@@ -248,19 +275,18 @@ begin
 
       rawSample := DecodeSample(GetMono(radius), GetMono(prevRadiuses[iLut]), sn, cs);
 
-      radius.X += rawSample.X * grooveRadius;
-      radius.Y -= rawSample.Y * grooveRadius;
+      sample.X := radius.X / grooveRadius + rawSample.X;
+      sample.Y := radius.Y / grooveRadius + rawSample.Y;
 
-      sample.X := radius.X / grooveRadius;
-      sample.Y := radius.Y / grooveRadius;
-
-      sample.X := (FilterAndStuff(fltXLL, sample.X, iSample) + CTrebbleBoostAmp * FilterAndStuff(fltXHL, sample.X, iSample)) * 0.5;
-      sample.Y := (FilterAndStuff(fltXLR, sample.Y, iSample) + CTrebbleBoostAmp * FilterAndStuff(fltXHR, sample.Y, iSample)) * 0.5;
+      radius.X += rawSample.X * fbRatio;
+      radius.Y += rawSample.Y * fbRatio;
 
       // handle and store sample
 
       filteredSample.X := FilterAndStuff(fltSampleL, sample.X, iSample);
       filteredSample.Y := FilterAndStuff(fltSampleR, sample.Y, iSample);
+
+      filteredSample := FilterRiaa(filteredSample);
 
       if hasOutFile then
         StoreSample(samples, filteredSample, iSample, FProfileRef.Mono);
@@ -271,7 +297,7 @@ begin
           InRange(radius.X, FInputScan.ConcentricGrooveRadius, rOuter) and
           InRange(radius.Y, FInputScan.ConcentricGrooveRadius, rOuter) and
           (IsNan(prevRadiuses[iLut].Y) or (prevRadiuses[iLut].Y > radius.X)) and
-          (IsNan(prevRadiuses[iLut].Y) or (prevRadiuses[iLut].Y > radius.Y));
+          (radius.X >= radius.Y);
 
       if Assigned(FOnSample) then
       begin
@@ -303,6 +329,14 @@ begin
     begin
       channels := IfThen(FProfileRef.Mono, 1, 2);
       SetLength(samples, iSample * channels);
+
+      // normalize samples
+      maxSample := -Infinity;
+      for iSample := 0 to High(samples) do
+        maxSample := Max(maxSample, Abs(samples[iSample]));
+      maxSample := DivDef(1.0, maxSample, 1.0);
+      for iSample := 0 to High(samples) do
+        samples[iSample] *= maxSample;
 
       CreateWAV(channels, 16, FSampleRate, FOutputWAVFileName, samples);
     end;
