@@ -24,7 +24,7 @@ type
     StartAngle, EndAngle: Double;
     StartAngleMirror, EndAngleMirror: Double;
     RadiusAngleLut: TRadiusAngleDynArray;
-    SinCosLut: TSinCosDynArray;
+    SinCosLut: TSinCosDDynArray;
   end;
 
   TInputScanDynArray = array of TInputScan;
@@ -39,7 +39,7 @@ type
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
     FSilent: Boolean;
-    FSinCosLUT: TSinCosDynArray;
+    FSinCosLUT: TSinCosDDynArray;
 
     FCenterExtents: TRect;
     FCenter: TPointD;
@@ -89,7 +89,7 @@ type
     procedure Blur;
     procedure FindTrack(AUseGradient, AFindCroppedArea: Boolean; AForcedSampleRate: Integer = -1);
     procedure CorrectByModel(ARelativeAngle, ACenterX, ACenterY, ASkewX, ASkewY: Double);
-    procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
+    procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDDynArray);
     procedure Linearize;
 
     function InRangePointD(Y, X: Double): Boolean; inline;
@@ -193,7 +193,7 @@ const
   CPointsPerRevolution = 512;
 var
   extents: TRect;
-  sinCosLUT: TSinCosDynArray;
+  sinCosLUT: TSinCosDDynArray;
   mnRadius, mxRadius: Integer;
   stencil: TStencil;
   results: array of record
@@ -799,7 +799,7 @@ var
   var
     bt, r: Double;
     ra: ^TRadiusAngle;
-    sc: ^TSinCos;
+    sc: ^TSinCosD;
   begin
     ra := @FCropData.RadiusAngleLut[iLut];
     sc := @FCropData.SinCosLut[iLut];
@@ -887,7 +887,7 @@ begin
   SetLength(Result, pos);
 end;
 
-procedure TInputScan.Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDynArray);
+procedure TInputScan.Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDDynArray);
 var
   X: TVector;
 begin
@@ -1275,7 +1275,7 @@ function TInputScan.GetMeanSD(const Image: TWordDynArray; AStartRadius, AEndRadi
 var
   iRadius, iLut, cnt: Integer;
   diff, px, py: Double;
-  sinCosLUT: TSinCosDynArray;
+  sinCosLUT: TSinCosDDynArray;
 begin
   diff := NormalizedAngleDiff(AStartAngle, AEndAngle);
   if diff = 0 then

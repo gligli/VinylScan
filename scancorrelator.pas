@@ -36,7 +36,7 @@ type
 
     X: TVector;
 
-    SinCosLUT: TSinCosDynArray;
+    SinCosLUT: TSinCosFDynArray;
     PreparedData: TWordDynArray;
   end;
 
@@ -86,7 +86,7 @@ type
     function NelderMeadAnalyze(const arg: TVector; obj: Pointer): TScalar;
     function InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
     procedure PrepareCorrect(var coords: TCorrectCoords);
-    function GridSearchCorrect(const skew: TCorrectSkew; const coords: TCorrectCoords): Double;
+    function GridSearchCorrect(const skew: TCorrectSkew; const coords: TCorrectCoords): UInt64;
 
     procedure AngleInit;
     procedure Analyze;
@@ -250,7 +250,7 @@ var
   var
     iRadiusAngle: Integer;
      cy, cx, sky, skx, px, py: Double;
-    sinCosLut: TSinCosDynArray;
+    sinCosLut: TSinCosDDynArray;
   begin
     sinCosLut := OffsetRadiusAngleLUTAngle(radiusAngleLut, a);
 
@@ -343,7 +343,7 @@ function TScanCorrelator.PrepareAnalyze: TDoubleDynArray;
 var
   iRadiusAngle, pos, cnt, angleCnt, radiusCnt: Integer;
   t, rBeg, rEnd, px, py, cx, cy, skx, sky, r, ri, sn, cs: Double;
-  sinCosLUT: TSinCosDynArray;
+  sinCosLUT: TSinCosDDynArray;
   baseScan: TInputScan;
   baseMeanSD: TPointD;
 begin
@@ -399,7 +399,7 @@ var
   coords: PAnalyzeCoords absolute obj;
 
   radiusCnt, angleCnt: Integer;
-  sinCosLUT: TSinCosDynArray;
+  sinCosLUT: TSinCosDDynArray;
   scan: TInputScan;
   rBeg, rEnd, cx, cy, skx, sky, ri: Double;
   results: TDoubleDynArray;
@@ -559,7 +559,7 @@ end;
 procedure TScanCorrelator.Crop;
 var
   RadiusAngleLut: TRadiusAngleDynArray;
-  SinCosLut: TSinCosDynArray;
+  SinCosLut: TSinCosDDynArray;
 
   procedure DoCrop(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   begin
@@ -721,7 +721,7 @@ var
       tmpCoords.SinCosLUT := nil;
       BuildSinCosLUT(tmpCoords.AngleCnt, tmpCoords.sinCosLUT, tmpCoords.StartAngle + baseScan.RelativeAngle, NormalizedAngleDiff(tmpCoords.StartAngle, tmpCoords.EndAngle));
 
-      objectives[AIndex] := GridSearchCorrect(skew, tmpCoords);
+      objectives[AIndex] := Sqrt(GridSearchCorrect(skew, tmpCoords) / (tmpCoords.RadiusCnt * tmpCoords.AngleCnt)) / High(Word);
     end
     else
     begin
@@ -753,8 +753,8 @@ begin
   baseCoords.BaseScanIdx := coords.ScanIdx;
   PrepareCorrect(baseCoords);
 
-  SetLength(objectives, Length(FInputScans));
-  ProcThreadPool.DoParallelLocalProc(@DoResults, 0, High(FInputScans));
+  SetLength(objectives, Coords.ScanIdx);
+  ProcThreadPool.DoParallelLocalProc(@DoResults, 0, Coords.ScanIdx - 1);
 
   // devise best baseScan
 
@@ -793,13 +793,14 @@ var
   iRadius, iAngle, pos: Integer;
   rBeg, r, sn, cs, px, py, cx, cy, skx, sky: Double;
   curScan, baseScan: TInputScan;
+  baseSinCosLut: TSinCosDDynArray;
 begin
   baseScan := FInputScans[Coords.BaseScanIdx];
   curScan := FInputScans[Coords.ScanIdx];
 
   // build sin / cos lookup table
 
-  BuildSinCosLUT(coords.AngleCnt, coords.SinCosLUT, coords.StartAngle + baseScan.RelativeAngle, NormalizedAngleDiff(coords.StartAngle, coords.EndAngle));
+  BuildSinCosLUT(coords.AngleCnt, baseSinCosLut, coords.StartAngle + baseScan.RelativeAngle, NormalizedAngleDiff(coords.StartAngle, coords.EndAngle));
 
   // parse image arcs
 
@@ -815,8 +816,8 @@ begin
   pos := 0;
   for iAngle := 0 to coords.AngleCnt - 1 do
   begin
-    cs := coords.SinCosLUT[iAngle].Cos;
-    sn := coords.SinCosLUT[iAngle].Sin;
+    cs := baseSinCosLut[iAngle].Cos;
+    sn := baseSinCosLut[iAngle].Sin;
 
     for iRadius := 0 to coords.RadiusCnt - 1 do
     begin
@@ -840,14 +841,15 @@ begin
   BuildSinCosLUT(coords.AngleCnt, coords.sinCosLUT, coords.StartAngle + curScan.RelativeAngle, NormalizedAngleDiff(coords.StartAngle, coords.EndAngle));
 end;
 
-function TScanCorrelator.GridSearchCorrect(const skew: TCorrectSkew; const coords: TCorrectCoords): Double;
+function TScanCorrelator.GridSearchCorrect(const skew: TCorrectSkew; const coords: TCorrectCoords): UInt64;
 var
-  iRadius, iScan, iAngle, pos: Integer;
-  r, rBeg, rEnd, skx, sky, cx, cy, rsk: Double;
+  iRadius, iScan, iAngle: Integer;
+  rsk, rBeg, rEnd, skx, sky, cx, cy: Double;
   sn, cs, px, py, cskx, csky: Single;
   scan: TInputScan;
-  acc: UInt64;
-  skewedRadiuses: array of TPointF;
+  pLut, pRSk: PSingle;
+  pPrep: PWord;
+  skewedRadius: array[0 .. 2 * 64 * 1024 - 1] of Single;
 begin
   iScan := coords.ScanIdx;
   scan := FInputScans[iScan];
@@ -859,50 +861,45 @@ begin
 
   rBeg := FCorrectAreaBegin * 0.5 * scan.DPI;
   if not InRange(SkewRadius(rBeg, skew), rBeg * CScannerTolLo, rBeg * CScannerTolHi) then
-    Exit(1e6);
+    Exit(High(UInt64));
 
   rEnd := FCorrectAreaEnd * 0.5 * scan.DPI;
   if not InRange(SkewRadius(rEnd, skew), rEnd * CScannerTolLo, rEnd * CScannerTolHi) then
-    Exit(1e6);
+    Exit(High(UInt64));
 
   // prepare final radius LUT
+
+  pRSk := @skewedRadius[0];
+  for iRadius := 0 to coords.RadiusCnt - 1 do
+  begin
+    rsk := SkewRadius(rBeg + iRadius, skew);
+    pRSk^ := rsk * skx; Inc(pRSk);
+    pRSk^ := rsk * sky; Inc(pRSk);
+  end;
 
   cskx := cx * skx;
   csky := cy * sky;
 
-  SetLength(skewedRadiuses, coords.RadiusCnt);
-  for iRadius := 0 to coords.RadiusCnt - 1 do
-  begin
-    r := rBeg + iRadius;
-
-    rsk := SkewRadius(r, skew);
-
-    skewedRadiuses[iRadius].X := rsk * skx;
-    skewedRadiuses[iRadius].Y := rsk * sky;
-  end;
-
   // parse image arcs
 
-  acc := 0;
-  pos := 0;
+  Result := 0;
+  pLut := @coords.SinCosLUT[0].Sin;
+  pPrep := @coords.PreparedData[0];
   for iAngle := 0 to coords.AngleCnt - 1 do
   begin
-    cs := coords.SinCosLUT[iAngle].Cos;
-    sn := coords.SinCosLUT[iAngle].Sin;
+    sn := pLut^; Inc(pLut);
+    cs := pLut^; Inc(pLut);
+
+    pRSk := @skewedRadius[0];
 
     for iRadius := 0 to coords.RadiusCnt - 1 do
     begin
-      px := cs * skewedRadiuses[iRadius].X + cskx;
-      py := sn * skewedRadiuses[iRadius].Y + csky;
+      px := cs * pRSk^ + cskx; Inc(pRSk);
+      py := sn * pRSk^ + csky; Inc(pRSk);
 
-      acc += Sqr(coords.PreparedData[pos] - scan.ProcessedImage[Trunc(py) * scan.Width + Trunc(px)]);
-
-      Inc(pos);
+      Result += Sqr(pPrep^ - scan.ProcessedImage[Trunc(py) * scan.Width + Trunc(px)]); Inc(pPrep);
     end;
   end;
-  Assert(pos = Length(coords.PreparedData));
-
-  Result := Sqrt(acc / pos) / High(Word);
 end;
 
 procedure TScanCorrelator.Correct;
@@ -921,7 +918,7 @@ var
     coords: PCorrectCoords;
     gsData: array of record
       Skew: TCorrectSkew;
-      Objective: Double;
+      Objective: UInt64;
     end;
 
     procedure DoGS(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
@@ -934,7 +931,7 @@ var
 
   var
     iConst, iMul, iGS: Integer;
-    loss: Double;
+    loss: UInt64;
     skew, tmpSk: TCorrectSkew;
     scan: TInputScan;
   begin
@@ -944,7 +941,7 @@ var
     coords := @coordsArray[AIndex];
     scan := FInputScans[coords^.ScanIdx];
 
-    loss := NaN;
+    loss := High(UInt64);
 
     if not IsNan(coords^.StartAngle) and not IsNan(coords^.EndAngle) then
     begin
@@ -966,7 +963,7 @@ var
           tmpSk.ConstSkew := iConst * CConstExtents / CConstHalfCount * scan.DPI;
 
           gsData[iGS].Skew := tmpSk;
-          gsData[iGS].Objective := NaN;
+          gsData[iGS].Objective := High(UInt64);
 
           Inc(iGS);
         end;
@@ -979,7 +976,7 @@ var
 
       // find best iteration
 
-      loss := Infinity;
+      loss := High(UInt64);
       for iGS := 0 to High(gsData) do
         if gsData[iGS].Objective < loss then
         begin
@@ -996,7 +993,9 @@ var
       Write(InterlockedIncrement(doneCount):4, ' / ', validAngleCnt, #13);
     end;
 
-    rmses[AIndex] := loss;
+    rmses[AIndex] := NaN;
+    if loss < High(UInt64) then
+      rmses[AIndex] := Sqrt(loss / (coords^.RadiusCnt * coords^.AngleCnt)) / High(Word);
     FPerAngleSkew[AIndex, 0] := ArgToSkew(coords^.X);
   end;
 
@@ -1005,6 +1004,7 @@ var
   coords, baseCoords: PCorrectCoords;
   validRmses: TDoubleDynArray;
   res: Boolean;
+  t, pt: UInt64;
 begin
   WriteLn('Correct');
 
@@ -1057,7 +1057,10 @@ begin
   // compute
 
   doneCount := 0;
+  pt := GetTickCount64;
   ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FPerAngleSkew));
+  t := GetTickCount64;
+  Write((t - pt) / 1000.0:12:3);
   WriteLn;
 
   // cumulate

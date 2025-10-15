@@ -12,7 +12,7 @@ type
   TSpinlock = LongInt;
   PSpinLock = ^TSpinlock;
 
-  TPointD = record
+  TPointD = packed record
     X, Y: Double;
   end;
 
@@ -30,8 +30,12 @@ type
     L, T, R, B: Double;
   end;
 
-  TSinCos = packed record
+  TSinCosD = packed record
     Sin, Cos: Double;
+  end;
+
+  TSinCosF = packed record
+    Sin, Cos: Single;
   end;
 
   TRadiusAngle = packed record
@@ -50,7 +54,8 @@ type
   TSingleDynArray2 = array of TSingleDynArray;
   TDoubleDynArray2 = array of TDoubleDynArray;
   TDoubleDynArray3 = array of TDoubleDynArray2;
-  TSinCosDynArray = array of TSinCos;
+  TSinCosDDynArray = array of TSinCosD;
+  TSinCosFDynArray = array of TSinCosF;
   TRadiusAngleDynArray = array of TRadiusAngle;
   TSpearmanRankDynArray = array of TSpearmanRank;
 
@@ -141,11 +146,12 @@ function InNormalizedAngle(x, xmin, xmax: Double): Boolean;
 function NormalizedAngleDiff(xmin, xmax: Double): Double;
 function NormalizedAngleTo02Pi(x: Double): Double;
 
-procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TSinCosDynArray; AOriginAngle: Double = 0.0; AExtentsAngle: Double = 2.0 * Pi);
+procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TSinCosDDynArray; AOriginAngle: Double = 0.0; AExtentsAngle: Double = 2.0 * Pi); overload;
+procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TSinCosFDynArray; AOriginAngle: Double = 0.0; AExtentsAngle: Double = 2.0 * Pi); overload;
 function BuildRadiusAngleLUT(StartRadius, EndRadius, StartAngle, EndAngle, PxCountDiv: Double): TRadiusAngleDynArray;
-function OffsetRadiusAngleLUTAngle(const LUT: TRadiusAngleDynArray; AngleOffset: Double): TSinCosDynArray;
+function OffsetRadiusAngleLUTAngle(const LUT: TRadiusAngleDynArray; AngleOffset: Double): TSinCosDDynArray;
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
-procedure IncrementalSinCos(Angle: Double; var PrevAngle: Double; var ASinCos: TSinCos);
+procedure IncrementalSinCos(Angle: Double; var PrevAngle: Double; var ASinCos: TSinCosD);
 
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray); overload;
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TDoubleDynArray); overload;
@@ -1274,7 +1280,7 @@ begin
     Result += 2.0 * Pi;
 end;
 
-procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TSinCosDynArray; AOriginAngle: Double; AExtentsAngle: Double);
+procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TSinCosDDynArray; AOriginAngle: Double; AExtentsAngle: Double);
 var
   i: Integer;
   rprp: Double;
@@ -1283,6 +1289,21 @@ begin
   rprp := AExtentsAngle / APointCount;
   for i := 0 to APointCount - 1 do
     SinCos(AOriginAngle + i * rprp, ASinCosLUT[i].Sin, ASinCosLUT[i].Cos);
+end;
+
+procedure BuildSinCosLUT(APointCount: Integer; var ASinCosLUT: TSinCosFDynArray; AOriginAngle: Double; AExtentsAngle: Double);
+var
+  i: Integer;
+  sn, cs, rprp: Double;
+begin
+  SetLength(ASinCosLUT, APointCount);
+  rprp := AExtentsAngle / APointCount;
+  for i := 0 to APointCount - 1 do
+  begin
+    SinCos(AOriginAngle + i * rprp, sn, cs);
+    ASinCosLUT[i].Sin := sn;
+    ASinCosLUT[i].Cos := cs;
+  end;
 end;
 
 function CompareRadiusAngle(Item1, Item2, UserParameter: Pointer): Integer;
@@ -1334,7 +1355,7 @@ begin
   QuickSort(Result[0], 0, cnt - 1, SizeOf(Result[0]), @CompareRadiusAngle);
 end;
 
-function OffsetRadiusAngleLUTAngle(const LUT: TRadiusAngleDynArray; AngleOffset: Double): TSinCosDynArray;
+function OffsetRadiusAngleLUTAngle(const LUT: TRadiusAngleDynArray; AngleOffset: Double): TSinCosDDynArray;
 var
   iLUT: Integer;
 begin
@@ -1352,7 +1373,7 @@ begin
   Result := (Cutoff * 2.0 / SampleRate) / sqrt(0.1024 + sqr(Cutoff * 2.0 / SampleRate));
 end;
 
-procedure IncrementalSinCos(Angle: Double; var PrevAngle: Double; var ASinCos: TSinCos);
+procedure IncrementalSinCos(Angle: Double; var PrevAngle: Double; var ASinCos: TSinCosD);
 begin
   if Angle <> PrevAngle then
   begin

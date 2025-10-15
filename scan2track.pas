@@ -177,7 +177,7 @@ var
   radius: TPointD;
   leftPx, rightPx: TPointD;
   prevRadiuses: TPointDDynArray;
-  sinCosLut: TSinCosDynArray;
+  sinCosLut: TSinCosDDynArray;
   samples: TDoubleDynArray;
   fltSampleL, fltSampleR: TFilterIIRHPBessel;
   fltXHL, fltXHR: TFilterIIRHPBessel;
