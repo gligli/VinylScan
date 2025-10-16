@@ -166,10 +166,10 @@ begin
   for iSmp := 1 to decoderMax - 1 do
   begin
     sample := GetSample(iSmp);
-    Result.X += sample;
+    Result.X += Min(sample, mx);
 
     sample := GetSample(-iSmp);
-    Result.Y += sample;
+    Result.Y += Min(sample, mx);
   end;
 
   Result.X /= decoderMax - 1;
@@ -179,9 +179,6 @@ begin
 
   Result.X := (Result.X - md) / (mx * 0.5);
   Result.Y := -(Result.Y - md) / (mx * 0.5);
-
-  Result.X := EnsureRange(Result.X, -1.0, 1.0);
-  Result.Y := EnsureRange(Result.Y, -1.0, 1.0);
 end;
 
 procedure TScan2Track.EvalTrack;
