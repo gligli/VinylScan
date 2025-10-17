@@ -235,6 +235,8 @@ var
   sinCosLut: TSinCosDDynArray;
   samples: TDoubleDynArray;
   fltSampleL, fltSampleR: TFilterIIRHPBessel;
+  fltXHL, fltXHR: TFilterIIRHPBessel;
+  fltXLL, fltXLR: TFilterIIRLPBessel;
 begin
   if not FSilent then
     WriteLn('EvalTrack');
@@ -244,6 +246,10 @@ begin
     SetLength(samples, FSampleRate * 2);
   fltSampleL := TFilterIIRHPBessel.Create(nil);
   fltSampleR := TFilterIIRHPBessel.Create(nil);
+  fltXHL := TFilterIIRHPBessel.Create(nil);
+  fltXHR := TFilterIIRHPBessel.Create(nil);
+  fltXLL := TFilterIIRLPBessel.Create(nil);
+  fltXLR := TFilterIIRLPBessel.Create(nil);
   try
     fltSampleL.FreqCut1 := CLowCutoffFreq;
     fltSampleL.SampleRate := FSampleRate;
@@ -251,6 +257,19 @@ begin
     fltSampleR.FreqCut1 := CLowCutoffFreq;
     fltSampleR.SampleRate := FSampleRate;
     fltSampleR.Order := 4;
+
+    fltXHL.FreqCut1 := CLoopbackLowCutoffFreq;
+    fltXHL.SampleRate := FSampleRate;
+    fltXHL.Order := 4;
+    fltXHR.FreqCut1 := CLoopbackLowCutoffFreq;
+    fltXHR.SampleRate := FSampleRate;
+    fltXHR.Order := 4;
+    fltXLL.FreqCut1 := CLoopbackLowCutoffFreq;
+    fltXLL.SampleRate := FSampleRate;
+    fltXLL.Order := 4;
+    fltXLR.FreqCut1 := CLoopbackLowCutoffFreq;
+    fltXLR.SampleRate := FSampleRate;
+    fltXLR.Order := 4;
 
     // build Sin/Cos LUT
 
@@ -288,11 +307,11 @@ begin
 
       rawSample := DecodeSample(GetMono(radius), invRadius, sn, cs);
 
-      sample.X := radius.X / grooveRadius + rawSample.X;
-      sample.Y := radius.Y / grooveRadius + rawSample.Y;
-
       radius.X += rawSample.X * fbRatio;
       radius.Y += rawSample.Y * fbRatio;
+
+      sample.X := FilterAndStuff(fltXLL, radius.X / grooveRadius, iSample) + FilterAndStuff(fltXHL, rawSample.X, iSample);
+      sample.Y := FilterAndStuff(fltXLR, radius.Y / grooveRadius, iSample) + FilterAndStuff(fltXHR, rawSample.Y, iSample);
 
       // handle and store sample
 
@@ -360,6 +379,10 @@ begin
   finally
     fltSampleL.Free;
     fltSampleR.Free;
+    fltXHL.Free;
+    fltXHR.Free;
+    fltXLL.Free;
+    fltXLR.Free;
   end;
 end;
 
