@@ -11,7 +11,6 @@ uses
 const
   CLoopbackLowCutoffFreq = 150.0;
   CLowCutoffFreq = 20.0;
-  CTrack2TrackToTrackWidthRatio = 0.7;
 
 type
   TScan2Track = class;
@@ -39,7 +38,7 @@ type
     procedure InitRiaa;
     procedure FreeRiaa;
     function FilterRiaa(ASample: TPointD): TPointD;
-    function DecodeSample(radius, prevRadius, angleSin, angleCos: Double): TPointD;
+    function DecodeSample(radius, invRadius, angleSin, angleCos: Double): TPointD;
 
   public
     constructor Create(AProfileRef: TProfile; AScanFileName: String; ADefaultDPI: Integer = 2400; ASilent: Boolean = False; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 6);
@@ -126,7 +125,7 @@ begin
   end;
 end;
 
-function TScan2Track.DecodeSample(radius, prevRadius, angleSin, angleCos: Double): TPointD;
+function TScan2Track.DecodeSample(radius, invRadius, angleSin, angleCos: Double): TPointD;
 var
   cx, cy, cvtSmpRadius: Double;
 
@@ -140,7 +139,7 @@ var
 
 var
   iSmp, decoderMax: Integer;
-  r, px, py, md, mx, sample: Double;
+  r, px, py, md, mn, mx, sample: Double;
 begin
   Result.X := 0.0;
   Result.Y := 0.0;
@@ -148,8 +147,8 @@ begin
   decoderMax := 1 shl FDecoderPrecision;
 
   cvtSmpRadius := FProfileRef.RecordingGrooveWidth * 0.5 * FInputScan.DPI / decoderMax;
-  if not IsNan(prevRadius) then
-    cvtSmpRadius := EnsureRange((prevRadius - radius) * 0.5 * CTrack2TrackToTrackWidthRatio / decoderMax, 0.0, cvtSmpRadius);
+  if not IsNan(invRadius) then
+    cvtSmpRadius := EnsureRange((radius - invRadius) * 0.5 / decoderMax, 0.0, cvtSmpRadius);
 
   cx := FInputScan.Center.X;
   cy := FInputScan.Center.Y;
@@ -161,24 +160,38 @@ begin
   if not FInputScan.InRangePointD(py, px) then
     Exit;
 
+  mn := 0;
+  if not IsNan(invRadius) then
+    mn := GetSample(-decoderMax);
   mx := GetSample(0);
+
+  mn := Min(mn, mx);
 
   for iSmp := 1 to decoderMax - 1 do
   begin
     sample := GetSample(iSmp);
-    Result.X += Min(sample, mx);
+    Result.X += sample;
 
     sample := GetSample(-iSmp);
-    Result.Y += Min(sample, mx);
+    Result.Y += sample;
   end;
 
   Result.X /= decoderMax - 1;
   Result.Y /= decoderMax - 1;
 
+  Result.X := DivDef(Result.X - mn, mx, 0.5);
+  Result.Y := DivDef(Result.Y - mn, mx, 0.5);
+
   md := GetMono(Result);
 
-  Result.X := (Result.X - md) / (mx * 0.5);
-  Result.Y := -(Result.Y - md) / (mx * 0.5);
+  Result.X := (Result.X - md) * 2.0;
+  Result.Y := -(Result.Y - md) * 2.0;
+
+  //if not inRange(Result.X, -1.0, 1.0) or not inRange(Result.Y, -1.0, 1.0) then
+  //  WriteLn(Result.X:12:3, Result.Y:12:3);
+
+  Result.X := EnsureRange(Result.X, -1.0, 1.0);
+  Result.Y := EnsureRange(Result.Y, -1.0, 1.0);
 end;
 
 procedure TScan2Track.EvalTrack;
@@ -213,7 +226,7 @@ procedure TScan2Track.EvalTrack;
 
 var
   iSample, iLut, channels: Integer;
-  rOuter, sn, cs, fbRatio, instantPct, maxPct, grooveRadius, maxSample: Double;
+  rOuter, sn, cs, fbRatio, instantPct, maxPct, grooveRadius, maxSample, invRadius: Double;
   hasOutFile, validSample: Boolean;
   sample, rawSample, filteredSample: TPointD;
   radius: TPointD;
@@ -261,6 +274,7 @@ begin
     rOuter := FProfileRef.OuterSize * 0.5 * FInputScan.DPI;
     radius.X := FInputScan.SetDownRadius + FProfileRef.RecordingGrooveThickness * 0.5 * FInputScan.DPI;
     radius.Y := FInputScan.SetDownRadius - FProfileRef.RecordingGrooveThickness * 0.5 * FInputScan.DPI;
+    invRadius := FInputScan.SetDownRadius - FProfileRef.RecordingGrooveThickness * FInputScan.DPI;
     iSample := 0;
     iLut := 0;
 
@@ -270,7 +284,9 @@ begin
       cs := sinCosLut[iLut].Cos;
       sn := sinCosLut[iLut].Sin;
 
-      rawSample := DecodeSample(GetMono(radius), GetMono(prevRadiuses[iLut]), sn, cs);
+      invRadius -= GetMono(DecodeSample(invRadius, NaN, sn, cs)) * fbRatio;
+
+      rawSample := DecodeSample(GetMono(radius), invRadius, sn, cs);
 
       sample.X := radius.X / grooveRadius + rawSample.X;
       sample.Y := radius.Y / grooveRadius + rawSample.Y;
@@ -294,7 +310,8 @@ begin
           InRange(radius.X, FInputScan.ConcentricGrooveRadius, rOuter) and
           InRange(radius.Y, FInputScan.ConcentricGrooveRadius, rOuter) and
           (IsNan(prevRadiuses[iLut].Y) or (prevRadiuses[iLut].Y > radius.X)) and
-          (radius.X >= radius.Y);
+          (radius.X >= radius.Y) and
+          (radius.Y > invRadius);
 
       if Assigned(FOnSample) then
       begin
