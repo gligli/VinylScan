@@ -826,14 +826,14 @@ var
 begin
   Result := 1e6;
 
-  if not InRange(NormalizeAngle(arg[1] - arg[0]), DegToRad(CMinCrop), DegToRad(CMaxCrop)) or
-     not InRange(NormalizeAngle(arg[3] - arg[2]), DegToRad(CMinCrop), DegToRad(CMaxCrop)) then
-    Exit;
-
   a0a := NormalizeAngle(arg[0]);
   a0b := NormalizeAngle(arg[1]);
   a1a := NormalizeAngle(arg[2]);
   a1b := NormalizeAngle(arg[3]);
+
+  if not InRange(NormalizedAngleDiff(a0a, a0b), DegToRad(CMinCrop), DegToRad(CMaxCrop)) or
+     not InRange(NormalizedAngleDiff(a1a, a1b), DegToRad(CMinCrop), DegToRad(CMaxCrop)) then
+    Exit;
 
   cx := FCenter.X;
   cy := FCenter.Y;
