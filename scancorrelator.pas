@@ -1109,7 +1109,6 @@ var
   coords, baseCoords: PCorrectCoords;
   validRmses: TDoubleDynArray;
   res: Boolean;
-  t, pt: UInt64;
 begin
   WriteLn('Correct');
 
@@ -1162,10 +1161,7 @@ begin
   // compute
 
   doneCount := 0;
-  pt := GetTickCount64;
   ProcThreadPool.DoParallelLocalProc(@DoEval, 0, High(FPerAngleSkew));
-  t := GetTickCount64;
-  Write((t - pt) / 1000.0:12:3);
   WriteLn;
 
   // cumulate
