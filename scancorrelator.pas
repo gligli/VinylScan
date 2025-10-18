@@ -906,7 +906,7 @@ end;
 procedure TScanCorrelator.GradientCorrect(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
 var
   coords: PCorrectCoords absolute obj;
-  cnt, iRadius, iAngle: Integer;
+  cnt, iRadius, iAngle, iGrad: Integer;
   r, rBeg, rEnd, skx, sky, sn, cs, px, py, cx, cy, rsk, mseInt, gimgx, gimgy, gInt, invCnt, gAcc: Double;
   skew: TCorrectSkew;
   scan: TInputScan;
@@ -976,10 +976,8 @@ begin
 
   func *= invCnt;
   if Assigned(grad) then
-  begin
-    grad[0] *= invCnt;
-    grad[1] *= invCnt;
-  end;
+    for iGrad := 0 to High(grad) do
+      grad[iGrad] *= invCnt;
 
   //if Assigned(grad) then
   //begin
@@ -1078,7 +1076,7 @@ var
 
       coords^.X := SkewToArg(skew);
 
-      loss := Sqrt(LBFGSScaledMinimize(@GradientCorrect, coords^.X, [1.0, 0.000001], 0.0, 2, coords));
+      loss := Sqrt(LBFGSScaledMinimize(@GradientCorrect, coords^.X, [CConstExtents / CConstHalfCount * scan.DPI, CMulExtents / CMulHalfCount], 0.0, 2, coords));
 
       // free up memory
       SetLength(coords^.SinCosLUT, 0);
