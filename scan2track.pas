@@ -139,7 +139,7 @@ var
 
 var
   iSmp, decoderMax: Integer;
-  r, px, py, md, mn, mx, sample: Double;
+  r, px, py, md, ns, mx, sample: Double;
 begin
   Result.X := 0.0;
   Result.Y := 0.0;
@@ -160,27 +160,27 @@ begin
   if not FInputScan.InRangePointD(py, px) then
     Exit;
 
-  mn := 0;
+  ns := 0;
   if not IsNan(invRadius) then
-    mn := GetSample(-decoderMax);
+    ns := FInputScan.GetPointD_Final(FInputScan.ProcessedImage, angleSin * invRadius + cy, angleCos * invRadius + cx);
   mx := GetSample(0);
-
-  mn := Min(mn, mx);
 
   for iSmp := 1 to decoderMax - 1 do
   begin
     sample := GetSample(iSmp);
+    mx := Max(sample, mx);
     Result.X += sample;
 
     sample := GetSample(-iSmp);
+    mx := Max(sample, mx);
     Result.Y += sample;
   end;
 
   Result.X /= decoderMax - 1;
   Result.Y /= decoderMax - 1;
 
-  Result.X := DivDef(Result.X - mn, mx, 0.5);
-  Result.Y := DivDef(Result.Y - mn, mx, 0.5);
+  Result.X := DivDef(Result.X - ns, mx, 0.5);
+  Result.Y := DivDef(Result.Y - ns, mx, 0.5);
 
   md := GetMono(Result);
 
