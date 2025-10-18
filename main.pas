@@ -26,7 +26,7 @@ type
     chkCorrect: TCheckBox;
     cbDPI: TComboBox;
     cbSR: TComboBox;
-    chkLinearize: TCheckBox;
+    chkAlignBlur: TCheckBox;
     chkAnalyze: TCheckBox;
     edInputPNG: TEdit;
     edOutputPNG: TEdit;
@@ -155,8 +155,8 @@ begin
   try
     sc.OutputPNGFileName := edOutputPNG.Text;
     sc.FixCISScanners := chkFixCIS.Checked;
-    sc.AnalyzePass := chkAnalyze.Checked;
-    sc.LinearizePass := chkLinearize.Checked;
+    sc.AlignPass := chkAnalyze.Checked;
+    sc.AlignOnBlurred := chkAlignBlur.Checked;
     sc.CorrectPass := chkCorrect.Checked;
     sc.RebuildBlendCount := seBlend.Value;
     sc.RebuildScaled := not chkDefaultDPI.Checked;
@@ -321,8 +321,8 @@ begin
   s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, '');
   try
     chkFixCIS.Checked := sc.FixCISScanners;
-    chkAnalyze.Checked := sc.AnalyzePass;
-    chkLinearize.Checked := sc.LinearizePass;
+    chkAnalyze.Checked := sc.AlignPass;
+    chkAlignBlur.Checked := sc.AlignOnBlurred;
     chkCorrect.Checked := sc.CorrectPass;
     seBlend.Value := sc.RebuildBlendCount;
     chkDefaultDPI.Checked := not sc.RebuildScaled;

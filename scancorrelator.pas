@@ -9,22 +9,22 @@ uses
   utils, inputscan, profiles, powell, hackedwritepng;
 
 const
-  CAnalyzeSigma = 2.0;
+  CAlignSigma = 2.0;
 
 type
   TCorrectSkew = record
     ConstSkew, MulSkew: Double;
   end;
 
-  { TAnalyzeCoords }
+  { TAlignCoords }
 
-  TAnalyzeCoords = record
+  TAlignCoords = record
     ScanIdx: Integer;
     MeanSD: TPointD;
     PreparedData: TDoubleDynArray;
   end;
 
-  PAnalyzeCoords = ^TAnalyzeCoords;
+  PAlignCoords = ^TAlignCoords;
 
   { TCorrectCoords }
 
@@ -49,9 +49,9 @@ type
     FProfileRef: TProfile;
     FInputScans: TInputScanDynArray;
     FFixCISScanners: Boolean;
-    FAnalyzePass: Boolean;
-    FLinearizePass: Boolean;
+    FAlignPass: Boolean;
     FCorrectPass: Boolean;
+    FAlignOnBlurred: Boolean;
     FRebuildScaled: Boolean;
     FRebuildBlendCount: Integer;
     FQualitySpeedRatio: Double;
@@ -59,7 +59,7 @@ type
     FOutputDPI: Integer;
     FLock: TSpinlock;
 
-    FAnalyzeStates: TStringDynArray;
+    FAlignStates: TStringDynArray;
     FPerAngleSkew: array of array of TCorrectSkew;
 
     FOutputWidth, FOutputHeight: Integer;
@@ -68,9 +68,9 @@ type
     FAngleInitAreaBegin: Double;
     FAngleInitAreaEnd: Double;
 
-    FAnalyzeAreaBegin: Double;
-    FAnalyzeAreaEnd: Double;
-    FAnalyzeAreaWidth: Double;
+    FAlignAreaBegin: Double;
+    FAlignAreaEnd: Double;
+    FAlignAreaWidth: Double;
 
     FCorrectAreaBegin: Double;
     FCorrectAreaEnd: Double;
@@ -82,16 +82,17 @@ type
     function ArgToSkew(arg: TVector): TCorrectSkew;
     function SkewToArg(const skew: TCorrectSkew): TVector;
 
-    function PrepareAnalyze: TDoubleDynArray;
-    function NelderMeadAnalyze(const arg: TVector; obj: Pointer): TScalar;
+    function PrepareAlign: TDoubleDynArray;
+    function NelderMeadAlign(const arg: TVector; obj: Pointer): TScalar;
+
     function InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
     procedure PrepareCorrect(var coords: TCorrectCoords);
     function GridSearchCorrect(const skew: TCorrectSkew; const coords: TCorrectCoords): Double;
     procedure GradientCorrect(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
-    function CorrectGetRMSE(AObj: Double; const coords: TCorrectCoords): Double;
+    function CorrectGetRMSE(AGSObj: Double; const coords: TCorrectCoords): Double;
 
     procedure AngleInit;
-    procedure Analyze;
+    procedure Align;
     procedure Crop;
     procedure Linearize;
     procedure Correct;
@@ -106,9 +107,9 @@ type
 
     property OutputPNGFileName: String read FOutputPNGFileName write FOutputPNGFileName;
     property FixCISScanners: Boolean read FFixCISScanners write FFixCISScanners;
-    property AnalyzePass: Boolean read FAnalyzePass write FAnalyzePass;
-    property LinearizePass: Boolean read FLinearizePass write FLinearizePass;
+    property AlignPass: Boolean read FAlignPass write FAlignPass;
     property CorrectPass: Boolean read FCorrectPass write FCorrectPass;
+    property AlignOnBlurred: Boolean read FAlignOnBlurred write FAlignOnBlurred;
     property RebuildBlendCount: Integer read FRebuildBlendCount write FRebuildBlendCount;
     property RebuildScaled: Boolean read FRebuildScaled write FRebuildScaled;
     property QualitySpeedRatio: Double read FQualitySpeedRatio write FQualitySpeedRatio;
@@ -158,16 +159,15 @@ begin
 
   FAngleInitAreaBegin := FProfileRef.InnerSize;
   FAngleInitAreaEnd := FProfileRef.LabelOuterSize;
-  FAnalyzeAreaBegin := FProfileRef.InnerSize;
-  FAnalyzeAreaEnd := FProfileRef.MinConcentricGroove;
-  FAnalyzeAreaWidth := (FAnalyzeAreaEnd - FAnalyzeAreaBegin) * 0.5;
+  FAlignAreaBegin := FProfileRef.InnerSize;
+  FAlignAreaEnd := FProfileRef.MinConcentricGroove;
+  FAlignAreaWidth := (FAlignAreaEnd - FAlignAreaBegin) * 0.5;
   FCorrectAreaBegin := FProfileRef.MinConcentricGroove;
   FCorrectAreaEnd := FProfileRef.OuterSize;
   FCorrectAreaWidth := (FCorrectAreaEnd - FCorrectAreaBegin) * 0.5;
 
   FFixCISScanners := False;
-  FAnalyzePass := True;
-  FLinearizePass := True;
+  FAlignPass := True;
   FCorrectPass := True;
   FRebuildScaled := True;
   FRebuildBlendCount := 32;
@@ -341,21 +341,26 @@ begin
   end;
 end;
 
-function TScanCorrelator.PrepareAnalyze: TDoubleDynArray;
+function TScanCorrelator.PrepareAlign: TDoubleDynArray;
 var
   iRadiusAngle, pos, cnt, angleCnt, radiusCnt: Integer;
   t, rBeg, rEnd, px, py, cx, cy, skx, sky, r, ri, sn, cs: Double;
   sinCosLUT: TSinCosDDynArray;
   baseScan: TInputScan;
   baseMeanSD: TPointD;
+  img: TWordDynArray;
 begin
   baseScan := FInputScans[0];
 
-  rBeg := FAnalyzeAreaBegin * 0.5 * baseScan.DPI;
-  rEnd := FAnalyzeAreaEnd * 0.5 * baseScan.DPI;
+  rBeg := FAlignAreaBegin * 0.5 * baseScan.DPI;
+  rEnd := FAlignAreaEnd * 0.5 * baseScan.DPI;
+
+  img := baseScan.Image;
+  if FAlignOnBlurred then
+    img := baseScan.ProcessedImage;
 
   angleCnt := Ceil(rEnd * 2.0 * Pi * FQualitySpeedRatio);
-  radiusCnt := Ceil(FAnalyzeAreaWidth * baseScan.DPI);
+  radiusCnt := Ceil(FAlignAreaWidth * baseScan.DPI);
   cnt := radiusCnt * angleCnt;
   SetLength(Result, cnt);
 
@@ -366,7 +371,7 @@ begin
   sky := baseScan.Skew.Y;
 
   BuildSinCosLUT(angleCnt, sinCosLUT, t);
-  baseMeanSD := baseScan.GetMeanSD(baseScan.Image, FAnalyzeAreaBegin * 0.5 * baseScan.DPI, FAnalyzeAreaEnd * 0.5 * baseScan.DPI, -Pi, Pi, CAnalyzeSigma);
+  baseMeanSD := baseScan.GetMeanSD(img, FAlignAreaBegin * 0.5 * baseScan.DPI, FAlignAreaEnd * 0.5 * baseScan.DPI, -Pi, Pi, CAlignSigma);
 
   pos := 0;
   ri := 1.0 / angleCnt;
@@ -382,7 +387,7 @@ begin
 
     if baseScan.InRangePointD(py, px) then
     begin
-      Result[iRadiusAngle] := (baseScan.GetPointD_Work(baseScan.Image, py, px) - baseMeanSD.X) * baseMeanSD.Y;
+      Result[iRadiusAngle] := (baseScan.GetPointD_Work(img, py, px) - baseMeanSD.X) * baseMeanSD.Y;
     end
     else
     begin
@@ -396,9 +401,9 @@ begin
   end;
 end;
 
-function TScanCorrelator.NelderMeadAnalyze(const arg: TVector; obj: Pointer): TScalar;
+function TScanCorrelator.NelderMeadAlign(const arg: TVector; obj: Pointer): TScalar;
 var
-  coords: PAnalyzeCoords absolute obj;
+  coords: PAlignCoords absolute obj;
 
   radiusCnt, angleCnt: Integer;
   sinCosLUT: TSinCosDDynArray;
@@ -410,9 +415,14 @@ var
   var
     iAngle, pos: Integer;
     px, py, r, sn, cs, funcAcc, imgInt, mseInt: Double;
+    img: TWordDynArray;
   begin
     if not InRange(AIndex, 0, radiusCnt - 1) then
       Exit;
+
+    img := scan.Image;
+    if FAlignOnBlurred then
+      img := scan.ProcessedImage;
 
     pos := AIndex * angleCnt;
     funcAcc := 0.0;
@@ -427,7 +437,7 @@ var
       px := (cs * r + cx) * skx;
       py := (sn * r + cy) * sky;
 
-      imgInt := (scan.GetPointD_Work(scan.Image, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y;
+      imgInt := (scan.GetPointD_Work(img, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y;
       mseInt := coords^.PreparedData[pos] - imgInt;
       funcAcc += Sqr(mseInt);
 
@@ -443,11 +453,11 @@ var
 begin
   scan := FInputScans[coords^.ScanIdx];
 
-  rBeg := FAnalyzeAreaBegin * 0.5 * scan.DPI;
-  rEnd := FAnalyzeAreaEnd * 0.5 * scan.DPI;
+  rBeg := FAlignAreaBegin * 0.5 * scan.DPI;
+  rEnd := FAlignAreaEnd * 0.5 * scan.DPI;
 
   angleCnt := Ceil(rEnd * 2.0 * Pi * FQualitySpeedRatio);
-  radiusCnt := Ceil(FAnalyzeAreaWidth * scan.DPI);
+  radiusCnt := Ceil(FAlignAreaWidth * scan.DPI);
 
   ri := 1.0 / angleCnt;
 
@@ -478,7 +488,7 @@ begin
   try
     Write('RMSEs: ');
     for iScan := 1 to High(FInputScans) do
-      Write(' ', FAnalyzeStates[iScan], FInputScans[iScan].Objective:12:9);
+      Write(' ', FAlignStates[iScan], FInputScans[iScan].Objective:12:9);
     Write(#13);
   finally
     SpinLeave(@FLock);
@@ -493,15 +503,16 @@ begin
   Result := CompareValue(NormalizedAngleTo02Pi(s1^.RelativeAngle), NormalizedAngleTo02Pi(s2^.RelativeAngle));
 end;
 
-procedure TScanCorrelator.Analyze;
+procedure TScanCorrelator.Align;
 var
   preparedData: TDoubleDynArray;
 
   procedure DoEval(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
-    coords: TAnalyzeCoords;
+    coords: TAlignCoords;
     X: TVector;
     scan: TInputScan;
+    img: TWordDynArray;
   begin
     if not InRange(AIndex, 1, High(FInputScans)) then
       Exit;
@@ -510,16 +521,20 @@ var
 
     scan := FInputScans[AIndex];
 
+    img := scan.Image;
+    if FAlignOnBlurred then
+      img := scan.ProcessedImage;
+
     coords.ScanIdx := AIndex;
     coords.PreparedData := preparedData;
-    coords.MeanSD := scan.GetMeanSD(scan.ProcessedImage, FAnalyzeAreaBegin * 0.5 * scan.DPI, FAnalyzeAreaEnd * 0.5 * scan.DPI, -Pi, Pi, CAnalyzeSigma);
+    coords.MeanSD := scan.GetMeanSD(img, FAlignAreaBegin * 0.5 * scan.DPI, FAlignAreaEnd * 0.5 * scan.DPI, -Pi, Pi, CAlignSigma);
 
-    FAnalyzeStates[AIndex] := 'Work';
+    FAlignStates[AIndex] := 'Work';
     X := [scan.RelativeAngle, scan.Center.X, scan.Center.Y, scan.Skew.X, scan.Skew.Y];
-    NelderMeadMinimize(@NelderMeadAnalyze, X, [DegToRad(1.0), 0.02 * scan.DPI, 0.02 * scan.DPI, 0.001, 0.001], 1e-6, @coords);
+    NelderMeadMinimize(@NelderMeadAlign, X, [DegToRad(1.0), 0.02 * scan.DPI, 0.02 * scan.DPI, 0.001, 0.001], 1e-6, @coords);
 
-    FAnalyzeStates[AIndex] := 'Done';
-    scan.Objective := NelderMeadAnalyze(X, @coords);
+    FAlignStates[AIndex] := 'Done';
+    scan.Objective := NelderMeadAlign(X, @coords);
     scan.CorrectByModel(X[0], X[1], X[2], X[3], X[4]);
   end;
 
@@ -527,17 +542,17 @@ var
   iScan: Integer;
   scan: TInputScan;
 begin
-  WriteLn('Analyze');
+  WriteLn('Align');
 
   if Length(FInputScans) <= 1 then
     Exit;
 
   // init
 
-  preparedData := PrepareAnalyze;
-  SetLength(FAnalyzeStates, Length(FInputScans));
+  preparedData := PrepareAlign;
+  SetLength(FAlignStates, Length(FInputScans));
   for iScan := 0 to High(FInputScans) do
-    FAnalyzeStates[iScan] := 'Wait';
+    FAlignStates[iScan] := 'Idle';
 
   // compute
 
@@ -987,9 +1002,9 @@ begin
   //end;
 end;
 
-function TScanCorrelator.CorrectGetRMSE(AObj: Double; const coords: TCorrectCoords): Double;
+function TScanCorrelator.CorrectGetRMSE(AGSObj: Double; const coords: TCorrectCoords): Double;
 begin
-  Result := Sqrt(AObj / (coords.RadiusCnt * coords.AngleCnt)) / High(Word);
+  Result := Sqrt(AGSObj / (coords.RadiusCnt * coords.AngleCnt)) / High(Word);
 end;
 
 procedure TScanCorrelator.Correct;
@@ -1367,8 +1382,8 @@ end;
 procedure TScanCorrelator.Process;
 begin
   AngleInit;
-  if FAnalyzePass then Analyze;
-  if FLinearizePass then Linearize;
+  if FAlignPass then Align;
+  Linearize;
   Crop;
   if FCorrectPass then Correct;
   Rebuild;
