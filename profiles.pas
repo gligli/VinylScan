@@ -118,6 +118,18 @@ end;
 
 { TProfiles }
 
+function CompareProfile(Item1, Item2, UserParameter: Pointer): Integer;
+var
+  p1: ^TProfile absolute Item1;
+  p2: ^TProfile absolute Item2;
+begin
+  Result := CompareValue(p1^.OuterSize, p2^.OuterSize);
+  if Result = 0 then
+    Result := CompareValue(p1^.RevolutionsPerSecond, p2^.RevolutionsPerSecond);
+  if Result = 0 then
+    Result := CompareValue(Ord(p2^.Mono), Ord(p1^.Mono));
+end;
+
 constructor TProfiles.Create(ADir: String);
 var
   Info: TSearchRec;
@@ -129,12 +141,15 @@ begin
     repeat
       SetLength(FProfiles, Length(FProfiles) + 1);
       FProfiles[High(FProfiles)] := TProfile.Create(ADir + Info.Name);
-    until FindNext(info) <> 0;
+    until FindNext(Info) <> 0;
     FindClose(Info);
   end;
 
   if Length(FProfiles) > 0 then
+  begin
+    QuickSort(FProfiles[0], 0, High(FProfiles), SizeOf(TProfile), @CompareProfile);
     FCurrentProfileRef := FProfiles[0];
+  end;
 end;
 
 destructor TProfiles.Destroy;
