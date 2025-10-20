@@ -19,6 +19,9 @@ type
     btOutWAV: TButton;
     btScan2Track: TButton;
     btScansCorrelator: TButton;
+    bvSC: TBevel;
+    bvS2T: TBevel;
+    bvGlob: TBevel;
     cbProfile: TComboBox;
     cbQSRatio: TComboBox;
     chkFixCIS: TCheckBox;
