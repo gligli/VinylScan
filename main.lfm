@@ -236,7 +236,7 @@ object MainForm: TMainForm
       Height = 23
       Top = 552
       Width = 80
-      MaxValue = 16
+      MaxValue = 8
       MinValue = 1
       TabOrder = 19
       Value = 1

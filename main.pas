@@ -65,7 +65,7 @@ type
     FLastTickCount: QWord;
     FPoints: TPointValueList;
 
-    function OnSample(Sender: TScan2Track; Sample, LeftPx, RightPx: TPointD; Percent: Double; Finished: Boolean): Boolean;
+    function OnSample(Sender: TScan2Track; Sample, pxPosition: TPointD; Percent: Double; Finished: Boolean): Boolean;
   public
     procedure UnitTests;
 
@@ -356,9 +356,9 @@ begin
     end;
 end;
 
-function TMainForm.OnSample(Sender: TScan2Track; Sample, LeftPx, RightPx: TPointD; Percent: Double; Finished: Boolean): Boolean;
+function TMainForm.OnSample(Sender: TScan2Track; Sample, pxPosition: TPointD; Percent: Double; Finished: Boolean): Boolean;
 const
-  CPointsPerSample = 2;
+  CPointsPerSample = 1;
 var
   SecondsAtATime: Double;
   tc: QWord;
@@ -367,8 +367,7 @@ begin
 
   SecondsAtATime := 0.25 / Sender.ProfileRef.RevolutionsPerSecond;
 
-  FPoints.Add(TPointValue.Create(LeftPx.X, LeftPx.Y, $ff8000));
-  FPoints.Add(TPointValue.Create(RightPx.X, RightPx.Y, $0080ff));
+  FPoints.Add(TPointValue.Create(pxPosition.X, pxPosition.Y, clLime));
 
   if Finished or (FPoints.Count >= Sender.SampleRate * SecondsAtATime * CPointsPerSample) then
   begin
@@ -413,7 +412,7 @@ begin
   C := Image.Picture.Bitmap.Canvas;
 
   C.Brush.Style := bsClear;
-  C.Pen.Color := $00ff80;
+  C.Pen.Color := clRed;
   C.Pen.Style := psDot;
 
   sk := AScan.Skew;

@@ -136,7 +136,7 @@ function MSE(const a: TWordDynArray; const b: TWordDynArray): Double; overload;
 function PearsonCorrelation(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
 procedure SpearmanPrepareRanks(const a: TDoubleDynArray; var ranks: TSpearmanRankDynArray);
 function SpearmanRankCorrelation(const a: TSpearmanRankDynArray; const b: TSpearmanRankDynArray): Double;
-function Median(const x: TDoubleDynArray): Double;
+function Median(x: PDouble; cnt: integer): Double;
 
 function Make8BitSample(smp: Double): ShortInt;
 function Make16BitSample(smp: Double): SmallInt;
@@ -1220,14 +1220,14 @@ begin
   Result := CompareValue(d1^, d2^);
 end;
 
-function Median(const x: TDoubleDynArray): Double;
+function Median(x: PDouble; cnt: integer): Double;
 var
   hl: Integer;
 begin
-  QuickSort(x[0], 0, High(x), SizeOf(Double), @CompareDouble);
+  QuickSort(x[0], 0, cnt - 1, SizeOf(Double), @CompareDouble);
 
-  hl := Length(x) shr 1;
-  if Odd(Length(x)) then
+  hl := (cnt - 1) shr 1;
+  if Odd(cnt) then
     Result := x[hl]
   else
     Result := (x[hl] + x[hl + 1]) * 0.5;

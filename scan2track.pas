@@ -11,11 +11,12 @@ uses
 const
   CLoopbackLowCutoffFreq = 150.0;
   CLowCutoffFreq = 20.0;
+  CTrackWidthRatio = 0.7;
 
 type
   TScan2Track = class;
 
-  TSampleEvent = function(Sender: TScan2Track; Sample, LeftPx, RightPx: TPointD; Percent: Double; Finished: Boolean): Boolean of object;
+  TSampleEvent = function(Sender: TScan2Track; Sample, Position: TPointD; Percent: Double; Finished: Boolean): Boolean of object;
 
   { TScan2Track }
 
@@ -29,19 +30,24 @@ type
 
     FDecoderPrecision: Integer;
     FSampleRate: Integer;
+    FSilent: Boolean;
+
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
-    FSilent: Boolean;
+    FDecodeMax: Integer;
+
+    FDecodeBuf: TDoubleDynArray;
+    FDecodeSinCosLut: TSinCosDDynArray;
 
     FRiaaFilters: array[0..1, Boolean{stereo right?}] of TRbjEqFilter;
 
     procedure InitRiaa;
     procedure FreeRiaa;
     function FilterRiaa(ASample: TPointD): TPointD;
-    function DecodeSample(radius, invRadius, angleSin, angleCos: Double): TPointD;
 
+    function DecodeSample(radius, prevRadius, angleSin, angleCos: Double; out AFeedback: Double): TPointD;
   public
-    constructor Create(AProfileRef: TProfile; AScanFileName: String; ADefaultDPI: Integer = 2400; ASilent: Boolean = False; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 6);
+    constructor Create(AProfileRef: TProfile; AScanFileName: String; ADefaultDPI: Integer = 2400; ASilent: Boolean = False; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 4);
     destructor Destroy; override;
 
     procedure LoadScan;
@@ -67,11 +73,15 @@ constructor TScan2Track.Create(AProfileRef: TProfile; AScanFileName: String; ADe
 begin
   FProfileRef := AProfileRef;
   FSampleRate := ASampleRate;
-  FDecoderPrecision := EnsureRange(ADecoderPrecision, 1, 16);
+  FDecoderPrecision := EnsureRange(ADecoderPrecision, 1, 8);
   FSilent := ASilent;
 
   FPointsPerRevolution := Round(FSampleRate / FProfileRef.RevolutionsPerSecond);
   FRadiansPerRevolutionPoint := -Pi * 2.0 / FPointsPerRevolution;
+
+  FDecodeMax := 1 shl (FDecoderPrecision - Ord(FProfileRef.Mono));
+  SetLength(FDecodeBuf, Sqr(FDecodeMax shl 1));
+  BuildSinCosLUT(FDecodeMax shl 1, FDecodeSinCosLut, FRadiansPerRevolutionPoint * 0.5, FRadiansPerRevolutionPoint);
 
   FInputScan := TInputScan.Create(AProfileRef, ADefaultDPI, False);
   FInputScan.ImageFileName := AScanFileName;
@@ -125,73 +135,115 @@ begin
   end;
 end;
 
-function TScan2Track.DecodeSample(radius, invRadius, angleSin, angleCos: Double): TPointD;
+function TScan2Track.DecodeSample(radius, prevRadius, angleSin, angleCos: Double; out AFeedback: Double): TPointD;
 var
   cx, cy, cvtSmpRadius: Double;
 
-  function GetSample(ASmpPos: Double): Double;
+  function GetSample(ASmpPosR: Double; ASmpPosA: Integer): Double;
   var
-    r: Double;
+    r, sn, cs: Double;
+    sncs: ^TSinCosD;
   begin
-    r := radius + ASmpPos * cvtSmpRadius;
-    Result := FInputScan.GetPointD_Final(FInputScan.ProcessedImage, angleSin * r + cy, angleCos * r + cx);
+    sncs := @FDecodeSinCosLut[ASmpPosA];
+    cs := angleCos * sncs^.Cos - angleSin * sncs^.Sin;
+    sn := angleSin * sncs^.Cos + angleCos * sncs^.Sin;
+    r := radius + ASmpPosR * cvtSmpRadius;
+
+    Result := FInputScan.GetPointD_Final(FInputScan.ProcessedImage, sn * r + cy, cs * r + cx);
   end;
 
 var
-  iSmp, decoderMax: Integer;
-  r, px, py, md, ns, mx, sample: Double;
+  iSmp, iAngle, sa, angleCnt, posMin, posMax: Integer;
+  r, px, py, sample, sampleMiddle, sampleMin, sampleMax, feedback, newValue, quantError: Double;
+  stats: array[Boolean, Boolean] of record
+    Acc: Double;
+    Cnt: Integer;
+  end;
+  rt, up: Boolean;
 begin
   Result.X := 0.0;
   Result.Y := 0.0;
-
-  decoderMax := 1 shl FDecoderPrecision;
-
-  cvtSmpRadius := FProfileRef.RecordingGrooveWidth * 0.5 * FInputScan.DPI / decoderMax;
-  if not IsNan(invRadius) then
-    cvtSmpRadius := EnsureRange((radius - invRadius) * 0.5 / decoderMax, 0.0, cvtSmpRadius);
-
+  AFeedback := 0.0;
   cx := FInputScan.Center.X;
   cy := FInputScan.Center.Y;
+  angleCnt := Length(FDecodeSinCosLut);
 
-  r := radius + decoderMax * cvtSmpRadius;
+  cvtSmpRadius := FProfileRef.RecordingGrooveWidth * 0.5 * FInputScan.DPI / FDecodeMax;
+  if not IsNan(prevRadius) then
+    cvtSmpRadius := EnsureRange((prevRadius - radius) * 0.5 * CTrackWidthRatio / FDecodeMax, 0.0, cvtSmpRadius);
+
+  r := radius + FDecodeMax * cvtSmpRadius;
   px := angleCos * r + cx;
   py := angleSin * r + cy;
-
   if not FInputScan.InRangePointD(py, px) then
     Exit;
 
-  ns := 0;
-  if not IsNan(invRadius) then
-    ns := FInputScan.GetPointD_Final(FInputScan.ProcessedImage, angleSin * invRadius + cy, angleCos * invRadius + cx);
-  mx := GetSample(0);
-
-  for iSmp := 1 to decoderMax - 1 do
+  posMin := -FDecodeMax;
+  posMax := FDecodeMax - 1;
+  sampleMin := Infinity;
+  sampleMax := -Infinity;
+  for iSmp := posMin to posMax do
   begin
-    sample := GetSample(iSmp);
-    mx := Max(sample, mx);
-    Result.X += sample;
+    sa := (iSmp - posMin) * angleCnt;
 
-    sample := GetSample(-iSmp);
-    mx := Max(sample, mx);
-    Result.Y += sample;
+    for iAngle := 0 to angleCnt - 1 do
+    begin
+      sample := GetSample(iSmp + 0.5, iAngle);
+
+      sampleMin := Min(sampleMin, sample);
+      sampleMax := Max(sampleMax, sample);
+
+      FDecodeBuf[sa] := sample;
+      Inc(sa);
+    end;
+  end;
+  sampleMiddle := (sampleMin + sampleMax) * 0.5;
+
+  FillChar(stats, SizeOf(stats), 0);
+  for iSmp := posMin to posMax do
+  begin
+    sa := (iSmp - posMin) * angleCnt;
+
+    for iAngle := 0 to angleCnt - 1 do
+    begin
+      sample := FDecodeBuf[sa];
+
+      up := sample >= sampleMiddle;
+
+      // Floyd-Steinberg algorithm
+
+      newValue := IfThen(up, sampleMax, sampleMin);
+      quantError := sample - newValue;
+      FDecodeBuf[sa] := newValue;
+      FDecodeBuf[sa + 1           ] += quantError * 7 / 16;
+      FDecodeBuf[sa - 1 + angleCnt] += quantError * 3 / 16;
+      FDecodeBuf[sa     + angleCnt] += quantError * 5 / 16;
+      FDecodeBuf[sa + 1 + angleCnt] += quantError * 1 / 16;
+
+      rt := iSmp < 0;
+
+      stats[rt, up].Acc += iSmp + 0.5;
+      Inc(stats[rt, up].Cnt);
+
+      Inc(sa);
+    end;
   end;
 
-  Result.X /= decoderMax - 1;
-  Result.Y /= decoderMax - 1;
-
-  Result.X := DivDef(Result.X - ns, mx, 0.5);
-  Result.Y := DivDef(Result.Y - ns, mx, 0.5);
-
-  md := GetMono(Result);
-
-  Result.X := (Result.X - md) * 2.0;
-  Result.Y := -(Result.Y - md) * 2.0;
-
-  //if not inRange(Result.X, -1.0, 1.0) or not inRange(Result.Y, -1.0, 1.0) then
-  //  WriteLn(Result.X:12:3, Result.Y:12:3);
-
-  Result.X := EnsureRange(Result.X, -1.0, 1.0);
-  Result.Y := EnsureRange(Result.Y, -1.0, 1.0);
+  feedback := DivDef(stats[False, True].Acc + stats[True, True].Acc, stats[False, True].Cnt + stats[True, True].Cnt, 0.0);
+  feedback := feedback / FDecodeMax;
+  if not FProfileRef.Mono then
+  begin
+    Result.X := DivDef(stats[False, True].Acc, stats[False, True].Cnt, 0.0);
+    Result.Y := DivDef(stats[True, True].Acc, stats[True, True].Cnt, 0.0);
+    Result.X := Result.X / (FDecodeMax * 0.5);
+    Result.Y := Result.Y / (FDecodeMax * 0.5);
+  end
+  else
+  begin
+    Result.X := feedback;
+    Result.Y := feedback;
+  end;
+  AFeedback := feedback;
 end;
 
 procedure TScan2Track.EvalTrack;
@@ -226,17 +278,16 @@ procedure TScan2Track.EvalTrack;
 
 var
   iSample, iLut, channels: Integer;
-  rOuter, sn, cs, fbRatio, instantPct, maxPct, grooveRadius, maxSample, invRadius: Double;
+  rOuter, sn, cs, fbRatio, instantPct, maxPct, grooveRadius, maxSample, radius, feedback, loSample: Double;
   hasOutFile, validSample: Boolean;
-  sample, rawSample, filteredSample: TPointD;
-  radius: TPointD;
-  leftPx, rightPx: TPointD;
-  prevRadiuses: TPointDDynArray;
+  sample, rawSample: TPointD;
+  pxPos: TPointD;
+  prevRadiuses: TDoubleDynArray;
   sinCosLut: TSinCosDDynArray;
   samples: TDoubleDynArray;
   fltSampleL, fltSampleR: TFilterIIRHPBessel;
   fltXHL, fltXHR: TFilterIIRHPBessel;
-  fltXLL, fltXLR: TFilterIIRLPBessel;
+  fltXL: TFilterIIRLPBessel;
 begin
   if not FSilent then
     WriteLn('EvalTrack');
@@ -248,8 +299,7 @@ begin
   fltSampleR := TFilterIIRHPBessel.Create(nil);
   fltXHL := TFilterIIRHPBessel.Create(nil);
   fltXHR := TFilterIIRHPBessel.Create(nil);
-  fltXLL := TFilterIIRLPBessel.Create(nil);
-  fltXLR := TFilterIIRLPBessel.Create(nil);
+  fltXL := TFilterIIRLPBessel.Create(nil);
   try
     fltSampleL.FreqCut1 := CLowCutoffFreq;
     fltSampleL.SampleRate := FSampleRate;
@@ -264,12 +314,9 @@ begin
     fltXHR.FreqCut1 := CLoopbackLowCutoffFreq;
     fltXHR.SampleRate := FSampleRate;
     fltXHR.Order := 4;
-    fltXLL.FreqCut1 := CLoopbackLowCutoffFreq;
-    fltXLL.SampleRate := FSampleRate;
-    fltXLL.Order := 4;
-    fltXLR.FreqCut1 := CLoopbackLowCutoffFreq;
-    fltXLR.SampleRate := FSampleRate;
-    fltXLR.Order := 4;
+    fltXL.FreqCut1 := CLoopbackLowCutoffFreq;
+    fltXL.SampleRate := FSampleRate;
+    fltXL.Order := 4;
 
     // build Sin/Cos LUT
 
@@ -281,19 +328,14 @@ begin
     sample.Y := NaN;
     SetLength(prevRadiuses, FPointsPerRevolution);
     for iLut := 0 to High(prevRadiuses) do
-    begin
-      prevRadiuses[iLut].X := NaN;
-      prevRadiuses[iLut].Y := NaN;
-    end;
+      prevRadiuses[iLut] := NaN;
 
     grooveRadius := FProfileRef.RecordingGrooveWidth * 0.5 * FInputScan.DPI;
     fbRatio := CutoffToFeedbackRatio(CLoopbackLowCutoffFreq, FSampleRate) * grooveRadius;
 
     maxPct := 0.0;
     rOuter := FProfileRef.OuterSize * 0.5 * FInputScan.DPI;
-    radius.X := FInputScan.SetDownRadius + FProfileRef.RecordingGrooveThickness * 0.5 * FInputScan.DPI;
-    radius.Y := FInputScan.SetDownRadius - FProfileRef.RecordingGrooveThickness * 0.5 * FInputScan.DPI;
-    invRadius := FInputScan.SetDownRadius - FProfileRef.RecordingGrooveThickness * FInputScan.DPI;
+    radius := FInputScan.SetDownRadius;
     iSample := 0;
     iLut := 0;
 
@@ -303,48 +345,41 @@ begin
       cs := sinCosLut[iLut].Cos;
       sn := sinCosLut[iLut].Sin;
 
-      invRadius -= GetMono(DecodeSample(invRadius, NaN, sn, cs)) * fbRatio;
+      rawSample := DecodeSample(radius, prevRadiuses[iLut], sn, cs, feedback);
 
-      rawSample := DecodeSample(GetMono(radius), invRadius, sn, cs);
+      radius += feedback * fbRatio;
 
-      radius.X += rawSample.X * fbRatio;
-      radius.Y += rawSample.Y * fbRatio;
+      loSample := FilterAndStuff(fltXL, radius / grooveRadius, iSample);
 
-      sample.X := FilterAndStuff(fltXLL, radius.X / grooveRadius, iSample) + FilterAndStuff(fltXHL, rawSample.X, iSample);
-      sample.Y := FilterAndStuff(fltXLR, radius.Y / grooveRadius, iSample) + FilterAndStuff(fltXHR, rawSample.Y, iSample);
+      sample.X := loSample + FilterAndStuff(fltXHL, rawSample.X, iSample);
+      sample.Y := loSample + FilterAndStuff(fltXHR, rawSample.Y, iSample);
 
       // handle and store sample
 
-      filteredSample.X := FilterAndStuff(fltSampleL, sample.X, iSample);
-      filteredSample.Y := FilterAndStuff(fltSampleR, sample.Y, iSample);
+      sample.X := FilterAndStuff(fltSampleL, sample.X, iSample);
+      sample.Y := FilterAndStuff(fltSampleR, sample.Y, iSample);
 
-      filteredSample := FilterRiaa(filteredSample);
+      sample := FilterRiaa(sample);
 
       if hasOutFile then
-        StoreSample(samples, filteredSample, iSample, FProfileRef.Mono);
+        StoreSample(samples, sample, iSample, FProfileRef.Mono);
 
       // progression
 
       validSample :=
-          InRange(radius.X, FInputScan.ConcentricGrooveRadius, rOuter) and
-          InRange(radius.Y, FInputScan.ConcentricGrooveRadius, rOuter) and
-          (IsNan(prevRadiuses[iLut].Y) or (prevRadiuses[iLut].Y > radius.X)) and
-          (radius.X >= radius.Y) and
-          (radius.Y > invRadius);
+          InRange(radius, FInputScan.ConcentricGrooveRadius, rOuter) and
+          (IsNan(prevRadiuses[iLut]) or (prevRadiuses[iLut] > radius));
 
       if Assigned(FOnSample) then
       begin
-        leftPx.X := cs * radius.X + FInputScan.Center.X;
-        leftPx.Y := sn * radius.X + FInputScan.Center.Y;
+        pxPos.X := cs * radius + FInputScan.Center.X;
+        pxPos.Y := sn * radius + FInputScan.Center.Y;
 
-        rightPx.X := cs * radius.Y + FInputScan.Center.X;
-        rightPx.Y := sn * radius.Y + FInputScan.Center.Y;
-
-        instantPct := (GetMono(radius) - FInputScan.ConcentricGrooveRadius) / (FInputScan.SetDownRadius - FInputScan.ConcentricGrooveRadius);
+        instantPct := (radius - FInputScan.ConcentricGrooveRadius) / (FInputScan.SetDownRadius - FInputScan.ConcentricGrooveRadius);
         instantPct := EnsureRange(1.0 - instantPct, 0.0, 1.0) * 100.0;
         maxPct := Max(maxPct, instantPct);
 
-        validSample := FOnSample(Self, filteredSample, leftPx, rightPx, maxPct, not validSample) and validSample;
+        validSample := FOnSample(Self, sample, pxPos, maxPct, not validSample) and validSample;
 			end;
 
       // advance to next iteration
@@ -381,8 +416,7 @@ begin
     fltSampleR.Free;
     fltXHL.Free;
     fltXHR.Free;
-    fltXLL.Free;
-    fltXLR.Free;
+    fltXL.Free;
   end;
 end;
 
