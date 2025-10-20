@@ -4,7 +4,7 @@ object MainForm: TMainForm
   Top = -8
   Width = 1488
   HorzScrollBar.Increment = 240
-  HorzScrollBar.Page = 904
+  HorzScrollBar.Page = 920
   HorzScrollBar.Tracking = True
   VertScrollBar.Increment = 240
   VertScrollBar.Page = 662
@@ -22,7 +22,7 @@ object MainForm: TMainForm
   OnCreate = FormCreate
   OnKeyDown = FormKeyDown
   object Image: TImage
-    Left = 264
+    Left = 280
     Height = 480
     Top = 0
     Width = 640
