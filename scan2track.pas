@@ -80,7 +80,7 @@ begin
   FRadiansPerRevolutionPoint := -Pi * 2.0 / FPointsPerRevolution;
 
   FDecodeMax := 1 shl (FDecoderPrecision - Ord(FProfileRef.Mono));
-  SetLength(FDecodeBuf, Sqr(FDecodeMax shl 1));
+  SetLength(FDecodeBuf, Sqr((FDecodeMax shl 1) + 1));
   BuildSinCosLUT(FDecodeMax shl 1, FDecodeSinCosLut, FRadiansPerRevolutionPoint * 0.5, FRadiansPerRevolutionPoint);
 
   FInputScan := TInputScan.Create(AProfileRef, ADefaultDPI, False);
@@ -184,7 +184,7 @@ begin
   sampleMax := -Infinity;
   for iSmp := posMin to posMax do
   begin
-    sa := (iSmp - posMin) * angleCnt;
+    sa := (iSmp - posMin) * (angleCnt + 1);
 
     for iAngle := 0 to angleCnt - 1 do
     begin
@@ -202,7 +202,7 @@ begin
   FillChar(stats, SizeOf(stats), 0);
   for iSmp := posMin to posMax do
   begin
-    sa := (iSmp - posMin) * angleCnt;
+    sa := (iSmp - posMin) * (angleCnt + 1);
 
     for iAngle := 0 to angleCnt - 1 do
     begin
@@ -211,17 +211,15 @@ begin
       up := sample >= sampleMiddle;
 
       // Floyd-Steinberg algorithm
-
       newValue := IfThen(up, sampleMax, sampleMin);
       quantError := sample - newValue;
       FDecodeBuf[sa] := newValue;
-      FDecodeBuf[sa + 1           ] += quantError * 7 / 16;
-      FDecodeBuf[sa - 1 + angleCnt] += quantError * 3 / 16;
-      FDecodeBuf[sa     + angleCnt] += quantError * 5 / 16;
-      FDecodeBuf[sa + 1 + angleCnt] += quantError * 1 / 16;
+      FDecodeBuf[sa + 1                 ] += quantError * 7 / 16;
+      FDecodeBuf[sa - 1 + (angleCnt + 1)] += quantError * 3 / 16;
+      FDecodeBuf[sa     + (angleCnt + 1)] += quantError * 5 / 16;
+      FDecodeBuf[sa + 1 + (angleCnt + 1)] += quantError * 1 / 16;
 
       rt := iSmp < 0;
-
       stats[rt, up].Acc += iSmp + 0.5;
       Inc(stats[rt, up].Cnt);
 
