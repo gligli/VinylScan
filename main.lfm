@@ -7,7 +7,7 @@ object MainForm: TMainForm
   HorzScrollBar.Page = 904
   HorzScrollBar.Tracking = True
   VertScrollBar.Increment = 240
-  VertScrollBar.Page = 665
+  VertScrollBar.Page = 662
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
@@ -252,7 +252,7 @@ object MainForm: TMainForm
       Left = 16
       Height = 20
       Top = 632
-      Width = 247
+      Width = 192
       Smooth = True
       TabOrder = 21
     end
@@ -330,8 +330,8 @@ object MainForm: TMainForm
     end
     object bvS2T: TBevel
       Left = 8
-      Height = 185
-      Top = 479
+      Height = 181
+      Top = 480
       Width = 264
     end
     object bvGlob: TBevel
@@ -340,6 +340,17 @@ object MainForm: TMainForm
       Top = 8
       Width = 264
     end
+  end
+  object btCancel: TButton
+    Left = 208
+    Height = 20
+    Top = 632
+    Width = 56
+    Cancel = True
+    Caption = 'Cancel'
+    Enabled = False
+    TabOrder = 1
+    OnClick = btCancelClick
   end
   object odInPNGs: TOpenDialog
     DefaultExt = '.PNG'

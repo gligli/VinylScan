@@ -13,6 +13,7 @@ type
   { TMainForm }
 
   TMainForm = class(TForm)
+   btCancel: TButton;
     btInPNGs: TButton;
     btOutPNG: TButton;
     btInPNG: TButton;
@@ -50,6 +51,7 @@ type
     sdOutWAV: TSaveDialog;
     sePrec: TSpinEdit;
     seBlend: TSpinEdit;
+    procedure btCancelClick(Sender: TObject);
     procedure btOutPNGClick(Sender: TObject);
     procedure btInPNGClick(Sender: TObject);
     procedure btOutWAVClick(Sender: TObject);
@@ -65,7 +67,8 @@ type
 
     FReducRatio: Integer;
     FReducFactor: Double;
-    FLastTickCount: QWord;
+    FCancelling: Boolean;
+    FLastTickCountDraw, FLastTickCountRefresh: QWord;
     FPoints: TPointValueList;
 
     function OnSample(Sender: TScan2Track; Sample, pxPosition: TPointD; Percent: Double; Finished: Boolean): Boolean;
@@ -98,6 +101,8 @@ begin
   if not pnSettings.Enabled then
     Exit;
 
+  FCancelling := False;
+  btCancel.Enabled := True;
   pnSettings.Enabled := False;
   try
     fn := edInputPNG.Text;
@@ -119,6 +124,7 @@ begin
     end;
   finally
     pnSettings.Enabled := True;
+    btCancel.Enabled := False;
   end;
 end;
 
@@ -144,6 +150,11 @@ procedure TMainForm.btOutPNGClick(Sender: TObject);
 begin
   if sdOutPNG.Execute then
     edOutputPNG.Text := sdOutPNG.FileName;
+end;
+
+procedure TMainForm.btCancelClick(Sender: TObject);
+begin
+  FCancelling := True;
 end;
 
 procedure TMainForm.btScansCorrelatorClick(Sender: TObject);
@@ -366,26 +377,31 @@ var
   SecondsAtATime: Double;
   tc: QWord;
 begin
-  Result := True;
+  Result := not Finished;
 
+  tc := GetTickCount64;
   SecondsAtATime := 0.25 / Sender.ProfileRef.RevolutionsPerSecond;
 
   FPoints.Add(TPointValue.Create(pxPosition.X, pxPosition.Y, clLime));
 
-  if Finished or (FPoints.Count >= Sender.SampleRate * SecondsAtATime * CPointsPerSample) then
+  if ((tc - FLastTickCountRefresh) > 100) then
   begin
-    Result := not ((GetForegroundWindow = Handle) and (GetAsyncKeyState(VK_ESCAPE) and $8000 <> 0));
+    Application.ProcessMessages;
+    Result := Result and not FCancelling;
+    FLastTickCountRefresh := tc;
+  end;
 
+  if not Result or (FPoints.Count >= Sender.SampleRate * SecondsAtATime * CPointsPerSample) then
+  begin
     DrawPoints(FPoints);
 
-    tc := GetTickCount64;
-    Write(Percent:6:2, '%,', DivDef(FPoints.Count / (Sender.SampleRate * CPointsPerSample) * 1000.0, tc - FLastTickCount, 0.0):6:3, 'x', #13);
+    Write(Percent:6:2, '%,', DivDef(FPoints.Count / (Sender.SampleRate * CPointsPerSample) * 1000.0, tc - FLastTickCountDraw, 0.0):6:3, 'x', #13);
     pbS2T.Position := Round(Percent);
-    FLastTickCount := tc;
+    FLastTickCountDraw := tc;
 
     FPoints.Clear;
 
-    if Finished or not Result then
+    if not Result then
       WriteLn;
   end;
 end;
