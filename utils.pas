@@ -73,9 +73,9 @@ const
   CScannerTolLo = 0.985;
   CScannerTolHi = 1.015;
 
-  cRedMul = 299;
-  cGreenMul = 587;
-  cBlueMul = 114;
+  cRedMul = 1;
+  cGreenMul = 1;
+  cBlueMul = 1;
 
   cLumaDiv = cRedMul + cGreenMul + cBlueMul;
 
