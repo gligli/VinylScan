@@ -183,9 +183,9 @@ begin
   Result.Y[ZeroValue] := 2;
   Result.Y[PositiveValue] := -1;
 
-  Result.X[NegativeValue] := -FProfileRef.LeadOutGrooveThickness * 0.5 * FDPI;
+  Result.X[NegativeValue] := -FProfileRef.LeadOutGrooveThickness * FDPI;
   Result.X[ZeroValue] := 0;
-  Result.X[PositiveValue] := FProfileRef.LeadOutGrooveThickness * 0.5 * FDPI;
+  Result.X[PositiveValue] := FProfileRef.LeadOutGrooveThickness * FDPI;
 end;
 
 procedure TInputScan.FindConcentricGroove_GridSearch;
@@ -345,7 +345,7 @@ begin
           gInt := meanSD^.Y * sy;
 
           gcx -= gimgx * gInt;
-          gcy -= gimgy * gInt;
+          gcy -= gimgy * sky * gInt;
           gr -= (gimgx * cs + gimgy * sn * sky) * gInt;
           gsky -= gimgy * (sn * rsx + cy) * gInt;
         end;
