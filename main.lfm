@@ -11,12 +11,13 @@ object MainForm: TMainForm
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 1181
+  ClientHeight = 1461
   ClientWidth = 1488
   Color = 4210752
   DoubleBuffered = True
   KeyPreview = True
   ParentDoubleBuffered = False
+  LCLVersion = '4.2.0.0'
   Scaled = False
   WindowState = wsMaximized
   OnCreate = FormCreate
@@ -45,6 +46,24 @@ object MainForm: TMainForm
     ParentColor = False
     ParentDoubleBuffered = False
     TabOrder = 0
+    object bvGlob: TBevel
+      Left = 8
+      Height = 64
+      Top = 8
+      Width = 264
+    end
+    object bvSC: TBevel
+      Left = 8
+      Height = 393
+      Top = 79
+      Width = 264
+    end
+    object bvS2T: TBevel
+      Left = 8
+      Height = 181
+      Top = 480
+      Width = 264
+    end
     object edOutputWAV: TEdit
       Left = 16
       Height = 23
@@ -321,24 +340,6 @@ object MainForm: TMainForm
       Top = 20
       Width = 34
       Caption = 'Profile'
-    end
-    object bvSC: TBevel
-      Left = 8
-      Height = 393
-      Top = 79
-      Width = 264
-    end
-    object bvS2T: TBevel
-      Left = 8
-      Height = 181
-      Top = 480
-      Width = 264
-    end
-    object bvGlob: TBevel
-      Left = 8
-      Height = 64
-      Top = 8
-      Width = 264
     end
   end
   object btCancel: TButton
