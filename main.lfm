@@ -7,17 +7,16 @@ object MainForm: TMainForm
   HorzScrollBar.Page = 920
   HorzScrollBar.Tracking = True
   VertScrollBar.Increment = 240
-  VertScrollBar.Page = 662
+  VertScrollBar.Page = 689
   VertScrollBar.Tracking = True
   AutoScroll = True
   Caption = 'GliGli''s VinylScan'
-  ClientHeight = 1461
+  ClientHeight = 1181
   ClientWidth = 1488
   Color = 4210752
   DoubleBuffered = True
   KeyPreview = True
   ParentDoubleBuffered = False
-  LCLVersion = '4.2.0.0'
   Scaled = False
   WindowState = wsMaximized
   OnCreate = FormCreate
@@ -60,7 +59,7 @@ object MainForm: TMainForm
     end
     object bvS2T: TBevel
       Left = 8
-      Height = 181
+      Height = 208
       Top = 480
       Width = 264
     end
@@ -124,10 +123,10 @@ object MainForm: TMainForm
     object btScan2Track: TButton
       Left = 16
       Height = 25
-      Top = 600
+      Top = 624
       Width = 131
       Caption = 'Scan to track (F11)'
-      TabOrder = 20
+      TabOrder = 22
       OnClick = btScan2TrackClick
     end
     object cbDPI: TComboBox
@@ -270,10 +269,10 @@ object MainForm: TMainForm
     object pbS2T: TProgressBar
       Left = 16
       Height = 20
-      Top = 632
+      Top = 656
       Width = 192
       Smooth = True
-      TabOrder = 21
+      TabOrder = 23
     end
     object llBlend: TLabel
       Left = 16
@@ -341,11 +340,29 @@ object MainForm: TMainForm
       Width = 34
       Caption = 'Profile'
     end
+    object chkStatDec: TCheckBox
+      Left = 16
+      Height = 19
+      Top = 594
+      Width = 163
+      Caption = 'Statistical decoding, Sigma:'
+      TabOrder = 20
+    end
+    object seSigma: TFloatSpinEdit
+      Left = 183
+      Height = 23
+      Top = 592
+      Width = 80
+      MaxValue = 42
+      MinValue = 1
+      TabOrder = 21
+      Value = 1
+    end
   end
   object btCancel: TButton
     Left = 208
     Height = 20
-    Top = 632
+    Top = 656
     Width = 56
     Cancel = True
     Caption = 'Cancel'
@@ -360,27 +377,27 @@ object MainForm: TMainForm
     InitialDir = 'C:\VinylScan\data\'
     Options = [ofAllowMultiSelect, ofEnableSizing, ofViewDetail]
     Left = 8
-    Top = 672
+    Top = 711
   end
   object odInPNG: TOpenDialog
     DefaultExt = '.PNG'
     Filter = 'PNG; TIFF|*.png;*.tif'
     InitialDir = 'data'
     Left = 72
-    Top = 672
+    Top = 711
   end
   object sdOutPNG: TSaveDialog
     DefaultExt = '.PNG'
     Filter = 'PNG|*.png'
     InitialDir = 'data'
     Left = 136
-    Top = 672
+    Top = 711
   end
   object sdOutWAV: TSaveDialog
     DefaultExt = '.WAV'
     Filter = 'WAV|*.wav'
     InitialDir = 'data'
     Left = 200
-    Top = 672
+    Top = 711
   end
 end

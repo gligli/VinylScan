@@ -31,6 +31,8 @@ type
     FDecoderPrecision: Integer;
     FSampleRate: Integer;
     FSilent: Boolean;
+    FStatisticalDecodingSigma: Double;
+    FUseStatisticalDecoding: Boolean;
 
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
@@ -62,6 +64,8 @@ type
     property DecoderPrecision: Integer read FDecoderPrecision;
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
+    property UseStatisticalDecoding: Boolean read FUseStatisticalDecoding write FUseStatisticalDecoding;
+    property StatisticalDecodingSigma: Double read FStatisticalDecodingSigma write FStatisticalDecodingSigma;
   end;
 
 implementation
@@ -75,6 +79,8 @@ begin
   FSampleRate := ASampleRate;
   FDecoderPrecision := EnsureRange(ADecoderPrecision, 1, 8);
   FSilent := ASilent;
+  FUseStatisticalDecoding := False;
+  FStatisticalDecodingSigma := 5.0;
 
   FPointsPerRevolution := Round(FSampleRate / FProfileRef.RevolutionsPerSecond);
   FRadiansPerRevolutionPoint := -Pi * 2.0 / FPointsPerRevolution;
@@ -139,14 +145,16 @@ function TScan2Track.DecodeSample(radius, prevRadius, angleSin, angleCos: Double
 var
   iSmp, iAngle, angleStride, posMin, posMax: Integer;
   r, px, py, cx, cy, cs, sn, snDec, csDec, cvtSmpRadius: Double;
-  sample, sampleMiddle, sampleMin, sampleMax, feedback, newValue, quantError: Double;
-  pSnCs, pDec: PDouble;
+  sample, sampleMiddle, sampleStdDev, sampleMin, sampleMax, feedback, newValue, quantError: Double;
+  pSnCs, pDec, pDec2: PDouble;
   rt, up: Boolean;
   stats: array[Boolean, Boolean] of record
     Acc: Double;
     Cnt: Integer;
   end;
 begin
+  // init
+
   Result.X := 0.0;
   Result.Y := 0.0;
   AFeedback := 0.0;
@@ -157,17 +165,22 @@ begin
   if not IsNan(prevRadius) then
     cvtSmpRadius := EnsureRange((prevRadius - radius) * 0.5 * CTrackWidthRatio / FDecodeMax, 0.0, cvtSmpRadius);
 
+  // ensure decoding is not OOB of image
+
   r := radius + FDecodeMax * cvtSmpRadius;
   px := angleCos * r + cx;
   py := angleSin * r + cy;
   if not FInputScan.InRangePointD(py, px) then
     Exit;
 
+  // gather raw image samples
+
   posMin := -FDecodeMax;
   posMax := FDecodeMax - 1;
+  pDec := @FDecodeBuf[0];
+  sampleMiddle := 0.0;
   sampleMin := Infinity;
   sampleMax := -Infinity;
-  pDec := @FDecodeBuf[0];
   for iSmp := posMin to posMax do
   begin
     r := radius + (iSmp + 0.5) * cvtSmpRadius;
@@ -183,15 +196,43 @@ begin
 
       sample := FInputScan.GetPointD_Final(FInputScan.ProcessedImage, sn * r + cy, cs * r + cx);
 
-      sampleMin := Min(sampleMin, sample);
-      sampleMax := Max(sampleMax, sample);
-
       pDec^ := sample;
       Inc(pDec);
+
+      sampleMiddle += sample;
+      sampleMin := Min(sampleMin, sample);
+      sampleMax := Max(sampleMax, sample);
     end;
     Inc(pDec);
   end;
-  sampleMiddle := (sampleMin + sampleMax) * 0.5;
+
+  // optionally devise middle/min/max from mean/standard deviation
+
+  if FUseStatisticalDecoding then
+  begin
+    sampleMiddle /= Sqr(FDecodeMax shl 1);
+    sampleStdDev := 0.0;
+    pDec := @FDecodeBuf[0];
+    for iSmp := posMin to posMax do
+    begin
+      for iAngle := 1 to Length(FDecodeSinCosLut) do
+      begin
+        sample := pDec^;
+        sampleStdDev += Sqr(sample - sampleMiddle);
+        Inc(pDec);
+      end;
+      Inc(pDec);
+    end;
+    sampleStdDev := Sqrt(sampleStdDev / Sqr(FDecodeMax shl 1)) * FStatisticalDecodingSigma;
+    sampleMin := sampleMiddle - sampleStdDev;
+    sampleMax := sampleMiddle + sampleStdDev;
+  end
+  else
+  begin
+    sampleMiddle := (sampleMin + sampleMax) * 0.5;
+  end;
+
+  // threshold-based decoding with Floyd-Steinberg dithering
 
   FillChar(stats, SizeOf(stats), 0);
   angleStride := Length(FDecodeSinCosLut) + 1;
@@ -222,6 +263,8 @@ begin
     end;
     Inc(pDec);
   end;
+
+  // finish decode
 
   feedback := DivDef(stats[False, True].Acc + stats[True, True].Acc, stats[False, True].Cnt + stats[True, True].Cnt, 0.0);
   feedback := feedback / FDecodeMax;

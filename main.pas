@@ -25,6 +25,7 @@ type
     bvGlob: TBevel;
     cbProfile: TComboBox;
     cbQSRatio: TComboBox;
+    chkStatDec: TCheckBox;
     chkFixCIS: TCheckBox;
     chkDefaultDPI: TCheckBox;
     chkCorrect: TCheckBox;
@@ -36,6 +37,7 @@ type
     edOutputPNG: TEdit;
     edOutputWAV: TEdit;
     ffProfile: TLabel;
+    seSigma: TFloatSpinEdit;
     Image: TImage;
     llQSRatio: TLabel;
     llDPI: TLabel;
@@ -109,6 +111,9 @@ begin
 
     s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, fn, StrToIntDef(cbDPI.Text, 2400), False, StrToIntDef(cbSR.Text, 48000), sePrec.Value);
     try
+      s2t.UseStatisticalDecoding := chkStatDec.Checked;
+      s2t.StatisticalDecodingSigma := seSigma.Value;
+
       s2t.OnSample := @OnSample;
       s2t.OutputWAVFileName := edOutputWAV.Text;
 
@@ -344,6 +349,8 @@ begin
     cbDPI.Text := IntToStr(sc.OutputDPI);
     cbSR.Text := IntToStr(s2t.SampleRate);
     sePrec.Value := s2t.DecoderPrecision;
+    chkStatDec.Checked := s2t.UseStatisticalDecoding;
+    seSigma.Value := s2t.StatisticalDecodingSigma;
   finally
     s2t.Free;
     sc.Free;
