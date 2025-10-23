@@ -137,36 +137,21 @@ end;
 
 function TScan2Track.DecodeSample(radius, prevRadius, angleSin, angleCos: Double; out AFeedback: Double): TPointD;
 var
-  cx, cy, cvtSmpRadius: Double;
-
-  function GetSample(ASmpPosR: Double; ASmpPosA: Integer): Double;
-  var
-    r, sn, cs: Double;
-    sncs: ^TSinCosD;
-  begin
-    sncs := @FDecodeSinCosLut[ASmpPosA];
-    cs := angleCos * sncs^.Cos - angleSin * sncs^.Sin;
-    sn := angleSin * sncs^.Cos + angleCos * sncs^.Sin;
-    r := radius + ASmpPosR * cvtSmpRadius;
-
-    Result := FInputScan.GetPointD_Final(FInputScan.ProcessedImage, sn * r + cy, cs * r + cx);
-  end;
-
-var
-  iSmp, iAngle, sa, angleCnt, posMin, posMax: Integer;
-  r, px, py, sample, sampleMiddle, sampleMin, sampleMax, feedback, newValue, quantError: Double;
+  iSmp, iAngle, angleStride, posMin, posMax: Integer;
+  r, px, py, cx, cy, cs, sn, snDec, csDec, cvtSmpRadius: Double;
+  sample, sampleMiddle, sampleMin, sampleMax, feedback, newValue, quantError: Double;
+  pSnCs, pDec: PDouble;
+  rt, up: Boolean;
   stats: array[Boolean, Boolean] of record
     Acc: Double;
     Cnt: Integer;
   end;
-  rt, up: Boolean;
 begin
   Result.X := 0.0;
   Result.Y := 0.0;
   AFeedback := 0.0;
   cx := FInputScan.Center.X;
   cy := FInputScan.Center.Y;
-  angleCnt := Length(FDecodeSinCosLut);
 
   cvtSmpRadius := FProfileRef.RecordingGrooveWidth * 0.5 * FInputScan.DPI / FDecodeMax;
   if not IsNan(prevRadius) then
@@ -182,49 +167,60 @@ begin
   posMax := FDecodeMax - 1;
   sampleMin := Infinity;
   sampleMax := -Infinity;
+  pDec := @FDecodeBuf[0];
   for iSmp := posMin to posMax do
   begin
-    sa := (iSmp - posMin) * (angleCnt + 1);
+    r := radius + (iSmp + 0.5) * cvtSmpRadius;
+    pSnCs := @FDecodeSinCosLut[0].Sin;
 
-    for iAngle := 0 to angleCnt - 1 do
+    for iAngle := 1 to Length(FDecodeSinCosLut) do
     begin
-      sample := GetSample(iSmp + 0.5, iAngle);
+      snDec := pSnCs^; Inc(pSnCs);
+      csDec := pSnCs^; Inc(pSnCs);
+
+      cs := angleCos * csDec - angleSin * snDec;
+      sn := angleSin * csDec + angleCos * snDec;
+
+      sample := FInputScan.GetPointD_Final(FInputScan.ProcessedImage, sn * r + cy, cs * r + cx);
 
       sampleMin := Min(sampleMin, sample);
       sampleMax := Max(sampleMax, sample);
 
-      FDecodeBuf[sa] := sample;
-      Inc(sa);
+      pDec^ := sample;
+      Inc(pDec);
     end;
+    Inc(pDec);
   end;
   sampleMiddle := (sampleMin + sampleMax) * 0.5;
 
   FillChar(stats, SizeOf(stats), 0);
+  angleStride := Length(FDecodeSinCosLut) + 1;
+  pDec := @FDecodeBuf[0];
   for iSmp := posMin to posMax do
   begin
-    sa := (iSmp - posMin) * (angleCnt + 1);
+    rt := iSmp < 0;
 
-    for iAngle := 0 to angleCnt - 1 do
+    for iAngle := 1 to Length(FDecodeSinCosLut) do
     begin
-      sample := FDecodeBuf[sa];
+      sample := pDec^;
 
       up := sample >= sampleMiddle;
 
       // Floyd-Steinberg algorithm
       newValue := IfThen(up, sampleMax, sampleMin);
       quantError := sample - newValue;
-      FDecodeBuf[sa] := newValue;
-      FDecodeBuf[sa + 1                 ] += quantError * 7 / 16;
-      FDecodeBuf[sa - 1 + (angleCnt + 1)] += quantError * 3 / 16;
-      FDecodeBuf[sa     + (angleCnt + 1)] += quantError * 5 / 16;
-      FDecodeBuf[sa + 1 + (angleCnt + 1)] += quantError * 1 / 16;
+      pDec^ := newValue;
+      pDec[            + 1] += quantError * (7 / 16);
+      pDec[angleStride - 1] += quantError * (3 / 16);
+      pDec[angleStride    ] += quantError * (5 / 16);
+      pDec[angleStride + 1] += quantError * (1 / 16);
 
-      rt := iSmp < 0;
       stats[rt, up].Acc += iSmp + 0.5;
       Inc(stats[rt, up].Cnt);
 
-      Inc(sa);
+      Inc(pDec);
     end;
+    Inc(pDec);
   end;
 
   feedback := DivDef(stats[False, True].Acc + stats[True, True].Acc, stats[False, True].Cnt + stats[True, True].Cnt, 0.0);
