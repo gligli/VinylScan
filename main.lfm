@@ -102,9 +102,6 @@ object MainForm: TMainForm
       Hint = 'Scans correlator input PNG files'
       Top = 88
       Width = 224
-      Lines.Strings = (
-        ''
-      )
       ParentShowHint = False
       ScrollBars = ssBoth
       ShowHint = True
