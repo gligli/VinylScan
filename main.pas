@@ -25,7 +25,6 @@ type
     bvGlob: TBevel;
     cbProfile: TComboBox;
     cbQSRatio: TComboBox;
-    chkStatDec: TCheckBox;
     chkFixCIS: TCheckBox;
     chkDefaultDPI: TCheckBox;
     chkCorrect: TCheckBox;
@@ -37,7 +36,6 @@ type
     edOutputPNG: TEdit;
     edOutputWAV: TEdit;
     ffProfile: TLabel;
-    seSigma: TFloatSpinEdit;
     Image: TImage;
     llQSRatio: TLabel;
     llDPI: TLabel;
@@ -73,7 +71,7 @@ type
     FLastTickCountDraw, FLastTickCountRefresh: QWord;
     FPoints: TPointValueList;
 
-    function OnSample(Sender: TScan2Track; Sample, pxPosition: TPointD; Percent: Double; Finished: Boolean): Boolean;
+    function OnSample(Sender: TScan2Track; pxPosition, InvDecodePosition: TPointD; Percent: Double; Time: TTime; Finished: Boolean): Boolean;
   public
     procedure UnitTests;
 
@@ -109,11 +107,8 @@ begin
   try
     fn := edInputPNG.Text;
 
-    s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, fn, StrToIntDef(cbDPI.Text, 2400), False, StrToIntDef(cbSR.Text, 48000), sePrec.Value);
+    s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, fn, StrToIntDef(cbDPI.Text, 2400), StrToIntDef(cbSR.Text, 48000), sePrec.Value);
     try
-      s2t.UseStatisticalDecoding := chkStatDec.Checked;
-      s2t.StatisticalDecodingSigma := seSigma.Value;
-
       s2t.OnSample := @OnSample;
       s2t.OutputWAVFileName := edOutputWAV.Text;
 
@@ -122,8 +117,16 @@ begin
       DrawImage(s2t.InputScan.ProcessedImage, s2t.InputScan.Width, s2t.InputScan.Height);
       DrawExtents(s2t.InputScan);
 
-      s2t.EvalTrack;
+      s2t.Process;
 
+      pbS2T.Position := 180;
+      Application.ProcessMessages;
+
+      if Trim(s2t.OutputWAVFileName) <> '' then
+        s2t.Save;
+
+      pbS2T.Position := pbS2T.Max;
+      Application.ProcessMessages;
     finally
       s2t.Free;
     end;
@@ -349,8 +352,6 @@ begin
     cbDPI.Text := IntToStr(sc.OutputDPI);
     cbSR.Text := IntToStr(s2t.SampleRate);
     sePrec.Value := s2t.DecoderPrecision;
-    chkStatDec.Checked := s2t.UseStatisticalDecoding;
-    seSigma.Value := s2t.StatisticalDecodingSigma;
   finally
     s2t.Free;
     sc.Free;
@@ -377,9 +378,10 @@ begin
     end;
 end;
 
-function TMainForm.OnSample(Sender: TScan2Track; Sample, pxPosition: TPointD; Percent: Double; Finished: Boolean): Boolean;
+function TMainForm.OnSample(Sender: TScan2Track; pxPosition, InvDecodePosition: TPointD; Percent: Double; Time: TTime;
+  Finished: Boolean): Boolean;
 const
-  CPointsPerSample = 1;
+  CPointsPerSample = 2;
 var
   SecondsAtATime: Double;
   tc: QWord;
@@ -389,6 +391,7 @@ begin
   tc := GetTickCount64;
   SecondsAtATime := 0.25 / Sender.ProfileRef.RevolutionsPerSecond;
 
+  FPoints.Add(TPointValue.Create(InvDecodePosition.X, InvDecodePosition.Y, clTeal));
   FPoints.Add(TPointValue.Create(pxPosition.X, pxPosition.Y, clLime));
 
   if ((tc - FLastTickCountRefresh) > 100) then
@@ -402,7 +405,10 @@ begin
   begin
     DrawPoints(FPoints);
 
-    Write(Percent:6:2, '%,', DivDef(FPoints.Count / (Sender.SampleRate * CPointsPerSample) * 1000.0, tc - FLastTickCountDraw, 0.0):6:3, 'x', #13);
+    Write(Percent:6:2, '%, ',
+          FormatDateTime(CTimeFormat, Time), ',',
+          DivDef(FPoints.Count / (Sender.SampleRate * CPointsPerSample) * 1000.0, tc - FLastTickCountDraw, 0.0):6:3, 'x',
+          #13);
     pbS2T.Position := Round(Percent);
     FLastTickCountDraw := tc;
 

@@ -73,9 +73,9 @@ const
   CScannerTolLo = 0.985;
   CScannerTolHi = 1.015;
 
-  cRedMul = 1;
-  cGreenMul = 1;
-  cBlueMul = 1;
+  cRedMul = 299;
+  cGreenMul = 587;
+  cBlueMul = 114;
 
   cLumaDiv = cRedMul + cGreenMul + cBlueMul;
 
@@ -1369,8 +1369,12 @@ begin
 end;
 
 function CutoffToFeedbackRatio(Cutoff: Double; SampleRate: Integer): Double;
+var
+  cosOmegaC: Double;
 begin
-  Result := (Cutoff * 2.0 / SampleRate) / sqrt(0.1024 + sqr(Cutoff * 2.0 / SampleRate));
+  cosOmegaC := Cos(2.0 * Pi * Cutoff / SampleRate);
+  Result := 2.0 - cosOmegaC - Sqrt(Sqr(2.0 - cosOmegaC) - 1);
+  Result := 1.0 - Result;
 end;
 
 procedure IncrementalSinCos(Angle: Double; var PrevAngle: Double; var ASinCos: TSinCosD);
@@ -1442,6 +1446,8 @@ var
   i: Integer;
   idata: TSmallIntDynArray;
 begin
+  Assert(resolution = 16);
+
   SetLength(idata, Length(data));
 
   for i := 0 to High(idata) do
