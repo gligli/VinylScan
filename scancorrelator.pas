@@ -37,7 +37,8 @@ type
     X: TVector;
 
     SinCosLUT: TSinCosDDynArray;
-    PreparedData: TDoubleDynArray;
+    PreparedDataD: TDoubleDynArray;
+    PreparedDataW: TWordDynArray;
   end;
 
   PCorrectCoords = ^TCorrectCoords;
@@ -87,9 +88,9 @@ type
 
     function InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
     procedure PrepareCorrect(var coords: TCorrectCoords);
-    function GridSearchCorrect(const skew: TCorrectSkew; const coords: TCorrectCoords): Double;
+    function GridSearchCorrect(const skew: TCorrectSkew; const coords: TCorrectCoords): UInt64;
     procedure GradientCorrect(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
-    function CorrectGetRMSE(AGSObj: Double; const coords: TCorrectCoords): Double;
+    function CorrectGetRMSE(AGSObj: UInt64; const coords: TCorrectCoords): Double;
 
     procedure AngleInit;
     procedure Align;
@@ -821,7 +822,8 @@ begin
 
   // parse image arcs
 
-  SetLength(coords.PreparedData, coords.AngleCnt * coords.RadiusCnt);
+  SetLength(coords.PreparedDataD, coords.AngleCnt * coords.RadiusCnt);
+  SetLength(coords.PreparedDataW, coords.AngleCnt * coords.RadiusCnt);
 
   cx := baseScan.Center.X;
   cy := baseScan.Center.Y;
@@ -844,29 +846,31 @@ begin
       py := (sn * r + cy) * sky;
 
       if baseScan.InRangePointD(py, px) then
-        coords.PreparedData[pos] := baseScan.GetPointD_Work(baseScan.ProcessedImage, py, px)
-      else
-        coords.PreparedData[pos] := 0;
+      begin
+        coords.PreparedDataD[pos] := baseScan.GetPointD_Work(baseScan.ProcessedImage, py, px);
+        coords.PreparedDataW[pos] := baseScan.ProcessedImage[Trunc(py) * baseScan.Width + Trunc(px)];
+      end;
 
       Inc(pos);
     end;
   end;
-  Assert(pos = Length(coords.PreparedData));
+  Assert(pos = Length(coords.PreparedDataD));
 
   // prepare iterations
 
   BuildSinCosLUT(coords.AngleCnt, coords.sinCosLUT, coords.StartAngle + curScan.RelativeAngle, NormalizedAngleDiff(coords.StartAngle, coords.EndAngle));
 end;
 
-function TScanCorrelator.GridSearchCorrect(const skew: TCorrectSkew; const coords: TCorrectCoords): Double;
+function TScanCorrelator.GridSearchCorrect(const skew: TCorrectSkew; const coords: TCorrectCoords): UInt64;
 var
   iRadius, iAngle: Integer;
   rsk, rBeg, rEnd, skx, sky, cx, cy: Double;
-  sn, cs, px, py, cskx, csky: Double;
+  sn, cs, px, py, cskx, csky: Single;
+  pLut: PDouble;
+  pRSk: PSingle;
+  pPrep: PWord;
   scan: TInputScan;
-  pLut, pRSk: PDouble;
-  pPrep: PDouble;
-  skewedRadius: array[0 .. 2 * 64 * 1024 - 1] of Double;
+  skewedRadius: array[0 .. 2 * 64 * 1024 - 1] of Single;
 begin
   scan := FInputScans[coords.ScanIdx];
 
@@ -898,9 +902,9 @@ begin
 
   // parse image arcs
 
-  Result := 0.0;
+  Result := 0;
   pLut := @coords.SinCosLUT[0].Sin;
-  pPrep := @coords.PreparedData[0];
+  pPrep := @coords.PreparedDataW[0];
   for iAngle := 0 to coords.AngleCnt - 1 do
   begin
     sn := pLut^; Inc(pLut);
@@ -913,7 +917,7 @@ begin
       px := cs * pRSk^ + cskx; Inc(pRSk);
       py := sn * pRSk^ + csky; Inc(pRSk);
 
-      Result += Sqr(pPrep^ - scan.GetPointD_Work(scan.ProcessedImage, py, px)); Inc(pPrep);
+      Result += Sqr(pPrep^ - scan.ProcessedImage[Trunc(py) * scan.Width + Trunc(px)]); Inc(pPrep);
     end;
   end;
 end;
@@ -965,7 +969,7 @@ begin
       px := (cs * rsk + cx) * skx;
       py := (sn * rsk + cy) * sky;
 
-      mseInt := (coords^.PreparedData[cnt] - scan.GetPointD_Work(scan.ProcessedImage, py, px)) * (1.0 / High(Word));
+      mseInt := (coords^.PreparedDataD[cnt] - scan.GetPointD_Work(scan.ProcessedImage, py, px)) * (1.0 / High(Word));
       func += Sqr(mseInt);
 
       if Assigned(grad) then
@@ -1002,7 +1006,7 @@ begin
   //end;
 end;
 
-function TScanCorrelator.CorrectGetRMSE(AGSObj: Double; const coords: TCorrectCoords): Double;
+function TScanCorrelator.CorrectGetRMSE(AGSObj: UInt64; const coords: TCorrectCoords): Double;
 begin
   Result := Sqrt(AGSObj / (coords.RadiusCnt * coords.AngleCnt)) / High(Word);
 end;
@@ -1010,9 +1014,9 @@ end;
 procedure TScanCorrelator.Correct;
 const
   CConstExtents = 0.02; // inches
-  CConstHalfCount = 16;
+  CConstHalfCount = 32;
   CMulExtents = 0.01;
-  CMulHalfCount = 20;
+  CMulHalfCount = 40;
 var
   rmses: TDoubleDynArray;
   coordsArray: array of TCorrectCoords;
@@ -1023,7 +1027,7 @@ var
     coords: PCorrectCoords;
     gsData: array of record
       Skew: TCorrectSkew;
-      Objective: Double;
+      Objective: UInt64;
     end;
 
     procedure DoGS(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
@@ -1036,6 +1040,7 @@ var
 
   var
     iConst, iMul, iGS: Integer;
+    gsLoss: UInt64;
     loss: Double;
     skew, tmpSk: TCorrectSkew;
     scan: TInputScan;
@@ -1068,7 +1073,7 @@ var
           tmpSk.ConstSkew := iConst * CConstExtents / CConstHalfCount * scan.DPI;
 
           gsData[iGS].Skew := tmpSk;
-          gsData[iGS].Objective := NaN;
+          gsData[iGS].Objective := High(UInt64);
 
           Inc(iGS);
         end;
@@ -1081,13 +1086,14 @@ var
 
       // find best iteration
 
-      loss := High(UInt64);
+      gsLoss := High(UInt64);
       for iGS := 0 to High(gsData) do
-        if gsData[iGS].Objective < loss then
+        if gsData[iGS].Objective < gsLoss then
         begin
           skew := gsData[iGS].Skew;
-          loss := gsData[iGS].Objective;
+          gsLoss := gsData[iGS].Objective;
         end;
+      loss := CorrectGetRMSE(gsLoss, coords^);
 
       coords^.X := SkewToArg(skew);
 
@@ -1095,7 +1101,7 @@ var
 
       // free up memory
       SetLength(coords^.SinCosLUT, 0);
-      SetLength(coords^.PreparedData, 0);
+      SetLength(coords^.PreparedDataD, 0);
 
       Write(InterlockedIncrement(doneCount):4, ' / ', validAngleCnt, #13);
     end;
