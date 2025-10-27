@@ -481,16 +481,16 @@ begin
   C.EllipseC(cx, cy, rcx, rcy);
   C.EllipseC(cx, cy, rax, ray);
 
-  if (NormalizedAngleDiff(AScan.CropData.StartAngle, AScan.CropData.EndAngle) <> 0) or
-      (NormalizedAngleDiff(AScan.CropData.StartAngleMirror, AScan.CropData.EndAngleMirror) <> 0) then
+  if (NormalizedAngleDiff(AScan.CropAngles.StartAngle, AScan.CropAngles.EndAngle) <> 0) or
+      (NormalizedAngleDiff(AScan.CropAngles.StartAngleMirror, AScan.CropAngles.EndAngleMirror) <> 0) then
   begin
-    CropLine(AScan.CropData.StartAngle);
-    CropLine(AScan.CropData.EndAngle);
-    CropLine(lerp(AScan.CropData.StartAngle, AScan.CropData.EndAngle, 0.5));
+    CropLine(AScan.CropAngles.StartAngle);
+    CropLine(AScan.CropAngles.EndAngle);
+    CropLine(lerp(AScan.CropAngles.StartAngle, AScan.CropAngles.EndAngle, 0.5));
 
-    CropLine(AScan.CropData.StartAngleMirror);
-    CropLine(AScan.CropData.EndAngleMirror);
-    CropLine(lerp(AScan.CropData.StartAngleMirror, AScan.CropData.EndAngleMirror, 0.5));
+    CropLine(AScan.CropAngles.StartAngleMirror);
+    CropLine(AScan.CropAngles.EndAngleMirror);
+    CropLine(lerp(AScan.CropAngles.StartAngleMirror, AScan.CropAngles.EndAngleMirror, 0.5));
   end;
 
   HorzScrollBar.Position := sx - Width div 2;

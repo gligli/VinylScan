@@ -16,13 +16,16 @@ type
     Y: array[TValueSign] of Integer;
   end;
 
-  TCorrectRef = record
+  TCorrectRef = packed record
     AngleIdx, ScanIdx: Integer;
   end;
 
-  TCropData = record
+  TCropAngles = record
     StartAngle, EndAngle: Double;
     StartAngleMirror, EndAngleMirror: Double;
+  end;
+
+  TCropData = record
     RadiusAngleLut: TRadiusAngleDynArray;
     SinCosLut: TSinCosDDynArray;
   end;
@@ -51,7 +54,7 @@ type
     FGrooveStartPoint: TPointD;
 
     FRelativeAngle: Double;
-    FCropData: TCropData;
+    FCropAngles: TCropAngles;
     FCenterQuality: Double;
     FObjective: Double;
 
@@ -66,10 +69,11 @@ type
     procedure SetRevolutionFromSampleRate(ASampleRate: Integer);
     function GetImageShortName: String;
     function MakeStencil: TStencil;
+    function MakeCropAngles(const arg: TDoubleDynArray): TCropAngles;
+    function MakeRadiusOffsets(ARadius: Integer): TIntegerDynArray;
 
     procedure GradientConcentricGroove(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
     function NelderMeadCrop(const arg: TVector; obj: Pointer): TScalar;
-    function MakeRadiusOffsets(ARadius: Integer): TIntegerDynArray;
 
     procedure FindCenterExtents;
     procedure FindConcentricGroove_GridSearch;
@@ -121,7 +125,7 @@ type
     property Center: TPointD read FCenter;
     property Skew: TPointD read FSkew;
     property RelativeAngle: Double read FRelativeAngle;
-    property CropData: TCropData read FCropData;
+    property CropAngles: TCropAngles read FCropAngles;
 
     property CenterQuality: Double read FCenterQuality;
     property Objective: Double read FObjective write FObjective;
@@ -186,6 +190,14 @@ begin
   Result.X[NegativeValue] := -FProfileRef.LeadOutGrooveThickness * FDPI;
   Result.X[ZeroValue] := 0;
   Result.X[PositiveValue] := FProfileRef.LeadOutGrooveThickness * FDPI;
+end;
+
+function TInputScan.MakeCropAngles(const arg: TDoubleDynArray): TCropAngles;
+begin
+  Result.StartAngle := NormalizeAngle(arg[0]);
+  Result.EndAngle := NormalizeAngle(arg[1]);
+  Result.StartAngleMirror := NormalizeAngle(arg[2]);
+  Result.EndAngleMirror := NormalizeAngle(arg[3]);
 end;
 
 procedure TInputScan.FindConcentricGroove_GridSearch;
@@ -399,8 +411,8 @@ begin
   for vs := Low(TValueSign) to High(TValueSign) do
     sliding[vs] := 0;
 
-  hasCrop := (NormalizedAngleDiff(FCropData.StartAngle, FCropData.EndAngle) <> 0) or
-      (NormalizedAngleDiff(FCropData.StartAngleMirror, FCropData.EndAngleMirror) <> 0);
+  hasCrop := (NormalizedAngleDiff(FCropAngles.StartAngle, FCropAngles.EndAngle) <> 0) or
+      (NormalizedAngleDiff(FCropAngles.StartAngleMirror, FCropAngles.EndAngleMirror) <> 0);
 
   stencil := MakeStencil;
 
@@ -409,8 +421,8 @@ begin
     angle := NormalizeAngle(i * FRadiansPerRevolutionPoint);
 
     if hasCrop and
-        (InNormalizedAngle(angle, FCropData.StartAngle, FCropData.EndAngle) or
-        InNormalizedAngle(angle, FCropData.StartAngleMirror, FCropData.EndAngleMirror)) then
+        (InNormalizedAngle(angle, FCropAngles.StartAngle, FCropAngles.EndAngle) or
+        InNormalizedAngle(angle, FCropAngles.StartAngleMirror, FCropAngles.EndAngleMirror)) then
     begin
       for vs := Low(TValueSign) to High(TValueSign) do
         sliding[vs] := 0;
@@ -792,47 +804,26 @@ begin
 end;
 
 function TInputScan.NelderMeadCrop(const arg: TVector; obj: Pointer): TScalar;
-var
-  a0a, a1a, a0b, a1b, cx, cy, skx, sky: Double;
-
-  procedure GetCoords(iLut: Integer; out py, px: Double; out cropped: Boolean);
-  var
-    bt, r: Double;
-    ra: ^TRadiusAngle;
-    sc: ^TSinCosD;
-  begin
-    ra := @FCropData.RadiusAngleLut[iLut];
-    sc := @FCropData.SinCosLut[iLut];
-
-    bt := ra^.Angle;
-    r := ra^.Radius;
-
-    px := (sc^.Cos * r + cx) * skx;
-    py := (sc^.Sin * r + cy) * sky;
-
-    cropped := InNormalizedAngle(bt, a0a, a0b) or InNormalizedAngle(bt, a1a, a1b);
-  end;
-
 const
   CMinCrop = 30.0;
   CMaxCrop = 120.0;
 var
+  data: ^TCropData absolute obj;
   iLut: Integer;
-  px, py: Double;
+  cx, cy, skx, sky, r, px, py, bt: Double;
   cropped: Boolean;
+  angles: TCropAngles;
   cnt: array[Boolean] of Integer;
-  acc: array[Boolean, Boolean] of TDoubleDynArray;
-  corr: array[Boolean] of Double;
+  acc: array[Boolean] of Double;
+  ra: ^TRadiusAngle;
+  sc: ^TSinCosD;
 begin
   Result := 1e6;
 
-  a0a := NormalizeAngle(arg[0]);
-  a0b := NormalizeAngle(arg[1]);
-  a1a := NormalizeAngle(arg[2]);
-  a1b := NormalizeAngle(arg[3]);
+  angles := MakeCropAngles(arg);
 
-  if not InRange(NormalizedAngleDiff(a0a, a0b), DegToRad(CMinCrop), DegToRad(CMaxCrop)) or
-     not InRange(NormalizedAngleDiff(a1a, a1b), DegToRad(CMinCrop), DegToRad(CMaxCrop)) then
+  if not InRange(NormalizedAngleDiff(angles.StartAngle, angles.EndAngle), DegToRad(CMinCrop), DegToRad(CMaxCrop)) or
+     not InRange(NormalizedAngleDiff(angles.StartAngleMirror, angles.EndAngleMirror), DegToRad(CMinCrop), DegToRad(CMaxCrop)) then
     Exit;
 
   cx := FCenter.X;
@@ -842,27 +833,31 @@ begin
 
   for cropped := False to True do
   begin
-    SetLength(acc[cropped, False], Length(FCropData.RadiusAngleLut));
-    SetLength(acc[cropped, True], Length(FCropData.RadiusAngleLut));
+    acc[cropped] := 0.0;
     cnt[cropped] := 0;
   end;
 
-  for iLut := 0 to High(FCropData.RadiusAngleLut) do
+  for iLut := 0 to High(data^.RadiusAngleLut) do
   begin
-    GetCoords(iLut, py, px, cropped);
-    acc[cropped, False, cnt[cropped]] := GetPointD_Work(FImage, py, px);
-    acc[cropped, True, cnt[cropped]] := GetPointD_Work(FProcessedImage, py, px);
-    Inc(cnt[cropped]);
+    ra := @data^.RadiusAngleLut[iLut];
+    sc := @data^.SinCosLut[iLut];
+
+    bt := ra^.Angle;
+    r := ra^.Radius;
+
+    px := (sc^.Cos * r + cx) * skx;
+    py := (sc^.Sin * r + cy) * sky;
+
+    if InRangePointD(py, px) then
+    begin
+      cropped := InNormalizedAngle(bt, angles.StartAngle, angles.EndAngle) or
+                 InNormalizedAngle(bt, angles.StartAngleMirror, angles.EndAngleMirror);
+      acc[cropped] += GetPointD_Work(FImage, py, px);
+      Inc(cnt[cropped]);
+    end;
   end;
 
-  for cropped := False to True do
-  begin
-    SetLength(acc[cropped, False], cnt[cropped]);
-    SetLength(acc[cropped, True], cnt[cropped]);
-    corr[cropped] := PearsonCorrelation(acc[cropped, False], acc[cropped, True]);
-  end;
-
-  Result := corr[True] - corr[False];
+  Result := DivDef(acc[True], cnt[True], 0.0) - DivDef(acc[False], cnt[False], 0.0);
 
   //WriteLn(ImageShortName, ', begin:', RadToDeg(a0a):9:3, ', end:', RadToDeg(a0b):9:3, result:18:6);
 end;
@@ -890,22 +885,15 @@ end;
 procedure TInputScan.Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDDynArray);
 var
   X: TVector;
+  data: TCropData;
 begin
   X := [NormalizeAngle(DegToRad(-30.0)), NormalizeAngle(DegToRad(30.0)), NormalizeAngle(DegToRad(-30.0) + Pi), NormalizeAngle(DegToRad(30.0) + Pi)];
 
-  FCropData.RadiusAngleLut := RadiusAngleLut;
-  FCropData.SinCosLut := SinCosLut;
-  try
-    NelderMeadMinimize(@NelderMeadCrop, X, [DegToRad(15.0), DegToRad(15.0), DegToRad(15.0), DegToRad(15.0)], 1e-3);
-  finally
-    FCropData.RadiusAngleLut := nil;
-    FCropData.SinCosLut := nil;
-  end;
+  data.RadiusAngleLut := RadiusAngleLut;
+  data.SinCosLut := SinCosLut;
+  NelderMeadMinimize(@NelderMeadCrop, X, [DegToRad(1.0), DegToRad(1.0), DegToRad(1.0), DegToRad(1.0)], 1e-4, @data);
 
-  FCropData.StartAngle := NormalizeAngle(X[0]);
-  FCropData.EndAngle := NormalizeAngle(X[1]);
-  FCropData.StartAngleMirror := NormalizeAngle(X[2]);
-  FCropData.EndAngleMirror := NormalizeAngle(X[3]);
+  FCropAngles := MakeCropAngles(X);
 end;
 
 procedure TInputScan.FindCroppedArea;
@@ -947,18 +935,18 @@ begin
       angle := NormalizeAngle((iAngle - CAngleMargin) * toRad);
 
       if isMirror then
-        FCropData.StartAngleMirror := angle
+        FCropAngles.StartAngleMirror := angle
       else
-        FCropData.StartAngle := angle;
+        FCropAngles.StartAngle := angle;
     end
     else if not angleCropped[iAngle] and prevAngleCropped then
     begin
       angle := NormalizeAngle((iAngle + CAngleMargin) * toRad);
 
       if isMirror then
-        FCropData.EndAngleMirror := angle
+        FCropAngles.EndAngleMirror := angle
       else
-        FCropData.EndAngle := angle;
+        FCropAngles.EndAngle := angle;
 
       isMirror := not isMirror;
     end;

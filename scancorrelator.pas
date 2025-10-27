@@ -589,7 +589,7 @@ var
 var
   i: Integer;
   rBeg, rEnd, s1, s2: Double;
-  c: TCropData;
+  c: TCropAngles;
 begin
   WriteLn('Crop');
 
@@ -606,7 +606,7 @@ begin
 
   for i := 0 to High(FInputScans) do
   begin
-    c := FInputScans[i].CropData;
+    c := FInputScans[i].CropAngles;
     s1 := NormalizedAngleDiff(c.StartAngle, c.EndAngle);
     s2 := NormalizedAngleDiff(c.StartAngleMirror, c.EndAngleMirror);
     WriteLn(FInputScans[i].ImageShortName, ', begin:', RadToDeg(c.StartAngle):9:3, ', end:', RadToDeg(c.EndAngle):9:3, ', size:', RadToDeg(s1):9:3, ', begin2:', RadToDeg(c.StartAngleMirror):9:3, ', end2:', RadToDeg(c.EndAngleMirror):9:3, ', size2:', RadToDeg(s2):9:3);
@@ -643,10 +643,10 @@ begin
 
     // use CropData to potentially reduce angle span
 
-    a0a := NormalizeAngle(scan.CropData.StartAngle - scan.RelativeAngle);
-    a0b := NormalizeAngle(scan.CropData.EndAngle - scan.RelativeAngle);
-    a1a := NormalizeAngle(scan.CropData.StartAngleMirror - scan.RelativeAngle);
-    a1b := NormalizeAngle(scan.CropData.EndAngleMirror - scan.RelativeAngle);
+    a0a := NormalizeAngle(scan.CropAngles.StartAngle - scan.RelativeAngle);
+    a0b := NormalizeAngle(scan.CropAngles.EndAngle - scan.RelativeAngle);
+    a1a := NormalizeAngle(scan.CropAngles.StartAngleMirror - scan.RelativeAngle);
+    a1b := NormalizeAngle(scan.CropAngles.EndAngleMirror - scan.RelativeAngle);
 
     croppedCnt := 0;
 
@@ -790,8 +790,8 @@ begin
       begin
          t := NormalizeAngle(bt + baseScan.RelativeAngle);
 
-         v += Ord(InNormalizedAngle(t, baseScan.CropData.StartAngle, baseScan.CropData.EndAngle)) +
-              Ord(InNormalizedAngle(t, baseScan.CropData.StartAngleMirror, baseScan.CropData.EndAngleMirror));
+         v += Ord(InNormalizedAngle(t, baseScan.CropAngles.StartAngle, baseScan.CropAngles.EndAngle)) +
+              Ord(InNormalizedAngle(t, baseScan.CropAngles.StartAngleMirror, baseScan.CropAngles.EndAngleMirror));
       end;
     end;
 
@@ -1286,8 +1286,8 @@ var
 
           sample := High(Word);
           if scan.InRangePointD(py, px) and
-              (not InNormalizedAngle(ct, scan.CropData.StartAngle, scan.CropData.EndAngle) and
-               not InNormalizedAngle(ct, scan.CropData.StartAngleMirror, scan.CropData.EndAngleMirror) or
+              (not InNormalizedAngle(ct, scan.CropAngles.StartAngle, scan.CropAngles.EndAngle) and
+               not InNormalizedAngle(ct, scan.CropAngles.StartAngleMirror, scan.CropAngles.EndAngleMirror) or
                (r < rLim)) then
           begin
             sample := scan.GetPointD_Final(scan.Image, py, px);
