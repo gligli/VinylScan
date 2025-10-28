@@ -36,7 +36,9 @@ type
     edOutputPNG: TEdit;
     edOutputWAV: TEdit;
     ffProfile: TLabel;
+    seGamma: TFloatSpinEdit;
     Image: TImage;
+    llGamma: TLabel;
     llQSRatio: TLabel;
     llDPI: TLabel;
     llBlend: TLabel;
@@ -107,7 +109,7 @@ begin
   try
     fn := edInputPNG.Text;
 
-    s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, fn, StrToIntDef(cbDPI.Text, 2400), StrToIntDef(cbSR.Text, 48000), sePrec.Value);
+    s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, fn, StrToIntDef(cbDPI.Text, 2400), StrToIntDef(cbSR.Text, 48000), sePrec.Value, seGamma.Value);
     try
       s2t.OnSample := @OnSample;
       s2t.OutputWAVFileName := edOutputWAV.Text;
@@ -173,7 +175,7 @@ begin
     Exit;
 
   pnSettings.Enabled := False;
-  sc := TScanCorrelator.Create(FProfiles.CurrentProfileRef, mmInputPNGs.Lines, StrToIntDef(cbDPI.Text, 2400));
+  sc := TScanCorrelator.Create(FProfiles.CurrentProfileRef, mmInputPNGs.Lines, seGamma.Value, StrToIntDef(cbDPI.Text, 2400));
   try
     sc.OutputPNGFileName := edOutputPNG.Text;
     sc.FixCISScanners := chkFixCIS.Checked;
@@ -352,6 +354,7 @@ begin
     cbDPI.Text := IntToStr(sc.OutputDPI);
     cbSR.Text := IntToStr(s2t.SampleRate);
     sePrec.Value := s2t.DecoderPrecision;
+    seGamma.Value := s2t.DecoderGamma;
   finally
     s2t.Free;
     sc.Free;

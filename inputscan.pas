@@ -38,6 +38,7 @@ type
   private
     FProfileRef: TProfile;
     FImageFileName: String;
+    FGamma: Double;
     FDPI: Integer;
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
@@ -84,7 +85,7 @@ type
     procedure LoadPNG;
     procedure LoadTIFF;
   public
-    constructor Create(AProfileRef: TProfile; ADefaultDPI: Integer = 2400; ASilent: Boolean = False);
+    constructor Create(AProfileRef: TProfile; AGamma: Double; ADefaultDPI: Integer = 2400; ASilent: Boolean = False);
     destructor Destroy; override;
 
     procedure InitImage(AWidth, AHeight, ADPI: Integer);
@@ -109,6 +110,7 @@ type
     property ImageFileName: String read FImageFileName write FImageFileName;
     property ImageShortName: String read GetImageShortName;
 
+    property Gamma: Double read FGamma;
     property DPI: Integer read FDPI;
     property Width: Integer read FWidth;
     property Height: Integer read FHeight;
@@ -138,13 +140,19 @@ type
 
   TScanImage = class(TFPCustomImage)
   private
+    FGamma: Double;
+    FGammaLUT: array[Word] of Word;
     FImage: TWordDynArray;
+    procedure SetGamma(AValue: Double);
   protected
     procedure SetInternalPixel(x,y:integer; Value:integer); override;
-    function GetInternalPixel(x,y:integer) : integer; override;
-    procedure SetInternalColor (x,y:integer; const Value:TFPColor); override;
+    function GetInternalPixel(x,y:integer): integer; override;
+    procedure SetInternalColor(x,y:integer; const Value:TFPColor); override;
   public
+    constructor Create(AWidth,AHeight:integer); override;
+
     property Image: TWordDynArray read FImage write FImage;
+    property Gamma: Double read FGamma write SetGamma;
   end;
 
   { TDPIAwareReaderPNG }
@@ -461,9 +469,10 @@ begin
   FGrooveStartPoint.Y := besty / FSkew.Y;
 end;
 
-constructor TInputScan.Create(AProfileRef: TProfile; ADefaultDPI: Integer; ASilent: Boolean);
+constructor TInputScan.Create(AProfileRef: TProfile; AGamma: Double; ADefaultDPI: Integer; ASilent: Boolean);
 begin
   FProfileRef := AProfileRef;
+  FGamma := AGamma;
   FDPI := ADefaultDPI;
   FSilent := ASilent;
   FCenterQuality := -Infinity;
@@ -524,6 +533,7 @@ begin
     try
       SetLength(FImage, FHeight * FWidth);
       img.Image := FImage;
+      img.Gamma := FGamma;
 
       if not FSilent then WriteLn('Size:', Width:6, 'x', Height:6);
 
@@ -574,6 +584,7 @@ begin
     try
       SetLength(FImage, FHeight * FWidth);
       img.Image := FImage;
+      img.Gamma := FGamma;
 
       if not FSilent then WriteLn('Size:', Width:6, 'x', Height:6);
 
@@ -1391,6 +1402,16 @@ end;
 
 { TScanImage }
 
+procedure TScanImage.SetGamma(AValue: Double);
+var
+  iLut: Integer;
+begin
+  if FGamma = AValue then Exit;
+  FGamma := AValue;
+  for iLut := Low(FGammaLUT) to High(FGammaLUT) do
+    FGammaLUT[iLut] := Round(Power(iLut * (1.0 / High(FGammaLUT)), FGamma) * High(FGammaLUT));
+end;
+
 procedure TScanImage.SetInternalPixel(x, y: integer; Value: integer);
 begin
   // not needed
@@ -1403,7 +1424,13 @@ end;
 
 procedure TScanImage.SetInternalColor(x, y: integer; const Value: TFPColor);
 begin
-  FImage[y * Width + x] := ToBW(Value.Red, Value.Green, Value.Blue);
+  FImage[y * Width + x] := ToBW(FGammaLUT[Value.Red], FGammaLUT[Value.Green], FGammaLUT[Value.Blue]);
+end;
+
+constructor TScanImage.Create(AWidth, AHeight: integer);
+begin
+  inherited Create(AWidth, AHeight);
+  SetGamma(1.0);
 end;
 
 { TDPIAwareReaderPNG }

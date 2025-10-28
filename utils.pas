@@ -70,6 +70,8 @@ type
   TCompareFunction = function(Item1, Item2, UserParameter: Pointer): Integer;
 
 const
+  CDefaultGamma = 2.2;
+
   CScannerTolLo = 0.985;
   CScannerTolHi = 1.015;
 

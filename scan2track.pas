@@ -41,8 +41,9 @@ type
     FOutputWAVFileName: String;
     FOnSample: TSampleEvent;
 
-    FDecoderPrecision: Integer;
     FSampleRate: Integer;
+    FDecoderPrecision: Integer;
+    FDecoderGamma: Double;
 
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
@@ -72,7 +73,7 @@ type
     procedure FilterAudio;
     procedure NormalizeAudio;
   public
-    constructor Create(AProfileRef: TProfile; AScanFileName: String; ADefaultDPI: Integer = 2400; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 7);
+    constructor Create(AProfileRef: TProfile; AScanFileName: String; ADefaultDPI: Integer = 2400; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 7; ADecoderGamma: Double = CDefaultGamma);
     destructor Destroy; override;
 
     procedure LoadScan;
@@ -86,6 +87,7 @@ type
     property InputScan: TInputScan read FInputScan;
     property SampleRate: Integer read FSampleRate;
     property DecoderPrecision: Integer read FDecoderPrecision;
+    property DecoderGamma: Double read FDecoderGamma;
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
   end;
@@ -94,16 +96,17 @@ implementation
 
 { TScan2Track }
 
-constructor TScan2Track.Create(AProfileRef: TProfile; AScanFileName: String; ADefaultDPI: Integer; ASampleRate: Integer; ADecoderPrecision: Integer);
+constructor TScan2Track.Create(AProfileRef: TProfile; AScanFileName: String; ADefaultDPI: Integer; ASampleRate: Integer; ADecoderPrecision: Integer; ADecoderGamma: Double);
 begin
   FProfileRef := AProfileRef;
   FSampleRate := Max(8000, ASampleRate);
   FDecoderPrecision := EnsureRange(ADecoderPrecision, 1, CWavPrecision);
+  FDecoderGamma := ADecoderGamma;
 
   FPointsPerRevolution := Round(FSampleRate / FProfileRef.RevolutionsPerSecond);
   FRadiansPerRevolutionPoint := -Pi * 2.0 / FPointsPerRevolution;
 
-  FInputScan := TInputScan.Create(AProfileRef, ADefaultDPI, False);
+  FInputScan := TInputScan.Create(AProfileRef, 1.0, ADefaultDPI, False); // will do Gamma in FP (preciser)
   FInputScan.ImageFileName := AScanFileName;
 
   InitRiaa;
@@ -256,6 +259,7 @@ begin
 
     r := radius + (iSmp + 0.5) * lerp(geometry.RightCvt, geometry.LeftCvt, (iSmp - geometry.PosMin) * cvtLerpFactor);
     sample := FInputScan.GetPointD_Final(FInputScan.ProcessedImage, angleSin * r + cy, angleCos * r + cx);
+    sample := Power(sample * (1.0 / High(Word)), FDecoderGamma);
 
     if InRange(iSmp, geometry.TrackMin, geometry.TrackMax) then
     begin

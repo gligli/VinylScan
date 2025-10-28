@@ -57,6 +57,7 @@ type
     FRebuildBlendCount: Integer;
     FQualitySpeedRatio: Double;
     FOutputPNGFileName: String;
+    FOutputGamma: Double;
     FOutputDPI: Integer;
     FLock: TSpinlock;
 
@@ -99,7 +100,7 @@ type
     procedure Correct;
     procedure Rebuild;
   public
-    constructor Create(AProfileRef: TProfile; const AFileNames: TStrings; AOutputDPI: Integer = 2400);
+    constructor Create(AProfileRef: TProfile; const AFileNames: TStrings; AOutputGamma: Double = CDefaultGamma; AOutputDPI: Integer = 2400);
     destructor Destroy; override;
 
     procedure LoadScans;
@@ -115,6 +116,7 @@ type
     property RebuildScaled: Boolean read FRebuildScaled write FRebuildScaled;
     property QualitySpeedRatio: Double read FQualitySpeedRatio write FQualitySpeedRatio;
 
+    property OutputGamma: Double read FOutputGamma;
     property OutputDPI: Integer read FOutputDPI;
     property OutputWidth: Integer read FOutputWidth;
     property OutputHeight: Integer read FOutputHeight;
@@ -142,17 +144,19 @@ implementation
 
 { TScanCorrelator }
 
-constructor TScanCorrelator.Create(AProfileRef: TProfile; const AFileNames: TStrings; AOutputDPI: Integer);
+constructor TScanCorrelator.Create(AProfileRef: TProfile; const AFileNames: TStrings; AOutputGamma: Double;
+  AOutputDPI: Integer);
 var
   iScan: Integer;
 begin
   FProfileRef := AProfileRef;
+  FOutputGamma := AOutputGamma;
   FOutputDPI := AOutputDPI;
   SetLength(FInputScans, AFileNames.Count);
 
   for iScan := 0 to AFileNames.Count - 1 do
   begin
-    FInputScans[iScan] := TInputScan.Create(FProfileRef, FOutputDPI, True);
+    FInputScans[iScan] := TInputScan.Create(FProfileRef, 1.0 / AOutputGamma, FOutputDPI, True);
     FInputScans[iScan].ImageFileName := AFileNames[iScan];
   end;
 
@@ -1226,7 +1230,7 @@ const
   CLabelDepthMaxValue = (1 shl CLabelDepthBits) - 1;
 var
   TauToAngleIdx: Double;
-  center, rBeg, rEnd, rLim: Double;
+  center, rBeg, rEnd, rLim, darkLuma, whiteLuma: Double;
 
   function InterpolateSkew(tau, radius: Double; scanIdx: Integer): Double;
   var
@@ -1290,7 +1294,6 @@ var
           px := (cs * rSkew + scan.Center.X) * scan.Skew.X;
           py := (sn * rSkew + scan.Center.Y) * scan.Skew.Y;
 
-          sample := High(Word);
           if scan.InRangePointD(py, px) and
               (not InNormalizedAngle(ct, scan.CropAngles.StartAngle, scan.CropAngles.EndAngle) and
                not InNormalizedAngle(ct, scan.CropAngles.StartAngleMirror, scan.CropAngles.EndAngleMirror) or
@@ -1315,8 +1318,8 @@ var
       end
       else
       begin
-        // dark outside the disc, inner inside
-        sample := IfThen(r >= rLim, Round(0.25 * High(Word)), Round(1.0 * High(Word)));
+        // dark outside the disc, white inside
+        sample := IfThen(r >= rLim, darkLuma, whiteLuma);
         FOutputImage[yx + ox] := Round(sample);
       end;
     end;
@@ -1335,6 +1338,8 @@ begin
   rBeg := FProfileRef.AdapterSize * 0.5 * FOutputDPI;
   rEnd := FProfileRef.OuterSize * 0.5 * FOutputDPI;
   rLim := FProfileRef.MinConcentricGroove * 0.5 * FOutputDPI;
+  darkLuma := Round(Power(0.25, 1.0 / FOutputGamma) * High(Word));
+  whiteLuma := Round(Power(1.0, 1.0 / FOutputGamma) * High(Word));
 
   ProcThreadPool.DoParallelLocalProc(@DoY, 0, FOutputHeight - 1);
 end;
