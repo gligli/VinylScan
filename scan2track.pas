@@ -16,15 +16,24 @@ const
   CTimeFormat = 'nn:ss.zzz';
 
 type
+  TDecodeParameters = record
+    BlockSize, BlockCount, SamplesDone, DecodedTrackLength, DecoderPrecision: Integer;
+    StartTime: QWord;
+    Gamma: Double;
+    Silent: Boolean;
+    Lock: TSpinlock;
+  end;
+
+  TDecodeContext = record
+    Gamma: Double;
+    DecodeMax: Integer;
+    FSBuf: TDoubleDynArray;
+  end;
+
   TDecodeGeometry = record
     LeftCvt, RightCvt: Double;
     PosMin, PosMax: Integer;
     TrackMin, TrackMax: Integer;
-  end;
-
-  TDecodeContext = record
-    DecodeMax: Integer;
-    FSBuf: TDoubleDynArray;
   end;
 
   TScan2Track = class;
@@ -44,6 +53,7 @@ type
     FSampleRate: Integer;
     FDecoderPrecision: Integer;
     FDecoderGamma: Double;
+    FOptimizeGamma: Boolean;
 
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
@@ -58,22 +68,27 @@ type
     procedure FreeRiaa;
     function FilterRiaa(ASample: TPointD): TPointD;
 
+    function GetAudioSampleCount: Integer;
     function GetAudio(ATrackIdx: Integer): TPointD;
     procedure SetAudio(ATrackIdx: Integer; const ASample: TPointD);
 
     function GetDecodeGeometry(radius, invRadius, prevInvRadius: Double; decodeMax: Integer; forceGrooveWidth: Boolean): TDecodeGeometry;
-    procedure InitDecodeContext(var context: TDecodeContext);
-    procedure FreeDecodeContext(var context: TDecodeContext);
-
     function DecodeSample_Work(radius, invRadius, prevInvRadius, angleSin, angleCos: Double): Double;
     function DecodeSample_Final(var context: TDecodeContext; radius, invRadius, prevInvRadius, angleSin, angleCos: Double): TPointD;
 
+    procedure PrepareDecodeParameters(var AParams: TDecodeParameters; ADecodedTrackLength: Integer; ASilent: Boolean; ADecoderPrecision: Integer; AGamma: Double);
+    procedure InitDecodeContext(var AContext: TDecodeContext; const AParams: TDecodeParameters);
+    procedure FreeDecodeContext(var AContext: TDecodeContext);
+    procedure DoDecodeBlock(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
+    function GREvalDecodeGamma(arg: Double; obj: Pointer): Double;
+
     procedure EvalTrack;
+    procedure FindBestGamma;
     procedure DecodeAudio;
-    procedure FilterAudio;
+    procedure FilterAudio(ASilent: Boolean = False);
     procedure NormalizeAudio;
   public
-    constructor Create(AProfileRef: TProfile; AScanFileName: String; ADefaultDPI: Integer = 2400; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 7; ADecoderGamma: Double = CDefaultGamma);
+    constructor Create(AProfileRef: TProfile; AScanFileName: String; ADefaultDPI: Integer = 2400; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 6; ADecoderGamma: Double = CDefaultGamma);
     destructor Destroy; override;
 
     procedure LoadScan;
@@ -90,6 +105,7 @@ type
     property DecoderGamma: Double read FDecoderGamma;
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
+    property OptimizeGamma: Boolean read FOptimizeGamma write FOptimizeGamma;
   end;
 
 implementation
@@ -102,6 +118,7 @@ begin
   FSampleRate := Max(8000, ASampleRate);
   FDecoderPrecision := EnsureRange(ADecoderPrecision, 1, CWavPrecision);
   FDecoderGamma := ADecoderGamma;
+  FOptimizeGamma := False;
 
   FPointsPerRevolution := Round(FSampleRate / FProfileRef.RevolutionsPerSecond);
   FRadiansPerRevolutionPoint := -Pi * 2.0 / FPointsPerRevolution;
@@ -158,15 +175,16 @@ begin
   end;
 end;
 
-procedure TScan2Track.InitDecodeContext(var context: TDecodeContext);
+procedure TScan2Track.InitDecodeContext(var AContext: TDecodeContext; const AParams: TDecodeParameters);
 begin
-  context.DecodeMax := 1 shl (Min(CWavPrecision, FDecoderPrecision shl 1) - Ord(FProfileRef.Mono));
-  SetLength(context.FSBuf, (context.DecodeMax shl 1) + 1);
+  AContext.Gamma := AParams.Gamma;
+  AContext.DecodeMax := 1 shl (Min(CWavPrecision, AParams.DecoderPrecision) - Ord(FProfileRef.Mono));
+  SetLength(AContext.FSBuf, (AContext.DecodeMax shl 1) + 1);
 end;
 
-procedure TScan2Track.FreeDecodeContext(var context: TDecodeContext);
+procedure TScan2Track.FreeDecodeContext(var AContext: TDecodeContext);
 begin
-  SetLength(context.FSBuf, 0);
+  SetLength(AContext.FSBuf, 0);
 end;
 
 function TScan2Track.DecodeSample_Work(radius, invRadius, prevInvRadius, angleSin, angleCos: Double): Double;
@@ -259,7 +277,7 @@ begin
 
     r := radius + (iSmp + 0.5) * lerp(geometry.RightCvt, geometry.LeftCvt, (iSmp - geometry.PosMin) * cvtLerpFactor);
     sample := FInputScan.GetPointD_Final(FInputScan.ProcessedImage, angleSin * r + cy, angleCos * r + cx);
-    sample := Power(sample * (1.0 / High(Word)), FDecoderGamma);
+    sample := Power(Max(sample * (1.0 / High(Word)), 0.0), context.Gamma);
 
     if InRange(iSmp, geometry.TrackMin, geometry.TrackMax) then
     begin
@@ -407,6 +425,13 @@ begin
   SetLength(FTrack, iSample);
 end;
 
+function TScan2Track.GetAudioSampleCount: Integer;
+begin
+  Result := Length(FAudio);
+  if not FProfileRef.Mono then
+    Result := Result shr 1;
+end;
+
 function TScan2Track.GetAudio(ATrackIdx: Integer): TPointD;
 begin
   if FProfileRef.Mono then
@@ -469,69 +494,123 @@ begin
   end;
 end;
 
-procedure TScan2Track.DecodeAudio;
+procedure TScan2Track.PrepareDecodeParameters(var AParams: TDecodeParameters; ADecodedTrackLength: Integer;
+  ASilent: Boolean; ADecoderPrecision: Integer; AGamma: Double);
+begin
+  SetLength(FAudio, ADecodedTrackLength * IfThen(FProfileRef.Mono, 1, 2));
+  AParams.Gamma := AGamma;
+  AParams.DecodedTrackLength := ADecodedTrackLength;
+  AParams.DecoderPrecision := ADecoderPrecision;
+  AParams.BlockSize := FSampleRate div 100;
+  AParams.BlockCount := (ADecodedTrackLength - 1) div AParams.BlockSize + 1;
+  AParams.Silent := ASilent;
+  AParams.StartTime := GetTickCount64;
+  AParams.SamplesDone := 0;
+  SpinLeave(@AParams.Lock);
+end;
+
+procedure TScan2Track.DoDecodeBlock(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
 var
-  lock: TSpinlock;
-  blockSize, blockCount, samplesDone: Integer;
-  startTime: QWord;
+  params: ^TDecodeParameters absolute AData;
+  iTrack, trackStart, trackEnd: Integer;
+  prevInvRadius: Double;
+  sample: TPointD;
+  context: TDecodeContext;
+  sncs: ^TSinCosD;
+begin
+  if not InRange(AIndex, 0, params^.BlockCount - 1) then
+    Exit;
 
-  procedure DoBlock(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
-  var
-    iTrack, trackStart, trackEnd: Integer;
-    prevInvRadius: Double;
-    sample: TPointD;
-    context: TDecodeContext;
-    sncs: ^TSinCosD;
-  begin
-    if not InRange(AIndex, 0, blockCount - 1) then
-      Exit;
+  InitDecodeContext(context, params^);
+  try
+    trackStart := AIndex * params^.BlockSize;
+    trackEnd := Min((AIndex + 1) * params^.BlockSize - 1, params^.DecodedTrackLength - 1);
 
-    InitDecodeContext(context);
-    try
-      trackStart := AIndex * blockSize;
-      trackEnd := Min((AIndex + 1) * blockSize - 1, High(FTrack));
-
-      for iTrack := trackStart to trackEnd do
-      begin
-        sncs := @FTrackSinCosLut[iTrack mod FPointsPerRevolution];
-        prevInvRadius := NaN;
-        if iTrack >= FPointsPerRevolution then
-          prevInvRadius := FTrack[iTrack - FPointsPerRevolution].Y;
-        sample := DecodeSample_Final(context, FTrack[iTrack].X, FTrack[iTrack].Y, prevInvRadius, sncs^.Sin, sncs^.Cos);
-        SetAudio(iTrack, sample);
-      end;
-
-      SpinEnter(@lock);
-      try
-        samplesDone += trackEnd - trackStart + 1;
-        Write(FormatDateTime(CTimeFormat, samplesDone / (FSampleRate * SecsPerDay)), ' / ',
-              FormatDateTime(CTimeFormat, Length(FTrack) / (FSampleRate * SecsPerDay)), ',',
-              DivDef(samplesDone / FSampleRate, (GetTickCount64 - startTime) * 0.001, 0.0):6:3, 'x',
-              #13);
-      finally
-        SpinLeave(@lock);
-      end;
-    finally
-      FreeDecodeContext(context);
+    for iTrack := trackStart to trackEnd do
+    begin
+      sncs := @FTrackSinCosLut[iTrack mod FPointsPerRevolution];
+      prevInvRadius := NaN;
+      if iTrack >= FPointsPerRevolution then
+        prevInvRadius := FTrack[iTrack - FPointsPerRevolution].Y;
+      sample := DecodeSample_Final(context, FTrack[iTrack].X, FTrack[iTrack].Y, prevInvRadius, sncs^.Sin, sncs^.Cos);
+      SetAudio(iTrack, sample);
     end;
 
+    if not params^.Silent then
+    begin
+      SpinEnter(@params^.Lock);
+      try
+        params^.SamplesDone += trackEnd - trackStart + 1;
+        Write(FormatDateTime(CTimeFormat, params^.SamplesDone / (FSampleRate * SecsPerDay)), ' / ',
+              FormatDateTime(CTimeFormat, params^.DecodedTrackLength / (FSampleRate * SecsPerDay)), ',',
+              DivDef(params^.SamplesDone / FSampleRate, (GetTickCount64 - params^.StartTime) * 0.001, 0.0):6:3, 'x',
+              #13);
+      finally
+        SpinLeave(@params^.Lock);
+      end;
+    end;
+  finally
+    FreeDecodeContext(context);
   end;
+end;
 
+function TScan2Track.GREvalDecodeGamma(arg: Double; obj: Pointer): Double;
+var
+  iSample: Integer;
+  params: ^TDecodeParameters absolute obj;
+begin
+  Result := 0.0;
+
+  if not InRange(arg, 0.1, 100.0) then
+    Exit(1e15);
+
+  params^.Gamma := arg;
+
+  ProcThreadPool.DoParallel(@DoDecodeBlock, 0, params^.BlockCount - 1, obj);
+
+  FilterAudio(True);
+
+  for iSample := 0 to GetAudioSampleCount - 1 do
+    Result += Sqr(GetMono(GetAudio(iSample)));
+
+  Write('Gamma:', arg:12:3, #13);
+end;
+
+procedure TScan2Track.FindBestGamma;
+const
+  CComputedSeconds = 30;
+var
+  gamma: Double;
+  params: TDecodeParameters;
+begin
+  WriteLn('FindBestGamma');
+
+  PrepareDecodeParameters(params, Min(Length(FTrack), FSampleRate * CComputedSeconds), True, FDecoderPrecision, NaN);
+
+  gamma := FDecoderGamma;
+  GoldenRatioMinimize(@GREvalDecodeGamma, gamma, CDefaultGamma, CDefaultGamma * cPhi, 1e-3, @params);
+  if InRange(gamma, 1.0, 50.0) then
+  begin
+    FDecoderGamma := gamma;
+    WriteLn('Gamma:', FDecoderGamma:12:3);
+  end
+  else
+  begin
+    WriteLn('Failed to optimize! (using fixed Gamma)');
+  end;
+end;
+procedure TScan2Track.DecodeAudio;
+var
+  params: TDecodeParameters;
 begin
   WriteLn('DecodeAudio');
 
-  SpinLeave(@lock);
-  samplesDone := 0;
-  blockSize := FSampleRate div 100;
-  blockCount := (Length(FTrack) - 1) div blockSize + 1;
-  SetLength(FAudio, Length(FTrack) * IfThen(FProfileRef.Mono, 1, 2));
-
-  startTime := GetTickCount64;
-  ProcThreadPool.DoParallelLocalProc(@DoBlock, 0, blockCount - 1);
+  PrepareDecodeParameters(params, Length(FTrack), False, FDecoderPrecision shl 1, FDecoderGamma);
+  ProcThreadPool.DoParallel(@DoDecodeBlock, 0, params.BlockCount - 1, @params);
   WriteLn;
 end;
 
-procedure TScan2Track.FilterAudio;
+procedure TScan2Track.FilterAudio(ASilent: Boolean);
 
   function FilterAndStuff(AFilter: TFilter; ASample: Double; ASampleIdx: Integer): Double;
   var
@@ -545,14 +624,15 @@ procedure TScan2Track.FilterAudio;
   end;
 
 var
-  iTrack: Integer;
+  iSample: Integer;
   grooveRadius, loSample: Double;
   sample: TPointD;
   fltSampleL, fltSampleR: TFilterIIRHPBessel;
   fltXHL, fltXHR: TFilterIIRHPBessel;
   fltXL: TFilterIIRLPBessel;
 begin
-  WriteLn('FilterAudio');
+  if not ASilent then
+    WriteLn('FilterAudio');
 
   fltSampleL := TFilterIIRHPBessel.Create(nil);
   fltSampleR := TFilterIIRHPBessel.Create(nil);
@@ -579,20 +659,20 @@ begin
 
     grooveRadius := FProfileRef.RecordingGrooveWidth * 0.5 * FInputScan.DPI;
 
-    for iTrack := 0 to High(FTrack) do
+    for iSample := 0 to GetAudioSampleCount - 1 do
     begin
-      sample := GetAudio(iTrack);
+      sample := GetAudio(iSample);
 
-      loSample := FilterAndStuff(fltXL, FTrack[iTrack].X / grooveRadius, iTrack);
-      sample.X := loSample + FilterAndStuff(fltXHL, sample.X, iTrack);
-      sample.Y := loSample + FilterAndStuff(fltXHR, sample.Y, iTrack);
+      loSample := FilterAndStuff(fltXL, FTrack[iSample].X / grooveRadius, iSample);
+      sample.X := loSample + FilterAndStuff(fltXHL, sample.X, iSample);
+      sample.Y := loSample + FilterAndStuff(fltXHR, sample.Y, iSample);
 
-      sample.X := FilterAndStuff(fltSampleL, sample.X, iTrack);
-      sample.Y := FilterAndStuff(fltSampleR, sample.Y, iTrack);
+      sample.X := FilterAndStuff(fltSampleL, sample.X, iSample);
+      sample.Y := FilterAndStuff(fltSampleR, sample.Y, iSample);
 
       sample := FilterRiaa(sample);
 
-      SetAudio(iTrack, sample);
+      SetAudio(iSample, sample);
     end;
   finally
     fltSampleL.Free;
@@ -621,6 +701,7 @@ end;
 procedure TScan2Track.Process;
 begin
   EvalTrack;
+  if FOptimizeGamma then FindBestGamma;
   DecodeAudio;
   FilterAudio;
   NormalizeAudio;

@@ -121,6 +121,7 @@ function herpXY(topleftPx: PWORD; stride: UInt64; alphaX, alphaY: Double): Doubl
 function herpXY_asm(topleftPx_rcx: PWORD; stride_rdx: UInt64; alphax_xmm2, alphay_xmm3: Double): Double; register; assembler;
 
 function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: Double; EpsilonX, EpsilonY: Double; Data: Pointer = nil): Double;
+function GoldenRatioMinimize(Func: TGRSEvalFunc; var X: Double; MinX, MaxX, Epsilon: Double; Data: Pointer = nil): Double;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: array of Double; EpsilonG: Double; MaxIter: Integer; Silent: Boolean; Data: Pointer = nil): Double;
 function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 function GridReduceMinimize(Func: TEvalFunc; var X: TDoubleDynArray; GridSize: array of Integer; GridExtents: array of Double; EpsilonReduce: Double; VerboseTag: String = ''; Data: Pointer = nil): Double;
@@ -165,7 +166,7 @@ procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFun
 function GetTIFFSize(AStream: TStream; out AWidth, AHeight: DWord; out dpiX, dpiY: Double): Boolean;
 
 implementation
-uses utypes, ubfgs, usimplex;
+uses utypes, ubfgs, usimplex, ugoldsrc;
 
 var
   GInvariantFormatSettings: TFormatSettings;
@@ -751,6 +752,29 @@ begin
       Result := GoldenRatioSearch(Func, MinX, x, ObjectiveY, EpsilonX, EpsilonY, Data);
   else
       Result := x;
+  end;
+end;
+
+threadvar
+  GGRData: Pointer;
+  GGRFunc: TGRSEvalFunc;
+
+  function GRX(X : Double) : Float;
+  begin
+    Result := GGRFunc(X, GGRData);
+  end;
+
+function GoldenRatioMinimize(Func: TGRSEvalFunc; var X: Double; MinX, MaxX, Epsilon: Double; Data: Pointer = nil): Double;
+begin
+  Result := Infinity;
+
+  GGRData := Data;
+  GGRFunc := Func;
+  try
+    GoldSearch(@GRX, MinX, MaxX, MaxInt, Epsilon, X, Result);
+  finally
+    GGRData := nil;
+    GGRFunc := nil;
   end;
 end;
 
