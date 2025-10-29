@@ -36,7 +36,8 @@ type
 
     X: TVector;
 
-    SinCosLUT: TSinCosDDynArray;
+    SinCosLUTD: TSinCosDDynArray;
+    SinCosLUTF: TSinCosFDynArray;
     PreparedDataD: TDoubleDynArray;
     PreparedDataW: TWordDynArray;
   end;
@@ -89,6 +90,7 @@ type
 
     function InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
     procedure PrepareCorrect(var coords: TCorrectCoords);
+    procedure FreeCorrect(var coords: TCorrectCoords);
     function GridSearchCorrect(const skew: TCorrectSkew; const coords: TCorrectCoords): UInt64;
     procedure GradientCorrect(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
     function CorrectGetRMSE(AGSObj: UInt64; const coords: TCorrectCoords): Double;
@@ -740,8 +742,8 @@ var
 
     if tmpCoords.BaseScanIdx <> tmpCoords.ScanIdx then
     begin
-      tmpCoords.SinCosLUT := nil;
-      BuildSinCosLUT(tmpCoords.AngleCnt, tmpCoords.sinCosLUT, tmpCoords.StartAngle + baseScan.RelativeAngle, NormalizedAngleDiff(tmpCoords.StartAngle, tmpCoords.EndAngle));
+      tmpCoords.SinCosLUTF := nil;
+      BuildSinCosLUT(tmpCoords.AngleCnt, tmpCoords.SinCosLUTF, tmpCoords.StartAngle + baseScan.RelativeAngle, NormalizedAngleDiff(tmpCoords.StartAngle, tmpCoords.EndAngle));
 
       objectives[AIndex] := CorrectGetRMSE(GridSearchCorrect(skew, tmpCoords), tmpCoords);
     end
@@ -862,7 +864,16 @@ begin
 
   // prepare iterations
 
-  BuildSinCosLUT(coords.AngleCnt, coords.sinCosLUT, coords.StartAngle + curScan.RelativeAngle, NormalizedAngleDiff(coords.StartAngle, coords.EndAngle));
+  BuildSinCosLUT(coords.AngleCnt, coords.SinCosLUTD, coords.StartAngle + curScan.RelativeAngle, NormalizedAngleDiff(coords.StartAngle, coords.EndAngle));
+  BuildSinCosLUT(coords.AngleCnt, coords.SinCosLUTF, coords.StartAngle + curScan.RelativeAngle, NormalizedAngleDiff(coords.StartAngle, coords.EndAngle));
+end;
+
+procedure TScanCorrelator.FreeCorrect(var coords: TCorrectCoords);
+begin
+  SetLength(coords.SinCosLUTD, 0);
+  SetLength(coords.SinCosLUTF, 0);
+  SetLength(coords.PreparedDataD, 0);
+  SetLength(coords.PreparedDataW, 0);
 end;
 
 function TScanCorrelator.GridSearchCorrect(const skew: TCorrectSkew; const coords: TCorrectCoords): UInt64;
@@ -870,8 +881,7 @@ var
   iRadius, iAngle: Integer;
   rsk, rBeg, rEnd, skx, sky, cx, cy: Double;
   sn, cs, px, py, cskx, csky: Single;
-  pLut: PDouble;
-  pRSk: PSingle;
+  pLut, pRSk: PSingle;
   pPrep: PWord;
   scan: TInputScan;
   skewedRadius: array[0 .. 2 * 64 * 1024 - 1] of Single;
@@ -907,7 +917,7 @@ begin
   // parse image arcs
 
   Result := 0;
-  pLut := @coords.SinCosLUT[0].Sin;
+  pLut := @coords.SinCosLUTF[0].Sin;
   pPrep := @coords.PreparedDataW[0];
   for iAngle := 0 to coords.AngleCnt - 1 do
   begin
@@ -961,8 +971,8 @@ begin
   cnt := 0;
   for iAngle := 0 to coords^.AngleCnt - 1 do
   begin
-    cs := coords^.SinCosLUT[iAngle].Cos;
-    sn := coords^.SinCosLUT[iAngle].Sin;
+    cs := coords^.SinCosLUTD[iAngle].Cos;
+    sn := coords^.SinCosLUTD[iAngle].Sin;
 
     for iRadius := 0 to coords^.RadiusCnt - 1 do
     begin
@@ -1060,52 +1070,51 @@ var
     if not IsNan(coords^.StartAngle) and not IsNan(coords^.EndAngle) then
     begin
       PrepareCorrect(coords^);
+      try
+        // prepare grid search iterations
 
-      // prepare grid search iterations
+        skew := ArgToSkew(coords^.X);
+        SetLength(gsData, (CMulHalfCount * 2 + 1) * (CConstHalfCount * 2 + 1));
 
-      skew := ArgToSkew(coords^.X);
-      SetLength(gsData, (CMulHalfCount * 2 + 1) * (CConstHalfCount * 2 + 1));
-
-      iGS := 0;
-      for iMul := -CMulHalfCount to CMulHalfCount do
-      begin
-        tmpSk := skew;
-        tmpSk.MulSkew := iMul * CMulExtents / CMulHalfCount;
-
-        for iConst := -CConstHalfCount to CConstHalfCount do
+        iGS := 0;
+        for iMul := -CMulHalfCount to CMulHalfCount do
         begin
-          tmpSk.ConstSkew := iConst * CConstExtents / CConstHalfCount * scan.DPI;
+          tmpSk := skew;
+          tmpSk.MulSkew := iMul * CMulExtents / CMulHalfCount;
 
-          gsData[iGS].Skew := tmpSk;
-          gsData[iGS].Objective := High(UInt64);
+          for iConst := -CConstHalfCount to CConstHalfCount do
+          begin
+            tmpSk.ConstSkew := iConst * CConstExtents / CConstHalfCount * scan.DPI;
 
-          Inc(iGS);
+            gsData[iGS].Skew := tmpSk;
+            gsData[iGS].Objective := High(UInt64);
+
+            Inc(iGS);
+          end;
         end;
+        Assert(iGS = Length(gsData));
+
+        // grid search iterations
+
+        ProcThreadPool.DoParallelLocalProc(@DoGS, 0, High(gsData));
+
+        // find best iteration
+
+        gsLoss := High(UInt64);
+        for iGS := 0 to High(gsData) do
+          if gsData[iGS].Objective < gsLoss then
+          begin
+            skew := gsData[iGS].Skew;
+            gsLoss := gsData[iGS].Objective;
+          end;
+        loss := CorrectGetRMSE(gsLoss, coords^);
+
+        coords^.X := SkewToArg(skew);
+
+        loss := Sqrt(LBFGSScaledMinimize(@GradientCorrect, coords^.X, [CConstExtents / CConstHalfCount * scan.DPI, CMulExtents / CMulHalfCount], 1e-12, 2, coords));
+      finally
+        FreeCorrect(coords^);
       end;
-      Assert(iGS = Length(gsData));
-
-      // grid search iterations
-
-      ProcThreadPool.DoParallelLocalProc(@DoGS, 0, High(gsData));
-
-      // find best iteration
-
-      gsLoss := High(UInt64);
-      for iGS := 0 to High(gsData) do
-        if gsData[iGS].Objective < gsLoss then
-        begin
-          skew := gsData[iGS].Skew;
-          gsLoss := gsData[iGS].Objective;
-        end;
-      loss := CorrectGetRMSE(gsLoss, coords^);
-
-      coords^.X := SkewToArg(skew);
-
-      loss := Sqrt(LBFGSScaledMinimize(@GradientCorrect, coords^.X, [CConstExtents / CConstHalfCount * scan.DPI, CMulExtents / CMulHalfCount], 1e-12, 2, coords));
-
-      // free up memory
-      SetLength(coords^.SinCosLUT, 0);
-      SetLength(coords^.PreparedDataD, 0);
 
       Write(InterlockedIncrement(doneCount):4, ' / ', validAngleCnt, #13);
     end;
