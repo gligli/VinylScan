@@ -93,7 +93,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>_DEBUG;_WINDOWS;_USRDLL;ALGLIBCPPVINYLSCAN_EXPORTS;%(PreprocessorDefinitions);AE_COMPILE_MINNS;AE_COMPILE_CORRELATIONTESTS;AE_COMPILE_MINLBFGS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;_USRDLL;ALGLIBCPPVINYLSCAN_EXPORTS;%(PreprocessorDefinitions);AE_COMPILE_MINNS;AE_COMPILE_MINLBFGS;AE_COMPILE_MINBC</PreprocessorDefinitions>
       <WarningLevel>Level3</WarningLevel>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
@@ -124,7 +124,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;_USRDLL;ALGLIBCPPVINYLSCAN_EXPORTS;%(PreprocessorDefinitions);AE_COMPILE_MINNS;AE_COMPILE_CORRELATIONTESTS;AE_COMPILE_MINLBFGS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;_USRDLL;ALGLIBCPPVINYLSCAN_EXPORTS;%(PreprocessorDefinitions);AE_COMPILE_MINNS;AE_COMPILE_MINLBFGS;AE_COMPILE_MINBC</PreprocessorDefinitions>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Full</Optimization>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
