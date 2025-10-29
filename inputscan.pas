@@ -212,7 +212,6 @@ procedure TInputScan.FindConcentricGroove_GridSearch;
 const
   CPointsPerRevolution = 512;
 var
-  extents: TRect;
   sinCosLUT: TSinCosDDynArray;
   mnRadius, mxRadius: Integer;
   stencil: TStencil;
@@ -243,8 +242,8 @@ var
         pyArr[vs, ilut] := round(sinCosLUT[iLut].Sin * (r + stencil.X[vs]))
       end;
 
-    for cy := extents.Top to extents.Bottom do
-      for cx := extents.Left to extents.Right do
+    for cy := FCenterExtents.Top to FCenterExtents.Bottom do
+      for cx := FCenterExtents.Left to FCenterExtents.Right do
       begin
         f := 0;
         for vs := Low(TValueSign) to High(TValueSign) do
@@ -283,9 +282,6 @@ begin
   BuildSinCosLUT(CPointsPerRevolution div 4, sinCosLUT, 0.0, Pi / 2.0);
 
   stencil := MakeStencil;
-
-  extents := FCenterExtents;
-  extents.Inflate(extents.Right - extents.CenterPoint.X, extents.Bottom - extents.CenterPoint.Y);
 
   X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius];
 
@@ -384,23 +380,23 @@ end;
 
 procedure TInputScan.FindConcentricGroove_Gradient;
 var
-  ff, mnCG, mxCG: Double;
+  ff, mnRadius, mxRadius: Double;
   meanSD: TPointD;
   X: TDoubleDynArray;
 begin
   BuildSinCosLUT(Ceil(Pi * FProfileRef.ConcentricGroove * FDPI), FSinCosLUT);
 
-  mnCG := FProfileRef.MinConcentricGroove * 0.5 * FDPI;
-  mxCG := FProfileRef.MaxConcentricGroove * 0.5 * FDPI;
-  meanSD := GetMeanSD(FProcessedImage, mnCG, mxCG, -Pi, Pi, 1.0);
+  mnRadius := FProfileRef.MinConcentricGroove * 0.5 * FDPI;
+  mxRadius := FProfileRef.MaxConcentricGroove * 0.5 * FDPI;
+  meanSD := GetMeanSD(FProcessedImage, mnRadius, mxRadius, -Pi, Pi, 1.0);
 
   X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius, 1.0];
 
   ff := BoxConstrainedScaledMinimize(@GradientConcentricGroove, X,
-          [FCenterExtents.Left, FCenterExtents.Top, mnCG, CScannerTolLo],
-          [FCenterExtents.Right, FCenterExtents.Bottom, mxCG, CScannerTolHi],
+          [FCenterExtents.Left, FCenterExtents.Top, mnRadius, CScannerTolLo],
+          [FCenterExtents.Right, FCenterExtents.Bottom, mxRadius, CScannerTolHi],
           [1.0, 1.0, 1.0, 1e-3],
-          1e-9, @meanSD);
+          1e-6, @meanSD);
 
   FCenter.X := X[0];
   FCenter.Y := X[1];
