@@ -384,17 +384,23 @@ end;
 
 procedure TInputScan.FindConcentricGroove_Gradient;
 var
-  ff: Double;
+  ff, mnCG, mxCG: Double;
   meanSD: TPointD;
   X: TDoubleDynArray;
 begin
   BuildSinCosLUT(Ceil(Pi * FProfileRef.ConcentricGroove * FDPI), FSinCosLUT);
 
-  meanSD := GetMeanSD(FProcessedImage, FProfileRef.MinConcentricGroove * 0.5 * FDPI, FProfileRef.MaxConcentricGroove * 0.5 * FDPI, -Pi, Pi, 1.0);
+  mnCG := FProfileRef.MinConcentricGroove * 0.5 * FDPI;
+  mxCG := FProfileRef.MaxConcentricGroove * 0.5 * FDPI;
+  meanSD := GetMeanSD(FProcessedImage, mnCG, mxCG, -Pi, Pi, 1.0);
 
   X := [FCenter.X, FCenter.Y, FConcentricGrooveRadius, 1.0];
 
-  ff := LBFGSScaledMinimize(@GradientConcentricGroove, X, [1.0, 1.0, 1.0, 1e-3], 1e-9, 4, @meanSD);
+  ff := BoxConstrainedScaledMinimize(@GradientConcentricGroove, X,
+          [FCenterExtents.Left, FCenterExtents.Top, mnCG, CScannerTolLo],
+          [FCenterExtents.Right, FCenterExtents.Bottom, mxCG, CScannerTolHi],
+          [1.0, 1.0, 1.0, 1e-3],
+          1e-9, @meanSD);
 
   FCenter.X := X[0];
   FCenter.Y := X[1];
