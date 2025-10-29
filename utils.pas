@@ -130,6 +130,7 @@ function LBFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon:
 function LBFGSScaledMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Scale: array of Double; Epsilon: Double = 1e-12; M: Integer = 5; Data: Pointer = nil): Double;
 function NonSmoothMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 function NonSmoothBoundedMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound: array of Double; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
+function BoxConstrainedScaledMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound, Scale: array of Double; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
 
 function PseudoHuber(x: Double): Double;
 function MAE(const a: TDoubleDynArray; const b: TDoubleDynArray): Double;
@@ -174,7 +175,7 @@ var
 
 function alglib_NonSmoothBoundedMinimize(Func: Pointer; n: Integer; X, LowBound, UpBound: PDouble; Epsilon, Radius, Penalty: Double; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
 function alglib_LBFGSMinimize(Func: Pointer; n: Integer; X, Scale: PDouble; Epsilon: Double; M: Integer; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
-function alglib_SpearmanRankCorrelation(X, Y: PDouble; n: Integer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
+function alglib_BoxConstrainedMinimize(Func: Pointer; n: Integer; X, LowBound, UpBound, Scale: PDouble; Epsilon: Double; Data: Pointer): Double; stdcall; external 'alglib-cpp-vinylscan.dll';
 
 procedure SpinEnter(Lock: PSpinLock); assembler;
 label spin_lock;
@@ -1065,6 +1066,41 @@ begin
     Result := alglib_NonSmoothBoundedMinimize(@NSFunc, Length(X), @X[0], @LowBound[0], @UpBound[0], Epsilon, 1e-3, 50.0, Data);
   finally
     GNSFunc := nil;
+  end;
+end;
+
+threadvar
+  GBCFunc: TGradientEvalFunc;
+
+  procedure BCFunc(n: Integer; arg: PDouble; func: PDouble; grad: PDouble; obj: Pointer);
+  var
+    i: Integer;
+    lfunc: Double;
+    larg: TDoubleDynArray;
+    lgrad: TDoubleDynArray;
+  begin
+    lfunc := NaN;
+    SetLength(larg, n);
+    SetLength(lgrad, n);
+    for i := 0 to n - 1 do
+      larg[i] := arg[i];
+
+    GBCFunc(larg, lfunc, lgrad, obj);
+
+    for i := 0 to n - 1 do
+      grad[i] := lgrad[i];
+
+    func^ := lfunc;
+  end;
+
+function BoxConstrainedScaledMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LowBound, UpBound,
+  Scale: array of Double; Epsilon: Double; Data: Pointer): Double;
+begin
+  GBCFunc := Func;
+  try
+    Result := alglib_BoxConstrainedMinimize(@BCFunc, Length(X), @X[0], @LowBound[0], @UpBound[0], @Scale[0], Epsilon, Data);
+  finally
+    GBCFunc := nil;
   end;
 end;
 
