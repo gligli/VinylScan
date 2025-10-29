@@ -451,7 +451,6 @@ begin
 
   C.Brush.Style := bsClear;
   C.Pen.Color := clRed;
-  C.Pen.Style := psDot;
 
   sk := AScan.Skew;
 
@@ -475,13 +474,19 @@ begin
   rax := Round(AScan.ProfileRef.AdapterSize * 0.5 * AScan.DPI * sk.X);
   ray := Round(AScan.ProfileRef.AdapterSize * 0.5 * AScan.DPI * sk.Y);
 
+  C.Pen.Style := psDot;
+
   C.Rectangle(cer);
+
+  C.Pen.Style := psSolid;
 
   C.Line(cx - 8, cy, cx + 9, cy);
   C.Line(cx, cy - 8, cx, cy + 9);
 
   C.Line(sx - 8, sy, sx + 9, sy);
   C.Line(sx, sy - 8, sx, sy + 9);
+
+  C.Pen.Style := psDashDot;
 
   C.EllipseC(cx, cy, rfx, rfy);
   C.EllipseC(cx, cy, rcx, rcy);
