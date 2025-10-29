@@ -1101,7 +1101,7 @@ var
 
       coords^.X := SkewToArg(skew);
 
-      loss := Sqrt(LBFGSScaledMinimize(@GradientCorrect, coords^.X, [CConstExtents / CConstHalfCount * scan.DPI, CMulExtents / CMulHalfCount], 0.0, 2, coords));
+      loss := Sqrt(LBFGSScaledMinimize(@GradientCorrect, coords^.X, [CConstExtents / CConstHalfCount * scan.DPI, CMulExtents / CMulHalfCount], 1e-12, 2, coords));
 
       // free up memory
       SetLength(coords^.SinCosLUT, 0);
