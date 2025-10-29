@@ -25,7 +25,6 @@ type
     bvGlob: TBevel;
     cbProfile: TComboBox;
     cbQSRatio: TComboBox;
-    chkOptGamma: TCheckBox;
     chkFixCIS: TCheckBox;
     chkDefaultDPI: TCheckBox;
     chkCorrect: TCheckBox;
@@ -112,7 +111,6 @@ begin
 
     s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, fn, StrToIntDef(cbDPI.Text, 2400), StrToIntDef(cbSR.Text, 48000), sePrec.Value, seGamma.Value);
     try
-      s2t.OptimizeGamma := chkOptGamma.Checked;
       s2t.OnSample := @OnSample;
       s2t.OutputWAVFileName := edOutputWAV.Text;
 
@@ -357,7 +355,6 @@ begin
     cbSR.Text := IntToStr(s2t.SampleRate);
     sePrec.Value := s2t.DecoderPrecision;
     seGamma.Value := s2t.DecoderGamma;
-    chkOptGamma.Checked := s2t.OptimizeGamma;
   finally
     s2t.Free;
     sc.Free;
