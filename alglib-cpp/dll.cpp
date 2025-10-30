@@ -46,7 +46,7 @@ extern "C"
     {
       minnssetbc(state, lb, ub);
     }
-    minnssetcond(state, Epsilon, 0);
+    minnssetcond(state, Epsilon, INT32_MAX);
     minnssetxrep(state, true);
     minnsoptimize(state, ns_jac, ns_frep, Data);
     minnsresults(state, x, rep);
@@ -93,7 +93,7 @@ extern "C"
       minlbfgssetscale(state, scl);
       minlbfgssetprecscale(state);
     }
-    minlbfgssetcond(state, 0.0, 0.0, Epsilon, 0);
+    minlbfgssetcond(state, 0.0, 0.0, Epsilon, INT32_MAX);
     minlbfgssetxrep(state, true);
     minlbfgsoptimize(state, lbfgs_grad, lbfgs_frep, Data);
     minlbfgsresults(state, x, rep);
@@ -152,7 +152,7 @@ extern "C"
       minbcsetscale(state, scl);
       minbcsetprecscale(state);
     }
-    minbcsetcond(state, 0.0, 0.0, Epsilon, 0);
+    minbcsetcond(state, 0.0, 0.0, Epsilon, INT32_MAX);
     minbcsetxrep(state, true);
     minbcoptimize(state, bc_grad, bc_frep, Data);
     minbcresults(state, x, rep);
