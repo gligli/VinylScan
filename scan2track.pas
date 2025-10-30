@@ -147,6 +147,7 @@ begin
     for iFilter := Low(FRiaaFilters) to High(FRiaaFilters) do
       FRiaaFilters[iFilter, stereoRight] := TRbjEqFilter.create(FSampleRate, 0);
 
+    // coeffs from https://www.diyaudio.com/community/threads/phono-preamp-riaa-eq-using-iir-digital-filters.353387/post-7059733
     FRiaaFilters[0, stereoRight].CalcFilterCoeffs(kHighShelf, 1031.990, 0.467, 12.570, False);
     FRiaaFilters[1, stereoRight].CalcFilterCoeffs(kPeaking, 37794.908, 0.559, 6.130, False);
   end;
