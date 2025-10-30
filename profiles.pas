@@ -127,7 +127,7 @@ begin
   if Result = 0 then
     Result := CompareValue(p1^.RevolutionsPerSecond, p2^.RevolutionsPerSecond);
   if Result = 0 then
-    Result := CompareValue(Ord(p2^.Mono), Ord(p1^.Mono));
+    Result := CompareValue(Ord(p1^.Mono), Ord(p2^.Mono));
 end;
 
 constructor TProfiles.Create(ADir: String);
