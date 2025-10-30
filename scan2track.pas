@@ -10,8 +10,8 @@ uses
 
 const
   CWavPrecision = 16;
-  CRadiusLoopbackLowCutoffFreq = 100.0;
-  CInvRadiusLoopbackLowCutoffFreq = 200.0;
+  CRadiusLoopbackLowCutoffFreq = 150.0;
+  CInvRadiusLoopbackLowCutoffFreq = 250.0;
   CLowCutoffFreq = 20.0;
   CTimeFormat = 'nn:ss.zzz';
 
@@ -36,7 +36,7 @@ type
 
   TScan2Track = class;
 
-  TSampleEvent = function(Sender: TScan2Track; Position, InvDecodePosition: TPointD; Percent: Double; Time: TTime; Finished: Boolean): Boolean of object;
+  TSampleEvent = function(Sender: TScan2Track; Position, InvDecodePosition: TPointD; Percent, Speed: Double; Time: TTime; Finished: Boolean): Boolean of object;
 
   { TScan2Track }
 
@@ -51,6 +51,8 @@ type
     FSampleRate: Integer;
     FDecoderPrecision: Integer;
     FDecoderGamma: Double;
+    FStatisticalDecodingSigma: Double;
+    FUseStatisticalDecoding: Boolean;
 
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
@@ -101,6 +103,8 @@ type
     property DecoderGamma: Double read FDecoderGamma;
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
+    property UseStatisticalDecoding: Boolean read FUseStatisticalDecoding write FUseStatisticalDecoding;
+    property StatisticalDecodingSigma: Double read FStatisticalDecodingSigma write FStatisticalDecodingSigma;
   end;
 
 implementation
@@ -113,6 +117,8 @@ begin
   FSampleRate := Max(8000, ASampleRate);
   FDecoderPrecision := EnsureRange(ADecoderPrecision, 1, CWavPrecision);
   FDecoderGamma := ADecoderGamma;
+  FUseStatisticalDecoding := False;
+  FStatisticalDecodingSigma := 2.0;
 
   FPointsPerRevolution := Round(FSampleRate / FProfileRef.RevolutionsPerSecond);
   FRadiansPerRevolutionPoint := -Pi * 2.0 / FPointsPerRevolution;
@@ -237,7 +243,7 @@ function TScan2Track.DecodeSample_Final(var context: TDecodeContext; radius, inv
   angleCos: Double): TPointD;
 var
   iSmp: Integer;
-  r, cx, cy, sample, sampleMiddle, sampleMin, sampleMax, newValue, quantError, cvtLerpFactor: Double;
+  r, cx, cy, sample, sampleMiddle, sampleStdDev, sampleMin, sampleMax, newValue, quantError, cvtLerpFactor: Double;
   geometry: TDecodeGeometry;
   pDec: PDouble;
   rt, up: Boolean;
@@ -265,8 +271,6 @@ begin
   pDec := @context.FSBuf[0];
   for iSmp := geometry.PosMin to geometry.PosMax do
   begin
-    rt := iSmp < 0;
-
     r := radius + (iSmp + 0.5) * lerp(geometry.RightCvt, geometry.LeftCvt, (iSmp - geometry.PosMin) * cvtLerpFactor);
     sample := FInputScan.GetPointD_Final(FInputScan.ProcessedImage, angleSin * r + cy, angleCos * r + cx);
 
@@ -277,6 +281,23 @@ begin
     Inc(pDec);
   end;
   sampleMiddle := (sampleMin + sampleMax) * 0.5;
+
+  // optionally devise min/max from mean/standard deviation
+
+  if FUseStatisticalDecoding then
+  begin
+    sampleStdDev := 0.0;
+    pDec := @context.FSBuf[0];
+    for iSmp := geometry.PosMin to geometry.PosMax do
+    begin
+      sample := pDec^;
+      sampleStdDev += Sqr(sample - sampleMiddle);
+      Inc(pDec);
+    end;
+    sampleStdDev := Sqrt(sampleStdDev / (geometry.PosMax - geometry.PosMin + 1)) * FStatisticalDecodingSigma;
+    sampleMin := sampleMiddle - sampleStdDev;
+    sampleMax := sampleMiddle + sampleStdDev;
+  end;
 
   // threshold-based decoding with noise shaping
 
@@ -325,8 +346,10 @@ procedure TScan2Track.EvalTrack;
 
 var
   iSample, iLut: Integer;
-  rOuter, sn, cs, fbRatio, invFbRatio, instantPct, maxPct, grooveRadius, radius, invRadius, invSample, rawSample: Double;
+  rOuter, sn, cs, fbRatio, invFbRatio, instantPct, maxPct, grooveRadius, radius, invRadius, invSample, rawSample, speed: Double;
   validSample: Boolean;
+  evalTime: TTime;
+  startTick: QWord;
   trackSample: TPointD;
   pxPos, invPxPos: TPointD;
   prevRadiuses: TPointDDynArray;
@@ -335,6 +358,7 @@ begin
 
   // init
 
+  startTick := GetTickCount64;
   trackSample.X := NaN;
   trackSample.Y := NaN;
   SetLength(FTrack, FSampleRate * 2);
@@ -396,7 +420,10 @@ begin
       instantPct := EnsureRange(1.0 - instantPct, 0.0, 1.0) * 100.0;
       maxPct := Max(maxPct, instantPct);
 
-      validSample := FOnSample(Self, pxPos, invPxPos, maxPct, iSample / (FSampleRate * SecsPerDay), not validSample) and validSample;
+      evalTime := iSample / (FSampleRate * SecsPerDay);
+      speed := DivDef(evalTime * MSecsPerDay, GetTickCount64 - startTick, 0.0);
+
+      validSample := FOnSample(Self, pxPos, invPxPos, maxPct, speed, evalTime, not validSample) and validSample;
 		end;
 
     // advance to next iteration

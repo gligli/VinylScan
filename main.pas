@@ -13,7 +13,7 @@ type
   { TMainForm }
 
   TMainForm = class(TForm)
-   btCancel: TButton;
+    btCancel: TButton;
     btInPNGs: TButton;
     btOutPNG: TButton;
     btInPNG: TButton;
@@ -25,6 +25,7 @@ type
     bvGlob: TBevel;
     cbProfile: TComboBox;
     cbQSRatio: TComboBox;
+    chkStatDec: TCheckBox;
     chkFixCIS: TCheckBox;
     chkDefaultDPI: TCheckBox;
     chkCorrect: TCheckBox;
@@ -37,6 +38,7 @@ type
     edOutputWAV: TEdit;
     ffProfile: TLabel;
     seGamma: TFloatSpinEdit;
+    seSigma: TFloatSpinEdit;
     Image: TImage;
     llGamma: TLabel;
     llQSRatio: TLabel;
@@ -70,10 +72,11 @@ type
     FReducRatio: Integer;
     FReducFactor: Double;
     FCancelling: Boolean;
-    FLastTickCountDraw, FLastTickCountRefresh: QWord;
+    FLastTickCountRefresh: QWord;
     FPoints: TPointValueList;
 
-    function OnSample(Sender: TScan2Track; pxPosition, InvDecodePosition: TPointD; Percent: Double; Time: TTime; Finished: Boolean): Boolean;
+    function OnSample(Sender: TScan2Track; pxPosition, InvDecodePosition: TPointD; Percent, Speed: Double; Time: TTime;
+      Finished: Boolean): Boolean;
   public
     procedure UnitTests;
 
@@ -111,6 +114,9 @@ begin
 
     s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, fn, StrToIntDef(cbDPI.Text, 2400), StrToIntDef(cbSR.Text, 48000), sePrec.Value, seGamma.Value);
     try
+      s2t.UseStatisticalDecoding := chkStatDec.Checked;
+      s2t.StatisticalDecodingSigma := seSigma.Value;
+
       s2t.OnSample := @OnSample;
       s2t.OutputWAVFileName := edOutputWAV.Text;
 
@@ -355,6 +361,8 @@ begin
     cbSR.Text := IntToStr(s2t.SampleRate);
     sePrec.Value := s2t.DecoderPrecision;
     seGamma.Value := s2t.DecoderGamma;
+    chkStatDec.Checked := s2t.UseStatisticalDecoding;
+    seSigma.Value := s2t.StatisticalDecodingSigma;
   finally
     s2t.Free;
     sc.Free;
@@ -381,7 +389,7 @@ begin
     end;
 end;
 
-function TMainForm.OnSample(Sender: TScan2Track; pxPosition, InvDecodePosition: TPointD; Percent: Double; Time: TTime;
+function TMainForm.OnSample(Sender: TScan2Track; pxPosition, InvDecodePosition: TPointD; Percent, Speed: Double; Time: TTime;
   Finished: Boolean): Boolean;
 const
   CPointsPerSample = 2;
@@ -408,12 +416,8 @@ begin
   begin
     DrawPoints(FPoints);
 
-    Write(Percent:6:2, '%, ',
-          FormatDateTime(CTimeFormat, Time), ',',
-          DivDef(FPoints.Count / (Sender.SampleRate * CPointsPerSample) * 1000.0, tc - FLastTickCountDraw, 0.0):6:3, 'x',
-          #13);
+    Write(Percent:6:2, '%, ', FormatDateTime(CTimeFormat, Time), ',', Speed:6:3, 'x', #13);
     pbS2T.Position := Round(Percent);
-    FLastTickCountDraw := tc;
 
     FPoints.Clear;
 
