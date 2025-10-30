@@ -84,7 +84,7 @@ type
     procedure FilterAudio;
     procedure NormalizeAudio;
   public
-    constructor Create(AProfileRef: TProfile; AScanFileName: String; ADefaultDPI: Integer = 2400; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 7; ADecoderGamma: Double = CDefaultGamma);
+    constructor Create(AProfileRef: TProfile; AScanFileName: String; ADefaultDPI: Integer = 2400; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 6; ADecoderGamma: Double = CDefaultGamma);
     destructor Destroy; override;
 
     procedure LoadScan;
@@ -249,7 +249,7 @@ begin
   Result.Y := 0.0;
   cx := FInputScan.Center.X;
   cy := FInputScan.Center.Y;
-  geometry := GetDecodeGeometry(radius, invRadius, prevInvRadius, context.DecodeMax, False);
+  geometry := GetDecodeGeometry(radius, invRadius, prevInvRadius, context.DecodeMax, True);
   cvtLerpFactor := 1.0 / (context.DecodeMax shl 1);
 
   // ensure decoding is not OOB of image
@@ -262,7 +262,6 @@ begin
 
   sampleMin := Infinity;
   sampleMax := -Infinity;
-
   pDec := @context.FSBuf[0];
   for iSmp := geometry.PosMin to geometry.PosMax do
   begin
@@ -271,11 +270,8 @@ begin
     r := radius + (iSmp + 0.5) * lerp(geometry.RightCvt, geometry.LeftCvt, (iSmp - geometry.PosMin) * cvtLerpFactor);
     sample := FInputScan.GetPointD_Final(FInputScan.ProcessedImage, angleSin * r + cy, angleCos * r + cx);
 
-    if InRange(iSmp, geometry.TrackMin, geometry.TrackMax) then
-    begin
-      sampleMin := Min(sampleMin, sample);
-      sampleMax := Max(sampleMax, sample);
-    end;
+    sampleMin := Min(sampleMin, sample);
+    sampleMax := Max(sampleMax, sample);
 
     pDec^ := sample;
     Inc(pDec);
