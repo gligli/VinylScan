@@ -92,7 +92,7 @@ type
     procedure PrepareCorrect(var coords: TCorrectCoords);
     procedure FreeCorrect(var coords: TCorrectCoords);
     function GridSearchCorrect(const skew: TCorrectSkew; const coords: TCorrectCoords): UInt64;
-    procedure GradientCorrect(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
+    function NelderMeadCorrect(const arg: TVector; obj: Pointer): TScalar;
     function CorrectGetRMSE(AGSObj: UInt64; const coords: TCorrectCoords): Double;
 
     procedure AngleInit;
@@ -936,26 +936,22 @@ begin
   end;
 end;
 
-procedure TScanCorrelator.GradientCorrect(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
+function TScanCorrelator.NelderMeadCorrect(const arg: TVector; obj: Pointer): TScalar;
 var
   coords: PCorrectCoords absolute obj;
-  cnt, iRadius, iAngle, iGrad: Integer;
-  r, rBeg, rEnd, skx, sky, sn, cs, px, py, cx, cy, rsk, mseInt, gimgx, gimgy, gInt, invCnt, gAcc: Double;
+  cnt, iRadius, iAngle: Integer;
+  r, rBeg, rEnd, skx, sky, sn, cs, px, py, cx, cy, rsk: Double;
   skew: TCorrectSkew;
   scan: TInputScan;
 begin
+  Result := 1e6;
   scan := FInputScans[coords^.ScanIdx];
-
-  func := 1e6;
-  if Assigned(grad) then
-    FillQWord(grad[0], Length(grad), 0);
-
-  skew := ArgToSkew(arg);
-
   cx := scan.Center.X;
   cy := scan.Center.Y;
   skx := scan.Skew.X;
   sky := scan.Skew.Y;
+
+  skew := ArgToSkew(arg);
 
   rBeg := FCorrectAreaBegin * 0.5 * scan.DPI;
   if not InRange(SkewRadius(rBeg, skew), rBeg * CScannerTolLo, rBeg * CScannerTolHi) then
@@ -967,7 +963,7 @@ begin
 
   // parse image arcs
 
-  func := 0.0;
+  Result := 0.0;
   cnt := 0;
   for iAngle := 0 to coords^.AngleCnt - 1 do
   begin
@@ -983,21 +979,7 @@ begin
       px := (cs * rsk + cx) * skx;
       py := (sn * rsk + cy) * sky;
 
-      mseInt := (coords^.PreparedDataD[cnt] - scan.GetPointD_Work(scan.ProcessedImage, py, px)) * (1.0 / High(Word));
-      func += Sqr(mseInt);
-
-      if Assigned(grad) then
-      begin
-        scan.GetGradientsD(scan.ProcessedImage, py, px, gimgy, gimgx);
-
-        gInt := -2.0 * mseInt * (1.0 / High(Word));
-
-        gAcc := (gimgx * cs * skx + gimgy * sn * sky) * gInt;
-        grad[0] += gAcc;
-
-        gAcc *= r;
-        grad[1] += gAcc;
-      end;
+      Result += Sqr(coords^.PreparedDataD[cnt] - scan.GetPointD_Work(scan.ProcessedImage, py, px));
 
       Inc(cnt);
     end;
@@ -1005,19 +987,7 @@ begin
 
   Assert(cnt = coords^.RadiusCnt * coords^.AngleCnt);
 
-  invCnt := 1.0 / cnt;
-
-  func *= invCnt;
-  if Assigned(grad) then
-    for iGrad := 0 to High(grad) do
-      grad[iGrad] *= invCnt;
-
-  //if Assigned(grad) then
-  //begin
-  //  WriteLn('ana ', func:16:9, arg[0]:16:9, arg[1]:16:9, grad[0]:16:9, grad[1]:16:9);
-  //  //GradientCorrectEst(arg, func, grad, obj);
-  //  //WriteLn('est ', func:16:9, arg[0]:16:9, arg[1]:16:9, grad[0]:16:9, grad[1]:16:9);
-  //end;
+  Result := Sqrt(Result / cnt) / High(Word);
 end;
 
 function TScanCorrelator.CorrectGetRMSE(AGSObj: UInt64; const coords: TCorrectCoords): Double;
@@ -1028,7 +998,7 @@ end;
 procedure TScanCorrelator.Correct;
 const
   CConstExtents = 0.02; // inches
-  CConstHalfCount = 32;
+  CConstHalfCount = 24;
   CMulExtents = 0.01;
   CMulHalfCount = 40;
 var
@@ -1111,7 +1081,11 @@ var
 
         coords^.X := SkewToArg(skew);
 
-        loss := Sqrt(LBFGSScaledMinimize(@GradientCorrect, coords^.X, [CConstExtents / CConstHalfCount * scan.DPI, CMulExtents / CMulHalfCount], 1e-12, 2, coords));
+        // finish with Nelder-Mead minimization
+
+        loss := NelderMeadMinimize(@NelderMeadCorrect, coords^.X,
+                  [CConstExtents / CConstHalfCount * scan.DPI, CMulExtents / CMulHalfCount],
+                  0.0, coords);
       finally
         FreeCorrect(coords^);
       end;
