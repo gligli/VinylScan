@@ -202,11 +202,16 @@ begin
 end;
 
 function TInputScan.MakeCropAngles(const arg: TDoubleDynArray): TCropAngles;
+const
+  CQuarterCrop = 60.0;
+var
+  qsz: Double;
 begin
-  Result.StartAngle := NormalizeAngle(arg[0]);
-  Result.EndAngle := NormalizeAngle(arg[1]);
-  Result.StartAngleMirror := NormalizeAngle(arg[2]);
-  Result.EndAngleMirror := NormalizeAngle(arg[3]);
+  qsz := DegToRad(CQuarterCrop);
+  Result.StartAngle := NormalizeAngle(arg[0] - qsz);
+  Result.EndAngle := NormalizeAngle(arg[0] + qsz);
+  Result.StartAngleMirror := NormalizeAngle(arg[1] - qsz);
+  Result.EndAngleMirror := NormalizeAngle(arg[1] + qsz);
 end;
 
 procedure TInputScan.FindConcentricGroove_GridSearch;
@@ -881,9 +886,6 @@ begin
 end;
 
 function TInputScan.NelderMeadCrop(const arg: TVector; obj: Pointer): TScalar;
-const
-  CMinCrop = 30.0;
-  CMaxCrop = 120.0;
 var
   data: ^TCropData absolute obj;
   iLut: Integer;
@@ -899,8 +901,8 @@ begin
 
   angles := MakeCropAngles(arg);
 
-  if not InRange(NormalizedAngleDiff(angles.StartAngle, angles.EndAngle), DegToRad(CMinCrop), DegToRad(CMaxCrop)) or
-     not InRange(NormalizedAngleDiff(angles.StartAngleMirror, angles.EndAngleMirror), DegToRad(CMinCrop), DegToRad(CMaxCrop)) then
+  if (NormalizedAngleDiff(angles.EndAngle, angles.StartAngleMirror) < 0.0) or
+     (NormalizedAngleDiff(angles.EndAngleMirror, angles.StartAngle) < 0.0) then
     Exit;
 
   cx := FCenter.X;
@@ -964,11 +966,11 @@ var
   X: TVector;
   data: TCropData;
 begin
-  X := [NormalizeAngle(DegToRad(-30.0)), NormalizeAngle(DegToRad(30.0)), NormalizeAngle(DegToRad(-30.0) + Pi), NormalizeAngle(DegToRad(30.0) + Pi)];
+  X := [0.0, Pi];
 
   data.RadiusAngleLut := RadiusAngleLut;
   data.SinCosLut := SinCosLut;
-  NelderMeadMinimize(@NelderMeadCrop, X, [DegToRad(1.0), DegToRad(1.0), DegToRad(1.0), DegToRad(1.0)], 1e-4, @data);
+  NelderMeadMinimize(@NelderMeadCrop, X, [DegToRad(1.0), DegToRad(1.0)], 1e-4, @data);
 
   FCropAngles := MakeCropAngles(X);
 end;
