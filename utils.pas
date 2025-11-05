@@ -160,7 +160,12 @@ procedure IncrementalSinCos(Angle: Double; var PrevAngle: Double; var ASinCos: T
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TSmallIntDynArray); overload;
 procedure CreateWAV(channels: word; resolution: word; rate: longint; fn: string; const data: TDoubleDynArray); overload;
 function GetMono(const ASample: TPointD): Double;
-function AdjustSample(const sample, meanSD: TPointD): TPointD;
+
+function ComputeDCTLut(chunkSz: Integer): TDoubleDynArray;
+function ComputeInvDCTLut(chunkSz: Integer): TDoubleDynArray;
+function ConvolveDCT(const samples, lut: TDoubleDynArray): TDoubleDynArray;
+generic procedure WaveletGS<T, PT>(Data: PT; Wavelet: PT; dim, depth: LongInt);
+generic procedure DeWaveletGS<T, PT>(Wavelet: PT; Data: PT; dim, depth: LongInt);
 
 procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFunction:TCompareFunction;AUserParameter:Pointer=nil);
 
@@ -1523,10 +1528,117 @@ begin
   Result := (ASample.X + ASample.Y) * 0.5;
 end;
 
-function AdjustSample(const sample, meanSD: TPointD): TPointD;
+function ComputeDCTLut(chunkSz: Integer): TDoubleDynArray;
+var
+  k, n, p: Integer;
+  s: Double;
 begin
-  Result.X := (sample.X - meanSD.X) * meanSD.Y;
-  Result.Y := -(sample.Y - meanSD.X) * meanSD.Y;
+  SetLength(Result, Sqr(chunkSz));
+  p := 0;
+  for k := 0 to chunkSz - 1 do
+  begin
+    s := ifthen(k = 0, sqrt(0.5), 1.0);
+    for n := 0 to chunkSz - 1 do
+    begin
+      Result[p] := s * cos(pi / chunkSz * (n + 0.5) * k) * sqrt (2.0 / chunkSz);
+      Inc(p);
+    end;
+  end;
+end;
+
+function ComputeInvDCTLut(chunkSz: Integer): TDoubleDynArray;
+var
+  k, n, p: Integer;
+begin
+  SetLength(Result, Sqr(chunkSz));
+  p := 0;
+  for k := 0 to chunkSz - 1 do
+  begin
+    Result[p] := sqrt(0.5) * sqrt (2.0 / chunkSz);
+    Inc(p);
+    for n := 1 to chunkSz - 1 do
+    begin
+      Result[p] := cos(pi / chunkSz * (k + 0.5) * n) * sqrt (2.0 / chunkSz);
+      Inc(p);
+    end;
+  end;
+end;
+
+function ConvolveDCT(const samples, lut: TDoubleDynArray): TDoubleDynArray;
+var
+  k, n, p, chunkSz: Integer;
+  acc: Double;
+begin
+  chunkSz := Length(samples);
+  SetLength(Result, chunkSz);
+  p := 0;
+  for k := 0 to chunkSz - 1 do
+  begin
+    acc := 0.0;
+    for n := 0 to chunkSz - 1 do
+    begin
+      acc += samples[n] * lut[p];
+      Inc(p);
+    end;
+    Result[k] := acc;
+  end;
+end;
+
+// from https://lists.freepascal.org/pipermail/fpc-announce/2006-September/000508.html
+generic procedure WaveletGS<T, PT>(Data: PT; Wavelet: PT; dim, depth: LongInt);
+var
+  x: LongInt;
+  dxoff: LongInt;
+  factor: T;
+  tempX: TDoubleDynArray;
+begin
+  SetLength(tempX, dim);
+
+  factor:=(1.0 / sqrt(2.0)); //Normalized Haar
+
+  ////
+
+  dxoff := dim div 2;
+  for x := 0 to dxoff - 1 do
+  begin
+    tempX[x]         := (Data[x * 2] + Data[x * 2 + 1]) * factor; //LOW-PASS
+    tempX[x + dxoff] := (Data[x * 2] - Data[x * 2 + 1]) * factor; //HIGH-PASS
+  end;
+
+  ////
+
+  Move(tempX[0], Wavelet[0], dim * sizeof(T)); //Copy to Wavelet
+
+  if depth > 0 then
+    specialize WaveletGS<T, PT>(Wavelet, Wavelet, dim div 2, depth - 1); //Repeat for SubDivisionDepth
+end;
+
+generic procedure DeWaveletGS<T, PT>(Wavelet: PT; Data: PT; dim, depth: LongInt);
+var
+  x: LongInt;
+  dxoff: LongInt;
+  factor: T;
+  tempX: TDoubleDynArray;
+begin
+  if depth>0 then
+    specialize DeWaveletGS<T, PT>(Wavelet, Wavelet, dim div 2, depth-1); //Repeat for SubDivisionDepth
+
+  SetLength(tempX, dim);
+
+  factor:=(1.0/sqrt(2.0)); //Normalized Haar
+
+  ////
+
+  dxoff := dim div 2;
+  for x := 0 to dxoff - 1 do
+  begin
+    tempX[x * 2]     := (Wavelet[x] + Wavelet[x + dxoff]) * factor; //LOW-PASS
+    tempX[x * 2 + 1] := (Wavelet[x] - Wavelet[x + dxoff]) * factor; //HIGH-PASS
+  end;
+
+  ////
+
+  Move(tempX[0], Data[0], dim * sizeof(T)); //Copy to Data
 end;
 
 procedure QuickSort(var AData;AFirstItem,ALastItem,AItemSize:Integer;ACompareFunction:TCompareFunction;AUserParameter:Pointer=nil);
