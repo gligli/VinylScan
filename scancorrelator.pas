@@ -1141,11 +1141,10 @@ begin
         baseCoords := @coordsArray[iasbase];
 
         if IsNan(baseCoords^.StartAngle) or IsNan(baseCoords^.EndAngle) then
-        begin
-          res := InitCorrect(baseCoords^, False);
-          Assert(res);
           Inc(validAngleCnt);
-        end;
+
+        res := InitCorrect(baseCoords^, False);
+        Assert(res);
       end;
     end;
 
