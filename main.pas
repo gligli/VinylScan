@@ -25,7 +25,7 @@ type
     bvGlob: TBevel;
     cbProfile: TComboBox;
     cbQSRatio: TComboBox;
-    chkStatDec: TCheckBox;
+    chkDenoise: TCheckBox;
     chkFixCIS: TCheckBox;
     chkDefaultDPI: TCheckBox;
     chkCorrect: TCheckBox;
@@ -38,7 +38,6 @@ type
     edOutputWAV: TEdit;
     ffProfile: TLabel;
     seGamma: TFloatSpinEdit;
-    seSigma: TFloatSpinEdit;
     Image: TImage;
     llGamma: TLabel;
     llQSRatio: TLabel;
@@ -114,8 +113,7 @@ begin
 
     s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, fn, StrToIntDef(cbDPI.Text, 2400), StrToIntDef(cbSR.Text, 48000), sePrec.Value, seGamma.Value);
     try
-      s2t.UseStatisticalDecoding := chkStatDec.Checked;
-      s2t.StatisticalDecodingSigma := seSigma.Value;
+      s2t.UseDenoiser := chkDenoise.Checked;
 
       s2t.OnSample := @OnSample;
       s2t.OutputWAVFileName := edOutputWAV.Text;
@@ -131,7 +129,10 @@ begin
       Application.ProcessMessages;
 
       if Trim(s2t.OutputWAVFileName) <> '' then
+      begin
         s2t.Save;
+        ShellExecute(0, 'open', PChar(s2t.OutputWAVFileName), '', '', SW_SHOW);
+      end;
 
       pbS2T.Position := pbS2T.Max;
       Application.ProcessMessages;
@@ -361,8 +362,7 @@ begin
     cbSR.Text := IntToStr(s2t.SampleRate);
     sePrec.Value := s2t.DecoderPrecision;
     seGamma.Value := s2t.DecoderGamma;
-    chkStatDec.Checked := s2t.UseStatisticalDecoding;
-    seSigma.Value := s2t.StatisticalDecodingSigma;
+    chkDenoise.Checked := s2t.UseDenoiser;
   finally
     s2t.Free;
     sc.Free;

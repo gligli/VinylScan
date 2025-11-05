@@ -9,11 +9,12 @@ uses
   utils, inputscan, profiles, Filter, FilterIIRLPBessel, FilterIIRHPBessel, filter_rbj;
 
 const
-  CWavPrecision = 16;
   CRadiusLoopbackLowCutoffFreq = 150.0;
   CInvRadiusLoopbackLowCutoffFreq = 250.0;
   CLowCutoffFreq = 20.0;
+
   CTimeFormat = 'nn:ss.zzz';
+  CWavPrecision = 16;
 
 type
   TDecodeParameters = record
@@ -25,11 +26,12 @@ type
 
   TDecodeContext = record
     DecodeMax: Integer;
-    FSBuf: TDoubleDynArray;
+    DecodeBuf: TDoubleDynArray;
+    SinCosLut: TSinCosDDynArray;
   end;
 
   TDecodeGeometry = record
-    LeftCvt, RightCvt: Double;
+    LeftCvt, RightCvt, MinCvt: Double;
     PosMin, PosMax: Integer;
     TrackMin, TrackMax: Integer;
   end;
@@ -51,8 +53,7 @@ type
     FSampleRate: Integer;
     FDecoderPrecision: Integer;
     FDecoderGamma: Double;
-    FStatisticalDecodingSigma: Double;
-    FUseStatisticalDecoding: Boolean;
+    FUseDenoiser: Boolean;
 
     FPointsPerRevolution: Integer;
     FRadiansPerRevolutionPoint: Double;
@@ -84,6 +85,7 @@ type
     procedure EvalTrack;
     procedure DecodeAudio;
     procedure FilterAudio;
+    procedure Denoise;
     procedure NormalizeAudio;
   public
     constructor Create(AProfileRef: TProfile; AScanFileName: String; ADefaultDPI: Integer = 2400; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 6; ADecoderGamma: Double = CDefaultGamma);
@@ -103,8 +105,7 @@ type
     property DecoderGamma: Double read FDecoderGamma;
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
-    property UseStatisticalDecoding: Boolean read FUseStatisticalDecoding write FUseStatisticalDecoding;
-    property StatisticalDecodingSigma: Double read FStatisticalDecodingSigma write FStatisticalDecodingSigma;
+    property UseDenoiser: Boolean read FUseDenoiser write FUseDenoiser;
   end;
 
 implementation
@@ -115,10 +116,10 @@ constructor TScan2Track.Create(AProfileRef: TProfile; AScanFileName: String; ADe
 begin
   FProfileRef := AProfileRef;
   FSampleRate := Max(8000, ASampleRate);
-  FDecoderPrecision := EnsureRange(ADecoderPrecision, 1, CWavPrecision);
+  FDecoderPrecision := EnsureRange(ADecoderPrecision, 1, 8);
   FDecoderGamma := ADecoderGamma;
-  FUseStatisticalDecoding := False;
-  FStatisticalDecodingSigma := 2.0;
+
+  FUseDenoiser := False;
 
   FPointsPerRevolution := Round(FSampleRate / FProfileRef.RevolutionsPerSecond);
   FRadiansPerRevolutionPoint := -Pi * 2.0 / FPointsPerRevolution;
@@ -178,13 +179,15 @@ end;
 
 procedure TScan2Track.InitDecodeContext(var AContext: TDecodeContext; const AParams: TDecodeParameters);
 begin
-  AContext.DecodeMax := 1 shl (Min(CWavPrecision, AParams.DecoderPrecision) - Ord(FProfileRef.Mono));
-  SetLength(AContext.FSBuf, (AContext.DecodeMax shl 1) + 1);
+  AContext.DecodeMax := 1 shl (AParams.DecoderPrecision - Ord(FProfileRef.Mono));
+  SetLength(AContext.DecodeBuf, Sqr((AContext.DecodeMax shl 1) + 1));
+  BuildSinCosLUT(1 shl (AParams.DecoderPrecision - 1), AContext.SinCosLut, FRadiansPerRevolutionPoint * 0.5, FRadiansPerRevolutionPoint);
 end;
 
 procedure TScan2Track.FreeDecodeContext(var AContext: TDecodeContext);
 begin
-  SetLength(AContext.FSBuf, 0);
+  SetLength(AContext.DecodeBuf, 0);
+  SetLength(AContext.SinCosLut, 0);
 end;
 
 function TScan2Track.DecodeSample_Work(radius, invRadius, prevInvRadius, angleSin, angleCos: Double): Double;
@@ -243,12 +246,16 @@ end;
 function TScan2Track.DecodeSample_Final(var context: TDecodeContext; radius, invRadius, prevInvRadius, angleSin,
   angleCos: Double): TPointD;
 var
-  iSmp: Integer;
-  r, cx, cy, sample, sampleMiddle, sampleStdDev, sampleMin, sampleMax, newValue, quantError, cvtLerpFactor: Double;
-  geometry: TDecodeGeometry;
-  pDec: PDouble;
+  iSmp, iAngle, angleStride, posMin, posMax: Integer;
+  r, px, py, cx, cy, cs, sn, snDec, csDec: Double;
+  sample, sampleMiddle, sampleMin, sampleMax, newValue, quantError: Double;
+  pSnCs, pDec: PDouble;
   rt, up: Boolean;
-  stats: array[Boolean] of Integer;
+  geometry: TDecodeGeometry;
+  stats: array[Boolean, Boolean] of record
+    Acc: Double;
+    Cnt: Integer;
+  end;
 begin
   // init
 
@@ -257,68 +264,78 @@ begin
   cx := FInputScan.Center.X;
   cy := FInputScan.Center.Y;
   geometry := GetDecodeGeometry(radius, invRadius, prevInvRadius, context.DecodeMax, True);
-  cvtLerpFactor := 1.0 / (context.DecodeMax shl 1);
 
   // ensure decoding is not OOB of image
 
   r := radius + context.DecodeMax * geometry.LeftCvt;
-  if not FInputScan.InRangePointD(angleSin * r + cy, angleCos * r + cx) then
+  px := angleCos * r + cx;
+  py := angleSin * r + cy;
+  if not FInputScan.InRangePointD(py, px) then
     Exit;
 
   // gather raw image samples
 
+  posMin := -context.DecodeMax;
+  posMax := context.DecodeMax - 1;
+  pDec := @context.DecodeBuf[0];
+  sampleMiddle := 0.0;
   sampleMin := Infinity;
   sampleMax := -Infinity;
-  pDec := @context.FSBuf[0];
-  for iSmp := geometry.PosMin to geometry.PosMax do
+  for iSmp := posMin to posMax do
   begin
-    r := radius + (iSmp + 0.5) * lerp(geometry.RightCvt, geometry.LeftCvt, (iSmp - geometry.PosMin) * cvtLerpFactor);
-    sample := FInputScan.GetPointD_Final(FInputScan.ProcessedImage, angleSin * r + cy, angleCos * r + cx);
+    r := radius + (iSmp + 0.5) * geometry.MinCvt;
+    pSnCs := @context.SinCosLut[0].Sin;
 
-    sampleMin := Min(sampleMin, sample);
-    sampleMax := Max(sampleMax, sample);
+    for iAngle := 1 to Length(context.SinCosLut) do
+    begin
+      snDec := pSnCs^; Inc(pSnCs);
+      csDec := pSnCs^; Inc(pSnCs);
 
-    pDec^ := sample;
+      cs := angleCos * csDec - angleSin * snDec;
+      sn := angleSin * csDec + angleCos * snDec;
+
+      sample := FInputScan.GetPointD_Final(FInputScan.ProcessedImage, sn * r + cy, cs * r + cx);
+
+      pDec^ := sample;
+      Inc(pDec);
+
+      sampleMiddle += sample;
+      sampleMin := Min(sampleMin, sample);
+      sampleMax := Max(sampleMax, sample);
+    end;
     Inc(pDec);
   end;
   sampleMiddle := (sampleMin + sampleMax) * 0.5;
 
-  // optionally devise min/max from mean/standard deviation
-
-  if FUseStatisticalDecoding then
-  begin
-    sampleStdDev := 0.0;
-    pDec := @context.FSBuf[0];
-    for iSmp := geometry.PosMin to geometry.PosMax do
-    begin
-      sample := pDec^;
-      sampleStdDev += Sqr(sample - sampleMiddle);
-      Inc(pDec);
-    end;
-    sampleStdDev := Sqrt(sampleStdDev / (geometry.PosMax - geometry.PosMin + 1)) * FStatisticalDecodingSigma;
-    sampleMin := sampleMiddle - sampleStdDev;
-    sampleMax := sampleMiddle + sampleStdDev;
-  end;
-
-  // threshold-based decoding with noise shaping
+  // threshold-based decoding with Floyd-Steinberg dithering
 
   FillChar(stats, SizeOf(stats), 0);
-  pDec := @context.FSBuf[0];
-  for iSmp := geometry.PosMin to geometry.PosMax do
+  angleStride := Length(context.SinCosLut) + 1;
+  pDec := @context.DecodeBuf[0];
+  for iSmp := posMin to posMax do
   begin
     rt := iSmp < 0;
-    sample := pDec^;
-    up := sample >= sampleMiddle;
 
-    // 1D noise shaping algorithm
-    newValue := sampleMin + Ord(up) * (sampleMax - sampleMin);
-    quantError := sample - newValue;
-    pDec^ := newValue;
-    pDec[1] += quantError;
+    for iAngle := 1 to Length(context.SinCosLut) do
+    begin
+      sample := pDec^;
 
-    if up then
-      Inc(stats[rt]);
+      up := sample >= sampleMiddle;
 
+      // Floyd-Steinberg algorithm
+      newValue := IfThen(up, sampleMax, sampleMin);
+      quantError := sample - newValue;
+      pDec^ := newValue;
+      pDec[            + 1] += quantError * (7 / 16);
+      pDec[angleStride - 1] += quantError * (3 / 16);
+      pDec[angleStride    ] += quantError * (5 / 16);
+      pDec[angleStride + 1] += quantError * (1 / 16);
+
+      stats[rt, up].Acc += iSmp + 0.5;
+      Inc(stats[rt, up].Cnt);
+
+      Inc(pDec);
+    end;
     Inc(pDec);
   end;
 
@@ -326,13 +343,16 @@ begin
 
   if FProfileRef.Mono then
   begin
-    Result.X := (stats[False] - stats[True]) / context.DecodeMax;
+    Result.X := DivDef(stats[False, True].Acc + stats[True, True].Acc, stats[False, True].Cnt + stats[True, True].Cnt, 0.0);
+    Result.X /= context.DecodeMax;
     Result.Y := Result.X;
   end
   else
   begin
-    Result.X := stats[False] / context.DecodeMax * 2.0 - 1.0;
-    Result.Y := -stats[True] / context.DecodeMax * 2.0 - 1.0;
+    Result.X := DivDef(stats[False, True].Acc, stats[False, True].Cnt, 0.0);
+    Result.Y := DivDef(stats[True, True].Acc, stats[True, True].Cnt, 0.0);
+    Result.X := Result.X / (context.DecodeMax * 0.5);
+    Result.Y := Result.Y / (context.DecodeMax * 0.5);
   end;
 end;
 
@@ -450,15 +470,24 @@ end;
 
 function TScan2Track.GetAudio(ATrackIdx: Integer): TPointD;
 begin
+  Result.X := 0.0;
+  Result.Y := 0.0;
+
   if FProfileRef.Mono then
   begin
-    Result.X := FAudio[ATrackIdx];
-    Result.Y := Result.X;
+    if ATrackIdx < Length(FAudio) then
+    begin
+      Result.X := FAudio[ATrackIdx];
+      Result.Y := Result.X;
+    end;
   end
   else
   begin
-    Result.X := FAudio[ATrackIdx * 2 + 0];
-    Result.Y := FAudio[ATrackIdx * 2 + 1];
+    if ATrackIdx * 2 < Length(FAudio) then
+    begin
+      Result.X := FAudio[ATrackIdx * 2 + 0];
+      Result.Y := FAudio[ATrackIdx * 2 + 1];
+    end;
   end;
 end;
 
@@ -466,12 +495,18 @@ procedure TScan2Track.SetAudio(ATrackIdx: Integer; const ASample: TPointD);
 begin
   if FProfileRef.Mono then
   begin
-    FAudio[ATrackIdx] := GetMono(ASample);
+    if ATrackIdx < Length(FAudio) then
+    begin
+      FAudio[ATrackIdx] := GetMono(ASample);
+    end;
   end
   else
   begin
-    FAudio[ATrackIdx * 2 + 0] := ASample.X;
-    FAudio[ATrackIdx * 2 + 1] := ASample.Y;
+    if ATrackIdx * 2 < Length(FAudio) then
+    begin
+      FAudio[ATrackIdx * 2 + 0] := ASample.X;
+      FAudio[ATrackIdx * 2 + 1] := ASample.Y;
+    end;
   end;
 end;
 
@@ -508,6 +543,8 @@ begin
     if pxExtents <> 0.0 then
       Result.TrackMax := round(grooveWidth / pxExtents * Result.PosMax);
   end;
+
+  Result.MinCvt := Min(Result.LeftCvt, Result.RightCvt);
 end;
 
 procedure TScan2Track.PrepareDecodeParameters(var AParams: TDecodeParameters; ADecodedTrackLength: Integer;
@@ -575,7 +612,7 @@ var
 begin
   WriteLn('DecodeAudio');
 
-  PrepareDecodeParameters(params, Length(FTrack), False, FDecoderPrecision shl 1);
+  PrepareDecodeParameters(params, Length(FTrack), False, FDecoderPrecision);
   ProcThreadPool.DoParallel(@DoDecodeBlock, 0, params.BlockCount - 1, @params);
   WriteLn;
 end;
@@ -652,6 +689,61 @@ begin
   end;
 end;
 
+procedure TScan2Track.Denoise;
+var
+  iBlk, iSmp, sz, cnt, depth: Integer;
+  blockL, blockR, noiseL, noiseR: TDoubleDynArray;
+  smp: TPointD;
+begin
+  WriteLn('Denoise');
+
+  sz := FPointsPerRevolution;
+  depth := Floor(Log2(sz));
+
+  SetLength(blockL, sz);
+  SetLength(blockR, sz);
+  SetLength(noiseL, sz);
+  SetLength(noiseR, sz);
+
+  for iSmp := 0 to sz - 1 do
+  begin
+    smp := GetAudio(iSmp);
+    noiseL[iSmp]:= smp.X;
+    noiseR[iSmp]:= smp.Y;
+  end;
+  specialize WaveletGS<Double, PDouble>(@noiseL[0], @noiseL[0], sz, depth);
+  specialize WaveletGS<Double, PDouble>(@noiseR[0], @noiseR[0], sz, depth);
+
+  cnt := (GetAudioSampleCount - 1) div sz + 1;
+
+  for iBlk := 0 to cnt - 1 do
+  begin
+    for iSmp := 0 to sz - 1 do
+    begin
+      smp := GetAudio(iBlk * sz + iSmp);
+      blockL[iSmp]:= smp.X;
+      blockR[iSmp]:= smp.Y;
+    end;
+    specialize WaveletGS<Double, PDouble>(@blockL[0], @blockL[0], sz, depth);
+    specialize WaveletGS<Double, PDouble>(@blockR[0], @blockR[0], sz, depth);
+
+    for iSmp := 0 to sz - 1 do
+    begin
+      blockL[iSmp] := Sign(blockL[iSmp]) * (Abs(blockL[iSmp]) - Abs(noiseL[iSmp]));
+      blockR[iSmp] := Sign(blockR[iSmp]) * (Abs(blockR[iSmp]) - Abs(noiseR[iSmp]));
+    end;
+
+    specialize DeWaveletGS<Double, PDouble>(@blockL[0], @blockL[0], sz, depth);
+    specialize DeWaveletGS<Double, PDouble>(@blockR[0], @blockR[0], sz, depth);
+    for iSmp := 0 to sz - 1 do
+    begin
+      smp.X := blockL[iSmp];
+      smp.Y := blockR[iSmp];
+      SetAudio(iBlk * sz + iSmp, smp);
+    end;
+  end;
+end;
+
 procedure TScan2Track.NormalizeAudio;
 var
   iAudio: Integer;
@@ -672,6 +764,7 @@ begin
   EvalTrack;
   DecodeAudio;
   FilterAudio;
+  if FUseDenoiser then Denoise;
   NormalizeAudio;
 end;
 
