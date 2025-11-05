@@ -240,7 +240,7 @@ begin
   acc.X := DivDef(acc.X - sampleMin, sampleMax - sampleMin, 0.5);
   acc.Y := DivDef(acc.Y - sampleMin, sampleMax - sampleMin, 0.5);
 
-  Result := acc.X - acc.Y;
+  Result := (acc.X - acc.Y) * 0.5;
 end;
 
 function TScan2Track.DecodeSample_Final(var context: TDecodeContext; radius, invRadius, prevInvRadius, angleSin,
