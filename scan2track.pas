@@ -18,7 +18,7 @@ const
 
 type
   TDecodeParameters = record
-    BlockSize, BlockCount, SamplesDone, DecodedTrackLength, DecoderPrecision: Integer;
+    BlockSize, BlockCount, SamplesDone, DecodedTrackLength, DecodeMax: Integer;
     StartTime: QWord;
     Silent: Boolean;
     Lock: TSpinlock;
@@ -116,7 +116,7 @@ constructor TScan2Track.Create(AProfileRef: TProfile; AScanFileName: String; ADe
 begin
   FProfileRef := AProfileRef;
   FSampleRate := Max(8000, ASampleRate);
-  FDecoderPrecision := EnsureRange(ADecoderPrecision, 1, 8);
+  FDecoderPrecision := EnsureRange(ADecoderPrecision, 0, 10);
   FDecoderGamma := ADecoderGamma;
 
   FUseDenoiser := False;
@@ -179,9 +179,9 @@ end;
 
 procedure TScan2Track.InitDecodeContext(var AContext: TDecodeContext; const AParams: TDecodeParameters);
 begin
-  AContext.DecodeMax := 1 shl (AParams.DecoderPrecision - Ord(FProfileRef.Mono));
+  AContext.DecodeMax := AParams.DecodeMax;
   SetLength(AContext.DecodeBuf, Sqr((AContext.DecodeMax shl 1) + 1));
-  BuildSinCosLUT(1 shl (AParams.DecoderPrecision - 1), AContext.SinCosLut, FRadiansPerRevolutionPoint * 0.5, FRadiansPerRevolutionPoint);
+  BuildSinCosLUT(AContext.DecodeMax, AContext.SinCosLut, FRadiansPerRevolutionPoint * 0.5, FRadiansPerRevolutionPoint);
 end;
 
 procedure TScan2Track.FreeDecodeContext(var AContext: TDecodeContext);
@@ -202,7 +202,7 @@ begin
   Result := 0.0;
   cx := FInputScan.Center.X;
   cy := FInputScan.Center.Y;
-  decodeMax := 1 shl FDecoderPrecision;
+  decodeMax := 1 shl (FDecoderPrecision + 1);
   geometry := GetDecodeGeometry(radius, invRadius, prevInvRadius, decodeMax, True);
 
   // ensure decoding is not OOB of image
@@ -213,12 +213,16 @@ begin
 
   // image depth based decoding
 
-  sampleMin := Infinity;
+  r := radius + decodeMax * geometry.LeftCvt;
+  sampleMin := FInputScan.GetPointD_Work(FInputScan.ProcessedImage, angleSin * r + cy, angleCos * r + cx);
+  r := radius - decodeMax * geometry.RightCvt;
+  sampleMin := Min(sampleMin, FInputScan.GetPointD_Work(FInputScan.ProcessedImage, angleSin * r + cy, angleCos * r + cx));
+
   sampleMax := FInputScan.GetPointD_Work(FInputScan.ProcessedImage, angleSin * radius + cy, angleCos * radius + cx);
 
   acc.X := 0.0;
   acc.Y := 0.0;
-  for iSmp := 1 to decodeMax do
+  for iSmp := 1 to decodeMax - 1 do
   begin
     r := radius + iSmp * geometry.LeftCvt;
     sample := FInputScan.GetPointD_Work(FInputScan.ProcessedImage, angleSin * r + cy, angleCos * r + cx);
@@ -232,8 +236,8 @@ begin
     sampleMax := Max(sampleMax, sample);
     acc.Y += sample;
   end;
-  acc.X /= decodeMax;
-  acc.Y /= decodeMax;
+  acc.X /= decodeMax - 1;
+  acc.Y /= decodeMax - 1;
 
   // finish decode
 
@@ -252,10 +256,7 @@ var
   pSnCs, pDec: PDouble;
   rt, up: Boolean;
   geometry: TDecodeGeometry;
-  stats: array[Boolean, Boolean] of record
-    Acc: Double;
-    Cnt: Integer;
-  end;
+  stats: array[Boolean] of Integer;
 begin
   // init
 
@@ -278,7 +279,6 @@ begin
   posMin := -context.DecodeMax;
   posMax := context.DecodeMax - 1;
   pDec := @context.DecodeBuf[0];
-  sampleMiddle := 0.0;
   sampleMin := Infinity;
   sampleMax := -Infinity;
   for iSmp := posMin to posMax do
@@ -299,7 +299,6 @@ begin
       pDec^ := sample;
       Inc(pDec);
 
-      sampleMiddle += sample;
       sampleMin := Min(sampleMin, sample);
       sampleMax := Max(sampleMax, sample);
     end;
@@ -331,8 +330,7 @@ begin
       pDec[angleStride    ] += quantError * (5 / 16);
       pDec[angleStride + 1] += quantError * (1 / 16);
 
-      stats[rt, up].Acc += iSmp + 0.5;
-      Inc(stats[rt, up].Cnt);
+      Inc(stats[rt], Ord(up));
 
       Inc(pDec);
     end;
@@ -341,19 +339,9 @@ begin
 
   // finish decode
 
-  if FProfileRef.Mono then
-  begin
-    Result.X := DivDef(stats[False, True].Acc + stats[True, True].Acc, stats[False, True].Cnt + stats[True, True].Cnt, 0.0);
-    Result.X /= context.DecodeMax;
-    Result.Y := Result.X;
-  end
-  else
-  begin
-    Result.X := DivDef(stats[False, True].Acc, stats[False, True].Cnt, 0.0);
-    Result.Y := DivDef(stats[True, True].Acc, stats[True, True].Cnt, 0.0);
-    Result.X := Result.X / (context.DecodeMax * 0.5);
-    Result.Y := Result.Y / (context.DecodeMax * 0.5);
-  end;
+  Result.X := DivDef(stats[False], (context.DecodeMax shl 1) * Length(context.SinCosLut), 0.0) * 2.0 - 1.0;
+  Result.Y := DivDef(stats[True], (context.DecodeMax shl 1) * Length(context.SinCosLut), 0.0) * 2.0 - 1.0;
+  Result.Y := -Result.Y;
 end;
 
 procedure TScan2Track.EvalTrack;
@@ -552,7 +540,7 @@ procedure TScan2Track.PrepareDecodeParameters(var AParams: TDecodeParameters; AD
 begin
   SetLength(FAudio, ADecodedTrackLength * IfThen(FProfileRef.Mono, 1, 2));
   AParams.DecodedTrackLength := ADecodedTrackLength;
-  AParams.DecoderPrecision := ADecoderPrecision;
+  AParams.DecodeMax := 1 shl ADecoderPrecision;
   AParams.BlockSize := FSampleRate div 100;
   AParams.BlockCount := (ADecodedTrackLength - 1) div AParams.BlockSize + 1;
   AParams.Silent := ASilent;
