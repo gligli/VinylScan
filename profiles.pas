@@ -30,6 +30,7 @@ type
     FAdapterSize: Double;
     FMono: Boolean;
     FCorrectAngleCount: Integer;
+    FCorrectCoordinateCount: Integer;
 
   public
     constructor Create(AFN: String);
@@ -52,6 +53,7 @@ type
     property AdapterSize: Double              read FAdapterSize;
     property Mono: Boolean                    read FMono;
     property CorrectAngleCount: Integer       read FCorrectAngleCount;
+    property CorrectCoordinateCount: Integer  read FCorrectCoordinateCount;
   end;
 
   TProfileArray = array of TProfile;
@@ -111,6 +113,7 @@ begin
 
     FMono                     := ini.ReadBool(CSection, 'Mono', True);
     FCorrectAngleCount        := ini.ReadInteger(CSection, 'CorrectAngleCount', 36);
+    FCorrectCoordinateCount   := ini.ReadInteger(CSection, 'CorrectCoordinateCount', 4);
   finally
     ini.Free;
   end;
