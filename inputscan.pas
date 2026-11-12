@@ -1314,7 +1314,7 @@ end;
 
 function TInputScan.InRangePointD(Y, X: Double): Boolean;
 begin
-  Result := InRange(Y, -Low(TSerpCoeffs9), Height + Low(TSerpCoeffs9) - 2) and InRange(X, -Low(TSerpCoeffs9), Height + Low(TSerpCoeffs9) - 2);
+  Result := InRange(Y, -Low(TSerpCoeffs9), Height + Low(TSerpCoeffs9) - 2) and InRange(X, -Low(TSerpCoeffs9), Width + Low(TSerpCoeffs9) - 2);
 end;
 
 function TInputScan.GetPointD_Work(const Image: TWordDynArray; Y, X: Double): Double;
@@ -1385,30 +1385,31 @@ begin
   //WriteLn(Result.X:16:6, Result.Y:16:6);
 end;
 
-procedure TInputScan.GetGradientsD(const Image: TWordDynArray; Y, X: Double; out GY: Double; out GX: Double);
-const
-  CH = 0.25;
+procedure TInputScan.GetGradientsD(const Image: TWordDynArray;
+  Y, X: Double; out GY: Double; out GX: Double);
 var
-  iFD: Integer;
-  lgx, lgy, fdx, fdy: Double;
+  ix, iy, idx: Integer;
+  fx, fy: Double;
+  p00, p10, p01, p11: Double;
 begin
-  lgx := 0.0;
-  lgy := 0.0;
+  ix := Trunc(X);
+  iy := Trunc(Y);
 
-  for iFD := Low(CFiniteDifferencesYFactor) to High(CFiniteDifferencesYFactor) do
-  begin
-    if iFD = 0 then
-      Continue;
+  fx := X - ix;
+  fy := Y - iy;
 
-    fdx := iFD * CH;
-    fdy := CFiniteDifferencesYFactor[iFD] / CH;
+  idx := iy * FWidth + ix;
 
-    lgx += GetPointD_Work(Image, y, x + fdx) * fdy;
-    lgy += GetPointD_Work(Image, y + fdx, x) * fdy;
-  end;
+  p00 := Image[idx];
+  p10 := Image[idx + 1];
+  p01 := Image[idx + FWidth];
+  p11 := Image[idx + FWidth + 1];
 
-  GX := lgx;
-  GY := lgy;
+  GX := (p10 - p00) * (1.0 - fy)
+      + (p11 - p01) * fy;
+
+  GY := (p01 - p00) * (1.0 - fx)
+      + (p11 - p10) * fx;
 end;
 
 procedure TInputScan.AddCorrectRef(AngleIdx, ScanIdx: Integer);
