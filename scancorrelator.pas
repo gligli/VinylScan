@@ -86,7 +86,7 @@ type
     function SkewToArg(const skew: TCorrectSkew): TVector;
 
     function PrepareAlign: TDoubleDynArray;
-    function NelderMeadAlign(const arg: TVector; obj: Pointer): TScalar;
+    procedure GradientAlign(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
 
     function InitCorrect(var coords: TCorrectCoords; AReduceAngles: Boolean): Boolean;
     procedure PrepareCorrect(var coords: TCorrectCoords);
@@ -408,31 +408,64 @@ begin
   end;
 end;
 
-function TScanCorrelator.NelderMeadAlign(const arg: TVector; obj: Pointer): TScalar;
+procedure TScanCorrelator.GradientAlign(const arg: TDoubleDynArray;
+  var func: Double; grad: TDoubleDynArray; obj: Pointer);
 var
   coords: PAlignCoords absolute obj;
-
-  radiusCnt, angleCnt: Integer;
-  sinCosLUT: TSinCosDDynArray;
   scan: TInputScan;
-  rBeg, rEnd, cx, cy, skx, sky, ri: Double;
-  results: TDoubleDynArray;
+  img: TWordDynArray;
+  sinCosLUT: TSinCosDDynArray;
+  angleCnt, radiusCnt, cnt: Integer;
+  pos, iRadius, iAngle, iScan: Integer;
+  t, cx, cy, skx, sky: Double;
+  rBeg, rEnd, ri, r, cs, sn: Double;
+  px, py, imgInt, mseInt: Double;
+  imgGx, imgGy: Double;
+  dpx, dpy: Double;
+  sumSq, sumG0, sumG1, sumG2, sumG3, sumG4: Double;
+  scale, invNorm: Double;
+begin
+  scan := FInputScans[coords^.ScanIdx];
 
-  procedure DoSpiral(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
-  var
-    iAngle, pos: Integer;
-    px, py, r, sn, cs, funcAcc, imgInt, mseInt: Double;
-    img: TWordDynArray;
+  img := scan.Image;
+  if FAlignOnBlurred then
+    img := scan.ProcessedImage;
+
+  rBeg := FAlignAreaBegin * 0.5 * scan.DPI;
+  rEnd := FAlignAreaEnd * 0.5 * scan.DPI;
+
+  angleCnt := Ceil(rEnd * 2.0 * Pi * FQualitySpeedRatio);
+  radiusCnt := Ceil(FAlignAreaWidth * scan.DPI);
+  cnt := radiusCnt * angleCnt;
+
+  ri := 1.0 / angleCnt;
+
+  t := arg[0];
+  cx := arg[1];
+  cy := arg[2];
+  skx := arg[3];
+  sky := arg[4];
+
+  func := 1e6;
+  if Assigned(grad) then
+    FillQWord(grad[0], Length(grad), 0);
+
+  if not scan.InRangePointD(cy - rEnd * sky, cx - rEnd * skx) or
+     not scan.InRangePointD(cy + rEnd * sky, cx + rEnd * skx) then
+    Exit;
+
+  BuildSinCosLUT(angleCnt, sinCosLUT, t);
+
+  sumSq := 0.0;
+  sumG0 := 0.0;
+  sumG1 := 0.0;
+  sumG2 := 0.0;
+  sumG3 := 0.0;
+  sumG4 := 0.0;
+
+  for iRadius := 0 to radiusCnt - 1 do
   begin
-    if not InRange(AIndex, 0, radiusCnt - 1) then
-      Exit;
-
-    img := scan.Image;
-    if FAlignOnBlurred then
-      img := scan.ProcessedImage;
-
-    pos := AIndex * angleCnt;
-    funcAcc := 0.0;
+    pos := iRadius * angleCnt;
 
     for iAngle := 0 to angleCnt - 1 do
     begin
@@ -444,52 +477,57 @@ var
       px := (cs * r + cx) * skx;
       py := (sn * r + cy) * sky;
 
-      imgInt := (scan.GetPointD_Work(img, py, px) - coords^.MeanSD.X) * coords^.MeanSD.Y;
+      imgInt := (scan.GetPointD_Work(img, py, px) -
+        coords^.MeanSD.X) * coords^.MeanSD.Y;
+
       mseInt := coords^.PreparedData[pos] - imgInt;
-      funcAcc += Sqr(mseInt);
+      sumSq += Sqr(mseInt);
+
+      if Assigned(grad) then
+      begin
+        scan.GetGradientsD(img, py, px, imgGy, imgGx);
+
+        scale := coords^.MeanSD.Y * mseInt;
+
+        // Angle
+        dpx := -sn * r * skx;
+        dpy :=  cs * r * sky;
+        sumG0 -= scale * (imgGx * dpx + imgGy * dpy);
+
+        // Center X
+        sumG1 -= scale * imgGx * skx;
+
+        // Center Y
+        sumG2 -= scale * imgGy * sky;
+
+        // Skew X
+        sumG3 -= scale * imgGx * (cs * r + cx);
+
+        // Skew Y
+        sumG4 -= scale * imgGy * (sn * r + cy);
+      end;
 
       Inc(pos);
     end;
-
-    results[AIndex] := funcAcc;
   end;
 
-var
-  iRes, iScan, cnt: Integer;
-  t: Double;
-begin
-  scan := FInputScans[coords^.ScanIdx];
+  func := Sqrt(sumSq / cnt);
 
-  rBeg := FAlignAreaBegin * 0.5 * scan.DPI;
-  rEnd := FAlignAreaEnd * 0.5 * scan.DPI;
+  if Assigned(grad) then
+  begin
+    if func > 0.0 then
+    begin
+      invNorm := 1.0 / (cnt * func);
 
-  angleCnt := Ceil(rEnd * 2.0 * Pi * FQualitySpeedRatio);
-  radiusCnt := Ceil(FAlignAreaWidth * scan.DPI);
+      grad[0] := sumG0 * invNorm;
+      grad[1] := sumG1 * invNorm;
+      grad[2] := sumG2 * invNorm;
+      grad[3] := sumG3 * invNorm;
+      grad[4] := sumG4 * invNorm;
+    end;
+  end;
 
-  ri := 1.0 / angleCnt;
-
-  t := arg[0];
-  cx := arg[1];
-  cy := arg[2];
-  skx := arg[3];
-  sky := arg[4];
-
-  if not scan.InRangePointD(cy - rEnd * sky, cx - rEnd * skx) or not scan.InRangePointD(cy + rEnd * sky, cx + rEnd * skx) then
-    Exit(1e6);
-
-  BuildSinCosLUT(angleCnt, sinCosLUT, t);
-
-  SetLength(results, radiusCnt);
-  ProcThreadPool.DoParallelLocalProc(@DoSpiral, 0, radiusCnt - 1);
-
-  cnt := radiusCnt * angleCnt;
-  Result := 0;
-  for iRes := 0 to high(results) do
-    Result += results[iRes];
-  Result /= cnt;
-  Result := Sqrt(Result);
-
-  scan.Objective := Min(scan.Objective, Result);
+  scan.Objective := Min(scan.Objective, func);
 
   SpinEnter(@FLock);
   try
@@ -518,6 +556,7 @@ var
   var
     coords: TAlignCoords;
     X: TVector;
+    obj: Double;
     scan: TInputScan;
     img: TWordDynArray;
   begin
@@ -538,10 +577,12 @@ var
 
     FAlignStates[AIndex] := 'Work';
     X := [scan.RelativeAngle, scan.Center.X, scan.Center.Y, scan.Skew.X, scan.Skew.Y];
-    NelderMeadMinimize(@NelderMeadAlign, X, [DegToRad(1.0), 0.02 * scan.DPI, 0.02 * scan.DPI, 0.001, 0.001], 1e-6, @coords);
+    LBFGSScaledMinimize(@GradientAlign, X, [DegToRad(1.0), 0.02 * scan.DPI, 0.02 * scan.DPI, 0.001, 0.001], 1e-6, 5, @coords);
 
     FAlignStates[AIndex] := 'Done';
-    scan.Objective := NelderMeadAlign(X, @coords);
+    obj := NaN;
+    GradientAlign(X, obj, nil, @coords);
+    scan.Objective := obj;
     scan.CorrectByModel(X[0], X[1], X[2], X[3], X[4]);
   end;
 
