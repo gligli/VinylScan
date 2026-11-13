@@ -92,7 +92,7 @@ type
     procedure PrepareCorrect(var coords: TCorrectCoords);
     procedure FreeCorrect(var coords: TCorrectCoords);
     function GridSearchCorrect(const skew: TCorrectSkew; const coords: TCorrectCoords): UInt64;
-    function NelderMeadCorrect(const arg: TVector; obj: Pointer): TScalar;
+    procedure GradientCorrect(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
     function CorrectGetRMSE(AGSObj: UInt64; const coords: TCorrectCoords): Double;
 
     procedure AngleInit;
@@ -577,7 +577,9 @@ var
 
     FAlignStates[AIndex] := 'Work';
     X := [scan.RelativeAngle, scan.Center.X, scan.Center.Y, scan.Skew.X, scan.Skew.Y];
-    LBFGSScaledMinimize(@GradientAlign, X, [DegToRad(1.0), 0.02 * scan.DPI, 0.02 * scan.DPI, 0.001, 0.001], 1e-6, 5, @coords);
+    BFGSScaledMinimize(@GradientAlign, X,
+      [DegToRad(1.0), 0.02 * scan.DPI, 0.02 * scan.DPI, 0.001, 0.001],
+      1e-6, @coords);
 
     FAlignStates[AIndex] := 'Done';
     obj := NaN;
@@ -977,35 +979,63 @@ begin
   end;
 end;
 
-function TScanCorrelator.NelderMeadCorrect(const arg: TVector; obj: Pointer): TScalar;
+procedure TScanCorrelator.GradientCorrect(const arg: TDoubleDynArray;
+  var func: Double; grad: TDoubleDynArray; obj: Pointer);
 var
   coords: PCorrectCoords absolute obj;
-  cnt, iRadius, iAngle: Integer;
-  r, rBeg, rEnd, skx, sky, sn, cs, px, py, cx, cy, rsk: Double;
-  skew: TCorrectSkew;
   scan: TInputScan;
+  cnt, pos, iRadius, iAngle: Integer;
+  r, rBeg, rEnd: Double;
+  rsk, skx, sky, sn, cs: Double;
+  cx, cy, px, py: Double;
+  imgInt, residual: Double;
+  imgGx, imgGy, dIdR: Double;
+  sumSq, sumG0, sumG1: Double;
+  rmse, invNorm: Double;
+  wantGrad: Boolean;
 begin
-  Result := 1e6;
+  func := 1e6;
+
+  Assert((Length(grad) = 0) or (Length(grad) = 2));
+
+  wantGrad := Length(grad) = 2;
+
+  if wantGrad then
+  begin
+    grad[0] := 0.0;
+    grad[1] := 0.0;
+  end;
+
   scan := FInputScans[coords^.ScanIdx];
+
   cx := scan.Center.X;
   cy := scan.Center.Y;
   skx := scan.Skew.X;
   sky := scan.Skew.Y;
 
-  skew := ArgToSkew(arg);
-
   rBeg := FCorrectAreaBegin * 0.5 * scan.DPI;
-  if not InRange(SkewRadius(rBeg, skew), rBeg * CScannerTolLo, rBeg * CScannerTolHi) then
-    Exit;
-
   rEnd := FCorrectAreaEnd * 0.5 * scan.DPI;
-  if not InRange(SkewRadius(rEnd, skew), rEnd * CScannerTolLo, rEnd * CScannerTolHi) then
+
+  // Preserve the original objective's validity constraints.
+  rsk := rBeg + arg[0] + arg[1] * rBeg;
+  if not InRange(rsk, rBeg * CScannerTolLo,
+    rBeg * CScannerTolHi) then
     Exit;
 
-  // parse image arcs
+  rsk := rEnd + arg[0] + arg[1] * rEnd;
+  if not InRange(rsk, rEnd * CScannerTolLo,
+    rEnd * CScannerTolHi) then
+    Exit;
 
-  Result := 0.0;
-  cnt := 0;
+  cnt := coords^.AngleCnt * coords^.RadiusCnt;
+  if cnt <= 0 then
+    Exit;
+
+  sumSq := 0.0;
+  sumG0 := 0.0;
+  sumG1 := 0.0;
+  pos := 0;
+
   for iAngle := 0 to coords^.AngleCnt - 1 do
   begin
     cs := coords^.SinCosLUTD[iAngle].Cos;
@@ -1014,21 +1044,46 @@ begin
     for iRadius := 0 to coords^.RadiusCnt - 1 do
     begin
       r := rBeg + iRadius;
-
-      rsk := SkewRadius(r, skew);
+      rsk := r + arg[0] + arg[1] * r;
 
       px := (cs * rsk + cx) * skx;
       py := (sn * rsk + cy) * sky;
 
-      Result += Sqr(coords^.PreparedDataD[cnt] - scan.GetPointD_Work(scan.ProcessedImage, py, px));
+      imgInt := scan.GetPointD_Work(scan.ProcessedImage, py, px);
 
-      Inc(cnt);
+      residual := coords^.PreparedDataD[pos] - imgInt;
+      sumSq += Sqr(residual);
+
+      if wantGrad then
+      begin
+        scan.GetGradientsD(scan.ProcessedImage, py, px, imgGy, imgGx);
+
+        // Derivative with respect to the corrected radius.
+        dIdR := imgGx * cs * skx + imgGy * sn * sky;
+
+        // arg[0] = ConstSkew
+        sumG0 -= residual * dIdR;
+
+        // arg[1] = MulSkew
+        sumG1 -= residual * r * dIdR;
+      end;
+
+      Inc(pos);
     end;
   end;
 
-  Assert(cnt = coords^.RadiusCnt * coords^.AngleCnt);
+  Assert(pos = cnt);
 
-  Result := Sqrt(Result / cnt) / High(Word);
+  rmse := Sqrt(sumSq / cnt);
+  func := rmse / High(Word);
+
+  if wantGrad and (func > 0.0) then
+  begin
+    invNorm := 1.0 / (cnt * High(Word) * rmse);
+
+    grad[0] := sumG0 * invNorm;
+    grad[1] := sumG1 * invNorm;
+  end;
 end;
 
 function TScanCorrelator.CorrectGetRMSE(AGSObj: UInt64; const coords: TCorrectCoords): Double;
@@ -1122,11 +1177,11 @@ var
 
         coords^.X := SkewToArg(skew);
 
-        // finish with Nelder-Mead minimization
+        // finish with Gradient minimization
 
-        loss := NelderMeadMinimize(@NelderMeadCorrect, coords^.X,
-                  [CConstExtents / CConstHalfCount * scan.DPI, CMulExtents / CMulHalfCount],
-                  0.0, coords);
+        loss := BFGSScaledMinimize(@GradientCorrect, coords^.X,
+          [CConstExtents / CConstHalfCount * scan.DPI, CMulExtents / CMulHalfCount],
+          0.0, coords);
       finally
         FreeCorrect(coords^);
       end;
