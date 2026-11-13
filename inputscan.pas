@@ -93,7 +93,7 @@ type
     procedure LoadImage;
     procedure FixCISScanners;
     procedure Blur;
-    procedure FindTrack(AUseGradient, AFindCroppedArea: Boolean; AForcedSampleRate: Integer = -1);
+    procedure FindTrack(AFindConcentricGroove, AFindCroppedArea: Boolean; AForcedSampleRate: Integer = -1);
     procedure CorrectByModel(ARelativeAngle, ACenterX, ACenterY, ASkewX, ASkewY: Double);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDDynArray);
     procedure Linearize;
@@ -738,7 +738,7 @@ begin
 end;
 
 
-procedure TInputScan.FindTrack(AUseGradient, AFindCroppedArea: Boolean; AForcedSampleRate: Integer);
+procedure TInputScan.FindTrack(AFindConcentricGroove, AFindCroppedArea: Boolean; AForcedSampleRate: Integer);
 begin
   if not FSilent then WriteLn('FindTrack');
 
@@ -750,11 +750,15 @@ begin
   FSetDownRadius := lerp(FProfileRef.FirstMusicGroove, FProfileRef.StylusSetDown, 0.0) * FDPI * 0.5;
   FConcentricGrooveRadius := FProfileRef.ConcentricGroove * FDPI * 0.5;
 
-  FindConcentricGroove_GridSearch;
-  if AUseGradient then
+  if AFindConcentricGroove then
+  begin
+    FindConcentricGroove_GridSearch;
     FindConcentricGroove_Gradient;
+  end;
   if AFindCroppedArea then
+  begin
     FindCroppedArea;
+  end;
   FindGrooveStart;
 
   if not FSilent then
