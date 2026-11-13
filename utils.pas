@@ -124,6 +124,7 @@ function GoldenRatioSearch(Func: TGRSEvalFunc; MinX, MaxX: Double; ObjectiveY: D
 function GoldenRatioMinimize(Func: TGRSEvalFunc; var X: Double; MinX, MaxX, Epsilon: Double; Data: Pointer = nil): Double;
 function GradientDescentMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; LearningRate: array of Double; EpsilonG: Double; MaxIter: Integer; Silent: Boolean; Data: Pointer = nil): Double;
 function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; Data: Pointer = nil): Double;
+function BFGSScaledMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Scale: TDoubleDynArray; Epsilon: Double; Data: Pointer): Double;
 function GridReduceMinimize(Func: TEvalFunc; var X: TDoubleDynArray; GridSize: array of Integer; GridExtents: array of Double; EpsilonReduce: Double; VerboseTag: String = ''; Data: Pointer = nil): Double;
 function NelderMeadMinimize(Func: TEvalFunc; var X: TDoubleDynArray; SimplexExtents: array of Double; Epsilon: Double = 1e-9; Data: Pointer = nil): Double;
 function LBFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double = 1e-12; M: Integer = 5; Data: Pointer = nil): Double;
@@ -840,6 +841,7 @@ end;
 threadvar
   GBFGSData: Pointer;
   GBFGSFunc: TGradientEvalFunc;
+  GBFGSScale: TDoubleDynArray;
 
   function BFGSX(X : TVector) : Float;
   begin
@@ -852,6 +854,40 @@ threadvar
   begin
     dummy := NaN;
     GBFGSFunc(X, dummy, G, GBFGSData);
+  end;
+
+  function BFGSXScaled(X : TVector) : Float;
+  var
+    iX: Integer;
+  begin
+    for iX := 0 to High(X) do
+      X[iX] *= GBFGSScale[iX];
+    try
+      GBFGSFunc(X, Result, nil, GBFGSData);
+    finally
+      for iX := 0 to High(X) do
+        X[iX] /= GBFGSScale[iX];
+    end;
+  end;
+
+  procedure BFGSGScaled(X, G : TVector);
+  var
+    iX: Integer;
+    dummy: Double;
+  begin
+    dummy := NaN;
+
+    for iX := 0 to High(X) do
+      X[iX] *= GBFGSScale[iX];
+    try
+      GBFGSFunc(X, dummy, G, GBFGSData);
+
+      for iX := 0 to High(G) do
+        G[iX] *= GBFGSScale[iX];
+    finally
+      for iX := 0 to High(X) do
+        X[iX] /= GBFGSScale[iX];
+    end;
   end;
 
 function BFGSMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Epsilon: Double; Data: Pointer): Double;
@@ -872,6 +908,34 @@ begin
   end;
 end;
 
+function BFGSScaledMinimize(Func: TGradientEvalFunc; var X: TDoubleDynArray; Scale: TDoubleDynArray; Epsilon: Double; Data: Pointer): Double;
+var
+  iX: Integer;
+  G: TVector;
+  H: TMatrix;
+begin
+  Assert(Length(X) = Length(Scale));
+
+  SetLength(G, Length(X));
+  SetLength(H, Length(X), Length(X));
+
+  GBFGSData := Data;
+  GBFGSFunc := Func;
+  GBFGSScale := Scale;
+  try
+    for iX := 0 to High(X) do
+      X[iX] /= Scale[iX];
+
+    BFGS(@BFGSXScaled, @BFGSGScaled, X, 0, High(X), MaxInt, Epsilon, Result, G, H);
+  finally
+    for iX := 0 to High(X) do
+      X[iX] *= Scale[iX];
+
+    GBFGSData := nil;
+    GBFGSFunc := nil;
+    GBFGSScale := nil;
+  end;
+end;
 
 threadvar
   GNMData: Pointer;
