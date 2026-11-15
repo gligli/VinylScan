@@ -10,7 +10,7 @@ uses
 
 const
   CRadiusLoopbackLowCutoffFreq = 150.0;
-  CInvRadiusLoopbackLowCutoffFreq = 250.0;
+  CInvRadiusLoopbackLowCutoffFreq = 150.0;
   CLowCutoffFreq = 20.0;
 
   CTimeFormat = 'nn:ss.zzz';
@@ -717,8 +717,8 @@ begin
 
     for iSmp := 0 to sz - 1 do
     begin
-      blockL[iSmp] := Sign(blockL[iSmp]) * (Abs(blockL[iSmp]) - Abs(noiseL[iSmp]));
-      blockR[iSmp] := Sign(blockR[iSmp]) * (Abs(blockR[iSmp]) - Abs(noiseR[iSmp]));
+      blockL[iSmp] := Sign(blockL[iSmp]) * Max(0.0, Abs(blockL[iSmp]) - Abs(noiseL[iSmp]));
+      blockR[iSmp] := Sign(blockR[iSmp]) * Max(0.0, Abs(blockR[iSmp]) - Abs(noiseR[iSmp]));
     end;
 
     specialize DeWaveletGS<Double, PDouble>(@blockL[0], @blockL[0], sz, depth);
@@ -774,7 +774,7 @@ begin
   WriteLn('LoadScan');
 
   FInputScan.LoadImage;
-  FInputScan.FindTrack(False, False, FSampleRate);
+  FInputScan.FindTrack(False, FSampleRate);
 
   BuildSinCosLUT(FPointsPerRevolution, FTrackSinCosLut, FInputScan.GrooveStartAngle, -2.0 * Pi);
 end;

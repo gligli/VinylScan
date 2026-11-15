@@ -74,13 +74,11 @@ type
     function MakeRadiusOffsets(ARadius: Integer): TIntegerDynArray;
 
     procedure GradientConcentricGroove(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
-    procedure GradientConcentricGrooveEst(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray; obj: Pointer);
     function NelderMeadCrop(const arg: TVector; obj: Pointer): TScalar;
 
     procedure FindCenterExtents;
     procedure FindConcentricGroove_GridSearch;
     procedure FindConcentricGroove_Gradient;
-    procedure FindCroppedArea;
     procedure FindGrooveStart;
 
     procedure LoadPNG;
@@ -93,7 +91,7 @@ type
     procedure LoadImage;
     procedure FixCISScanners;
     procedure Blur;
-    procedure FindTrack(AFindConcentricGroove, AFindCroppedArea: Boolean; AForcedSampleRate: Integer = -1);
+    procedure FindTrack(AFindConcentricGroove: Boolean; AForcedSampleRate: Integer = -1);
     procedure CorrectByModel(ARelativeAngle, ACenterX, ACenterY, ASkewX, ASkewY: Double);
     procedure Crop(const RadiusAngleLut: TRadiusAngleDynArray; const SinCosLut: TSinCosDDynArray);
     procedure Linearize;
@@ -216,8 +214,8 @@ end;
 
 procedure TInputScan.FindConcentricGroove_GridSearch;
 const
-  CPointsPerRevolution = 256;
-  CSkewPrecision = 1000.0;
+  CPointsPerRevolution = 128;
+  CSkewPrecision = 200.0;
 var
   sinCosLUT: TSinCosDDynArray;
   mnSkew, mxSkew, mnRadius, mxRadius: Integer;
@@ -392,50 +390,6 @@ begin
     grad[1] := gcy;
     grad[2] := gr;
     grad[3] := gsky;
-  end;
-end;
-
-procedure TInputScan.GradientConcentricGrooveEst(const arg: TDoubleDynArray; var func: Double; grad: TDoubleDynArray;
-  obj: Pointer);
-const
-  CH = 1e-8;
-var
-  iFD, iGrad: Integer;
-  gf, fdx, fdy: Double;
-  agrad, garg: TDoubleDynArray;
-begin
-  SetLength(agrad, Length(grad));
-  GradientConcentricGroove(arg, func, agrad, obj);
-
-  if Assigned(grad) then
-  begin
-    FillQWord(grad[0], Length(grad), 0);
-
-    for iFD := Low(CFiniteDifferencesYFactor) to High(CFiniteDifferencesYFactor) do
-    begin
-      if iFD = 0 then
-        Continue;
-
-      fdx := iFD * CH;
-      fdy := CFiniteDifferencesYFactor[iFD] / CH;
-
-      for iGrad := 0 to High(grad) do
-      begin
-        gf := NaN;
-        garg := Copy(arg);
-        garg[iGrad] += fdx;
-        GradientConcentricGroove(garg, gf, nil, obj);
-        grad[iGrad] += gf * fdy;
-      end;
-    end;
-
-    Write(func:20:6);
-    for iGrad := 0 to High(grad) do
-    begin
-      Write(agrad[iGrad]:20:6);
-      Write(grad[iGrad]:20:6);
-    end;
-    WriteLn;
   end;
 end;
 
@@ -738,7 +692,7 @@ begin
 end;
 
 
-procedure TInputScan.FindTrack(AFindConcentricGroove, AFindCroppedArea: Boolean; AForcedSampleRate: Integer);
+procedure TInputScan.FindTrack(AFindConcentricGroove: Boolean; AForcedSampleRate: Integer);
 begin
   if not FSilent then WriteLn('FindTrack');
 
@@ -747,17 +701,13 @@ begin
   else
     SetRevolutionFromDPI(FDPI);
 
-  FSetDownRadius := lerp(FProfileRef.FirstMusicGroove, FProfileRef.StylusSetDown, 0.0) * FDPI * 0.5;
+  FSetDownRadius := lerp(FProfileRef.FirstMusicGroove, FProfileRef.StylusSetDown, 1.0 / 3.0) * FDPI * 0.5;
   FConcentricGrooveRadius := FProfileRef.ConcentricGroove * FDPI * 0.5;
 
   if AFindConcentricGroove then
   begin
     FindConcentricGroove_GridSearch;
     FindConcentricGroove_Gradient;
-  end;
-  if AFindCroppedArea then
-  begin
-    FindCroppedArea;
   end;
   FindGrooveStart;
 
@@ -977,65 +927,6 @@ begin
   NelderMeadMinimize(@NelderMeadCrop, X, [DegToRad(1.0), DegToRad(1.0)], 1e-4, @data);
 
   FCropAngles := MakeCropAngles(X);
-end;
-
-procedure TInputScan.FindCroppedArea;
-const
-  CAngleCount = 720;
-  CAngleMargin = 3;
-var
-  iAngle, iRadius, beginRadius, endRadius: Integer;
-  toRad, angle, sn, cs: Double;
-  prevAngleCropped, isMirror: Boolean;
-  angleCropped: TBooleanDynArray;
-  angleData: TDoubleDynArray;
-begin
-  beginRadius := Ceil(FProfileRef.LastMusicGroove * 0.5 * FDPI);
-  endRadius := Floor(FProfileRef.FirstMusicGroove * 0.5 * FDPI);
-
-  SetLength(angleCropped, CAngleCount);
-  SetLength(angleData, endRadius - beginRadius + 1);
-
-  toRad := 2.0 * Pi / Length(angleCropped);
-
-  for iAngle := 0 to High(angleCropped) do
-  begin
-    angle := iAngle * toRad;
-    SinCos(angle, sn, cs);
-
-    for iRadius := beginRadius to endRadius do
-      angleData[iRadius - beginRadius] := GetPointD_Work(FImage, (sn * iRadius + FCenter.Y) * FSkew.Y, (cs * iRadius + FCenter.X) * FSkew.X);
-
-    angleCropped[iAngle] := IsZero(StdDev(angleData));
-  end;
-
-  isMirror := False;
-  prevAngleCropped := angleCropped[High(angleCropped)];
-  for iAngle := 0 to High(angleCropped) do
-  begin
-    if angleCropped[iAngle] and not prevAngleCropped then
-    begin
-      angle := NormalizeAngle((iAngle - CAngleMargin) * toRad);
-
-      if isMirror then
-        FCropAngles.StartAngleMirror := angle
-      else
-        FCropAngles.StartAngle := angle;
-    end
-    else if not angleCropped[iAngle] and prevAngleCropped then
-    begin
-      angle := NormalizeAngle((iAngle + CAngleMargin) * toRad);
-
-      if isMirror then
-        FCropAngles.EndAngleMirror := angle
-      else
-        FCropAngles.EndAngle := angle;
-
-      isMirror := not isMirror;
-    end;
-
-    prevAngleCropped := angleCropped[iAngle];
-  end;
 end;
 
 procedure TInputScan.FixCISScanners;
@@ -1389,8 +1280,7 @@ begin
   //WriteLn(Result.X:16:6, Result.Y:16:6);
 end;
 
-procedure TInputScan.GetGradientsD(const Image: TWordDynArray;
-  Y, X: Double; out GY: Double; out GX: Double);
+procedure TInputScan.GetGradientsD(const Image: TWordDynArray; Y, X: Double; out GY: Double; out GX: Double);
 var
   ix, iy, idx: Integer;
   fx, fy: Double;

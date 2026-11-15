@@ -210,7 +210,7 @@ procedure TScanCorrelator.LoadScans;
     Scan := FInputScans[AIndex];
 
     if FFixCISScanners then Scan.FixCISScanners;
-    Scan.FindTrack(True, False);
+    Scan.FindTrack(True);
     Scan.Blur;
   end;
 
