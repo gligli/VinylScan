@@ -845,7 +845,7 @@ function TInputScan.NelderMeadCrop(const arg: TVector; obj: Pointer): TScalar;
 var
   data: ^TCropData absolute obj;
   iLut: Integer;
-  cx, cy, skx, sky, r, px, py, bt: Double;
+  cx, cy, skx, sky, r, px, py, bt, gy, gx: Double;
   cropped: Boolean;
   angles: TCropAngles;
   cnt: array[Boolean] of Integer;
@@ -887,7 +887,10 @@ begin
     begin
       cropped := InNormalizedAngle(bt, angles.StartAngle, angles.EndAngle) or
                  InNormalizedAngle(bt, angles.StartAngleMirror, angles.EndAngleMirror);
-      acc[cropped] += GetPointD_Work(FImage, py, px);
+
+      GetGradientsD(FImage, py, px, gy, gx);
+
+      acc[cropped] += Sqrt(Sqr(gx) + Sqr(gy));
       Inc(cnt[cropped]);
     end;
   end;

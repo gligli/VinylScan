@@ -659,7 +659,7 @@ begin
     c := FInputScans[i].CropAngles;
     s1 := NormalizedAngleDiff(c.StartAngle, c.EndAngle);
     s2 := NormalizedAngleDiff(c.StartAngleMirror, c.EndAngleMirror);
-    WriteLn(FInputScans[i].ImageShortName, ', begin:', RadToDeg(c.StartAngle):9:3, ', end:', RadToDeg(c.EndAngle):9:3, ', size:', RadToDeg(s1):9:3, ', begin2:', RadToDeg(c.StartAngleMirror):9:3, ', end2:', RadToDeg(c.EndAngleMirror):9:3, ', size2:', RadToDeg(s2):9:3);
+    WriteLn(FInputScans[i].ImageShortName, ', center:', RadToDeg(c.CenterAngle):9:3, ', center2:', RadToDeg(c.CenterAngleMirror):9:3);
   end;
 end;
 
