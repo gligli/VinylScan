@@ -111,7 +111,7 @@ begin
   try
     fn := edInputPNG.Text;
 
-    s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, fn, StrToIntDef(cbDPI.Text, 2400), StrToIntDef(cbSR.Text, 48000), sePrec.Value, seGamma.Value);
+    s2t := TScan2Track.Create(FProfiles.CurrentProfileRef, fn, StrToIntDef(cbDPI.Text, 2400), StrToIntDef(cbSR.Text, 48000), sePrec.Value);
     try
       s2t.UseDenoiser := chkDenoise.Checked;
 
@@ -361,7 +361,7 @@ begin
     cbDPI.Text := IntToStr(sc.OutputDPI);
     cbSR.Text := IntToStr(s2t.SampleRate);
     sePrec.Value := s2t.DecoderPrecision;
-    seGamma.Value := s2t.DecoderGamma;
+    seGamma.Value := sc.OutputGamma;
     chkDenoise.Checked := s2t.UseDenoiser;
   finally
     s2t.Free;

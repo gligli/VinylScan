@@ -9,8 +9,8 @@ uses
   utils, inputscan, profiles, Filter, FilterIIRLPBessel, FilterIIRHPBessel, filter_rbj;
 
 const
+  CGradientLearningRate = 1.0;
   CRadiusLoopbackLowCutoffFreq = 150.0;
-  CInvRadiusLoopbackLowCutoffFreq = 150.0;
   CLowCutoffFreq = 20.0;
 
   CTimeFormat = 'nn:ss.zzz';
@@ -52,7 +52,6 @@ type
 
     FSampleRate: Integer;
     FDecoderPrecision: Integer;
-    FDecoderGamma: Double;
     FUseDenoiser: Boolean;
 
     FPointsPerRevolution: Integer;
@@ -73,7 +72,7 @@ type
     procedure SetAudio(ATrackIdx: Integer; const ASample: TPointD);
 
     function GetDecodeGeometry(radius, invRadius, prevInvRadius: Double; decodeMax: Integer; forceGrooveWidth: Boolean): TDecodeGeometry;
-    function DecodeSample_Work(radius, invRadius, prevInvRadius, angleSin, angleCos: Double): Double;
+    function DecodeSample_Work(radius, angleSin, angleCos: Double): Double;
     function DecodeSample_Final(var context: TDecodeContext; radius, invRadius, prevInvRadius, angleSin, angleCos: Double): TPointD;
 
     procedure PrepareDecodeParameters(var AParams: TDecodeParameters; ADecodedTrackLength: Integer; ASilent: Boolean;
@@ -88,7 +87,7 @@ type
     procedure Denoise;
     procedure NormalizeAudio;
   public
-    constructor Create(AProfileRef: TProfile; AScanFileName: String; ADefaultDPI: Integer = 2400; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 6; ADecoderGamma: Double = CDefaultGamma);
+    constructor Create(AProfileRef: TProfile; AScanFileName: String; ADefaultDPI: Integer = 2400; ASampleRate: Integer = 48000; ADecoderPrecision: Integer = 6);
     destructor Destroy; override;
 
     procedure LoadScan;
@@ -102,7 +101,6 @@ type
     property InputScan: TInputScan read FInputScan;
     property SampleRate: Integer read FSampleRate;
     property DecoderPrecision: Integer read FDecoderPrecision;
-    property DecoderGamma: Double read FDecoderGamma;
     property PointsPerRevolution: Integer read FPointsPerRevolution;
     property RadiansPerRevolutionPoint: Double read FRadiansPerRevolutionPoint;
     property UseDenoiser: Boolean read FUseDenoiser write FUseDenoiser;
@@ -112,19 +110,18 @@ implementation
 
 { TScan2Track }
 
-constructor TScan2Track.Create(AProfileRef: TProfile; AScanFileName: String; ADefaultDPI: Integer; ASampleRate: Integer; ADecoderPrecision: Integer; ADecoderGamma: Double);
+constructor TScan2Track.Create(AProfileRef: TProfile; AScanFileName: String; ADefaultDPI: Integer; ASampleRate: Integer; ADecoderPrecision: Integer);
 begin
   FProfileRef := AProfileRef;
   FSampleRate := Max(8000, ASampleRate);
   FDecoderPrecision := EnsureRange(ADecoderPrecision, 0, 10);
-  FDecoderGamma := ADecoderGamma;
 
   FUseDenoiser := False;
 
   FPointsPerRevolution := Round(FSampleRate / FProfileRef.RevolutionsPerSecond);
   FRadiansPerRevolutionPoint := -Pi * 2.0 / FPointsPerRevolution;
 
-  FInputScan := TInputScan.Create(AProfileRef, FDecoderGamma, ADefaultDPI, False);
+  FInputScan := TInputScan.Create(AProfileRef, 1.0, ADefaultDPI, False);
   FInputScan.ImageFileName := AScanFileName;
 
   InitRiaa;
@@ -190,61 +187,16 @@ begin
   SetLength(AContext.SinCosLut, 0);
 end;
 
-function TScan2Track.DecodeSample_Work(radius, invRadius, prevInvRadius, angleSin, angleCos: Double): Double;
+function TScan2Track.DecodeSample_Work(radius, angleSin, angleCos: Double): Double;
 var
-  iSmp, decodeMax: Integer;
-  r, cx, cy, sampleMin, sampleMax, sample: Double;
-  acc: TPointD;
-  geometry: TDecodeGeometry;
+  cx, cy, gx, gy: Double;
 begin
-  // init
-
-  Result := 0.0;
   cx := FInputScan.Center.X;
   cy := FInputScan.Center.Y;
-  decodeMax := 1 shl (FDecoderPrecision + 1);
-  geometry := GetDecodeGeometry(radius, invRadius, prevInvRadius, decodeMax, True);
 
-  // ensure decoding is not OOB of image
+  FInputScan.GetGradientsD(FInputScan.ProcessedImage, radius * angleSin + cy, radius * angleCos + cx, gy, gx);
 
-  r := radius + decodeMax * geometry.LeftCvt;
-  if not FInputScan.InRangePointD(angleSin * r + cy, angleCos * r + cx) then
-    Exit;
-
-  // image depth based decoding
-
-  r := radius + decodeMax * geometry.LeftCvt;
-  sampleMin := FInputScan.GetPointD_Work(FInputScan.ProcessedImage, angleSin * r + cy, angleCos * r + cx);
-  r := radius - decodeMax * geometry.RightCvt;
-  sampleMin := Min(sampleMin, FInputScan.GetPointD_Work(FInputScan.ProcessedImage, angleSin * r + cy, angleCos * r + cx));
-
-  sampleMax := FInputScan.GetPointD_Work(FInputScan.ProcessedImage, angleSin * radius + cy, angleCos * radius + cx);
-
-  acc.X := 0.0;
-  acc.Y := 0.0;
-  for iSmp := 1 to decodeMax - 1 do
-  begin
-    r := radius + iSmp * geometry.LeftCvt;
-    sample := FInputScan.GetPointD_Work(FInputScan.ProcessedImage, angleSin * r + cy, angleCos * r + cx);
-    sampleMin := Min(sampleMin, sample);
-    sampleMax := Max(sampleMax, sample);
-    acc.X += sample;
-
-    r := radius - iSmp * geometry.RightCvt;
-    sample := FInputScan.GetPointD_Work(FInputScan.ProcessedImage, angleSin * r + cy, angleCos * r + cx);
-    sampleMin := Min(sampleMin, sample);
-    sampleMax := Max(sampleMax, sample);
-    acc.Y += sample;
-  end;
-  acc.X /= decodeMax - 1;
-  acc.Y /= decodeMax - 1;
-
-  // finish decode
-
-  acc.X := DivDef(acc.X - sampleMin, sampleMax - sampleMin, 0.5);
-  acc.Y := DivDef(acc.Y - sampleMin, sampleMax - sampleMin, 0.5);
-
-  Result := (acc.X - acc.Y) * 0.5;
+  Result := (gy * angleSin + gx * angleCos) / High(Word);
 end;
 
 function TScan2Track.DecodeSample_Final(var context: TDecodeContext; radius, invRadius, prevInvRadius, angleSin,
@@ -355,7 +307,7 @@ procedure TScan2Track.EvalTrack;
 
 var
   iSample, iLut: Integer;
-  rOuter, sn, cs, fbRatio, invFbRatio, instantPct, maxPct, grooveRadius, radius, invRadius, invSample, rawSample, speed: Double;
+  rOuter, sn, cs, instantPct, maxPct, radius, invRadius, invGradient, rawGradient, speed, gy, gx: Double;
   validSample: Boolean;
   evalTime: TTime;
   startTick: QWord;
@@ -379,10 +331,6 @@ begin
     prevRadiuses[iLut].Y := NaN;
   end;
 
-  grooveRadius := FProfileRef.RecordingGrooveWidth * 0.5 * FInputScan.DPI;
-  fbRatio := CutoffToFeedbackRatio(CRadiusLoopbackLowCutoffFreq, FSampleRate) * grooveRadius;
-  invFbRatio := CutoffToFeedbackRatio(CInvRadiusLoopbackLowCutoffFreq, FSampleRate) * grooveRadius;
-
   maxPct := 0.0;
   rOuter := FProfileRef.OuterSize * 0.5 * FInputScan.DPI;
   radius := FInputScan.SetDownRadius;
@@ -396,13 +344,14 @@ begin
     cs := FTrackSinCosLut[iLut].Cos;
     sn := FTrackSinCosLut[iLut].Sin;
 
-    invSample := DecodeSample_Work(invRadius, NaN, NaN, sn, cs);
-    invRadius -= invSample * invFbRatio;
+    invGradient := DecodeSample_Work(invRadius, sn, cs);
+    invRadius -= invGradient * CGradientLearningRate;
+
     if not IsNan(prevRadiuses[iLut].X) then
       invRadius := Max(radius - (prevRadiuses[iLut].X - radius), invRadius);
 
-    rawSample := DecodeSample_Work(radius, invRadius, prevRadiuses[iLut].Y, sn, cs);
-    radius += rawSample * fbRatio;
+    rawGradient := DecodeSample_Work(radius, sn, cs);
+    radius += rawGradient * CGradientLearningRate;
 
     trackSample.X := radius;
     trackSample.Y := invRadius;
