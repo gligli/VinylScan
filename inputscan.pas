@@ -21,8 +21,8 @@ type
   end;
 
   TCropAngles = record
-    StartAngle, EndAngle: Double;
-    StartAngleMirror, EndAngleMirror: Double;
+    StartAngle, CenterAngle, EndAngle: Double;
+    StartAngleMirror, CenterAngleMirror, EndAngleMirror: Double;
   end;
 
   TCropData = record
@@ -207,8 +207,10 @@ var
 begin
   qsz := DegToRad(CQuarterCrop);
   Result.StartAngle := NormalizeAngle(arg[0] - qsz);
+  Result.CenterAngle := NormalizeAngle(arg[0]);
   Result.EndAngle := NormalizeAngle(arg[0] + qsz);
   Result.StartAngleMirror := NormalizeAngle(arg[1] - qsz);
+  Result.CenterAngleMirror := NormalizeAngle(arg[1]);
   Result.EndAngleMirror := NormalizeAngle(arg[1] + qsz);
 end;
 

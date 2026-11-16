@@ -1342,8 +1342,9 @@ var
 
   procedure DoY(AIndex: PtrInt; AData: Pointer; AItem: TMultiThreadProcItem);
   var
-    iScan, ox, cnt, yx: Integer;
-    r, rSkew, sn, cs, px, py, acc, sample, bt, ct, d2d: Double;
+    iScan, ox, yx, bestScan: Integer;
+    iMirror: Boolean;
+    r, rSkew, sn, cs, px, py, sample, bt, ct, d2d, cropCenterAngle, bestAngle, angleDiff: Double;
     scan: TInputScan;
   begin
     yx := AIndex * FOutputWidth;
@@ -1356,43 +1357,46 @@ var
       begin
         bt := ArcTan2(AIndex - center, ox - center);
 
-        cnt := 0;
-        acc := 0;
+        bestScan := -1;
+        bestAngle := -Infinity;
         for iScan := 0 to High(FInputScans) do
         begin
           scan := FInputScans[iScan];
 
-          d2d := scan.DPI / FOutputDPI;
-
-          rSkew := InterpolateSkew(bt, r * d2d, iScan);
-
           ct := NormalizeAngle(bt + scan.RelativeAngle);
 
-          SinCos(ct, sn, cs);
-          px := (cs * rSkew + scan.Center.X) * scan.Skew.X;
-          py := (sn * rSkew + scan.Center.Y) * scan.Skew.Y;
+          if Abs(NormalizeAngle(ct - scan.CropAngles.CenterAngleMirror)) < Abs(NormalizeAngle(ct - scan.CropAngles.CenterAngle)) then
+            cropCenterAngle := scan.CropAngles.CenterAngleMirror
+          else
+            cropCenterAngle := scan.CropAngles.CenterAngle;
 
-          if scan.InRangePointD(py, px) and
-              (not InNormalizedAngle(ct, scan.CropAngles.StartAngle, scan.CropAngles.EndAngle) and
-               not InNormalizedAngle(ct, scan.CropAngles.StartAngleMirror, scan.CropAngles.EndAngleMirror) or
-               (r < rLim)) then
+          angleDiff := Abs(NormalizeAngle(ct - cropCenterAngle));
+
+          if angleDiff > bestAngle then
           begin
-            sample := scan.GetPointD_Final(scan.Image, py, px);
-
-            if cnt < FRebuildBlendCount then
-            begin
-              acc += sample;
-              Inc(cnt);
-            end;
+            bestAngle := angleDiff;
+            bestScan := iScan;
           end;
         end;
 
-        acc := DivDef(acc, cnt, High(Word));
+        scan := FInputScans[bestScan];
+
+        d2d := scan.DPI / FOutputDPI;
+        rSkew := InterpolateSkew(bt, r * d2d, bestScan);
+        ct := NormalizeAngle(bt + scan.RelativeAngle);
+
+        SinCos(ct, sn, cs);
+        px := (cs * rSkew + scan.Center.X) * scan.Skew.X;
+        py := (sn * rSkew + scan.Center.Y) * scan.Skew.Y;
+
+        sample := High(Word);
+        if scan.InRangePointD(py, px) then
+          sample := scan.GetPointD_Final(scan.Image, py, px);
 
         if r >= rLim then
-          FOutputImage[yx + ox] := EnsureRange(Round(acc), 0, High(Word))
+          FOutputImage[yx + ox] := EnsureRange(Round(sample), 0, High(Word))
         else
-          FOutputImage[yx + ox] := EnsureRange(Round(acc * CLabelDepthMaxValue / High(Word)), 0, CLabelDepthMaxValue) * High(Word) div CLabelDepthMaxValue; // lower bit depth for label
+          FOutputImage[yx + ox] := EnsureRange(Round(sample * CLabelDepthMaxValue / High(Word)), 0, CLabelDepthMaxValue) * High(Word) div CLabelDepthMaxValue; // lower bit depth for label
       end
       else
       begin
